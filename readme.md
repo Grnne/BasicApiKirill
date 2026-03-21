@@ -10,7 +10,9 @@
 - Mac: https://docs.docker.com/desktop/install/mac-install/
 - Linux: `sudo apt install docker.io`
 
-### 2. Запустите API
+### 2. Клонируйте репозиторий
+
+### 3. Запустите API
 Откройте терминал в этой папке и выполните:
 docker-compose up -d
 
