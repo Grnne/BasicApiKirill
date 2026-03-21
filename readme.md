@@ -11,7 +11,10 @@
 - Linux: `sudo apt install docker.io`
 
 ### 2. Запустите API
-
-```bash
 # Откройте терминал в этой папке и выполните:
+```bash
 docker-compose up -d
+
+# Для остановки выполните:
+```bash
+docker-compose down
