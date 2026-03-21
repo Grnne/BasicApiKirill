@@ -16,5 +16,11 @@
 Откройте терминал в этой папке и выполните:
 docker-compose up -d
 
+если необходимо поменять порт, задайте порт вручную через env, например:
+для powershell:
+$env:HOST_PORT=9090; docker-compose up -d
+для bash:
+HOST_PORT=9090 docker-compose up -d
+
 Для остановки выполните:
 docker-compose down
