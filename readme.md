@@ -12,9 +12,7 @@
 
 ### 2. Запустите API
 # Откройте терминал в этой папке и выполните:
-```bash
 docker-compose up -d
 
 # Для остановки выполните:
-```bash
 docker-compose down
