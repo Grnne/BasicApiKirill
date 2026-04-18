@@ -1,31 +1,57 @@
 ﻿using BasicApi.Extensions;
+using BasicApi.Hubs;
+using FluentMigrator.Runner;
 
-namespace BasicApi
+namespace BasicApi;
+
+public class Program
 {
-    public class Program
+    public static void Main(string[] args)
     {
-        public static void Main(string[] args)
+        var builder = WebApplication.CreateBuilder(args);
+
+        builder.Services.AddApiServices(builder.Configuration);
+
+        // Добавить CORS для SignalR
+        builder.Services.AddCors(options =>
         {
-            var builder = WebApplication.CreateBuilder(args);
-
-            // Add services to the container.
-            builder.Services.AddApiServices(builder.Configuration);
-
-            var app = builder.Build();
-
-            app.UseSwaggerWithUI();
-
-            app.MapGet("/", context =>
+            options.AddPolicy("AllowAll", policy =>
             {
-                context.Response.Redirect("/swagger");
-                return Task.CompletedTask;
+                policy.AllowAnyHeader()
+                      .AllowAnyMethod()
+                      .AllowCredentials()
+                      .SetIsOriginAllowed(_ => true); // для разработки
             });
+        });
 
-            app.UseHttpsRedirection();
-            app.UseAuthorization();
-            app.MapControllers();
+        var app = builder.Build();
 
-            app.Run();
+        // Миграции при старте
+        using (var scope = app.Services.CreateScope())
+        {
+            scope.ServiceProvider
+                .GetRequiredService<IMigrationRunner>()
+                .MigrateUp();
         }
+
+        // Добавить CORS перед маршрутами
+        app.UseCors("AllowAll");
+        app.UseDefaultFiles();
+        app.UseStaticFiles();
+        app.UseSwaggerWithUI();
+        app.MapHub<ChatHub>("/hubs/chat");
+
+        app.MapGet("/", context =>
+        {
+            context.Response.Redirect("/swagger");
+            return Task.CompletedTask;
+        });
+
+        app.UseHttpsRedirection();
+        app.UseAuthentication();
+        app.UseAuthorization();
+        app.MapControllers();
+
+        app.Run();
     }
 }

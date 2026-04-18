@@ -1,6 +1,25 @@
 ﻿services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: chat_postgres
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-postgres}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    restart: unless-stopped
+    networks:
+      - chat_network
+
   basicapi:
-    image: ${DOCKER_REGISTRY-}basicapi
     build:
       context: .
       dockerfile: BasicApi/Dockerfile
@@ -8,11 +27,25 @@
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=${DB_NAME:-postgres};Username=${DB_USER:-postgres};Password=${DB_PASSWORD:-postgres}
     ports:
-      - "${HOST_PORT:-8080}:8080"  #  тут менять порты пример 8090:8080
+      - "${HOST_PORT:-8080}:8080"
     volumes:
       - ${APPDATA}/Microsoft/UserSecrets:/home/app/.microsoft/usersecrets:ro
       - ${APPDATA}/Microsoft/UserSecrets:/root/.microsoft/usersecrets:ro
       - ${APPDATA}/ASP.NET/Https:/home/app/.aspnet/https:ro
       - ${APPDATA}/ASP.NET/Https:/root/.aspnet/https:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
+    networks:
+      - chat_network
+
+volumes:
+  postgres_data:
+    name: chat_postgres_data
+
+networks:
+  chat_network:
+    driver: bridge

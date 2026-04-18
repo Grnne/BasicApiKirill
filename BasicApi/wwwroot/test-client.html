@@ -1,0 +1,119 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <title>Chat Test Client</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.7/signalr.min.js"></script>
+</head>
+<body>
+    <h2>Chat Test Client</h2>
+
+    <div>
+        <h3>Auth</h3>
+        <input type="text" id="token" placeholder="JWT Token" style="width: 500px" />
+        <button onclick="connect()">Connect</button>
+        <button onclick="disconnect()">Disconnect</button>
+        <span id="status">Disconnected</span>
+    </div>
+
+    <div>
+        <h3>Chat</h3>
+        <input type="text" id="chatId" placeholder="Chat ID" style="width: 300px" />
+        <button onclick="joinChat()">Join Chat</button>
+        <button onclick="leaveChat()">Leave Chat</button>
+    </div>
+
+    <div>
+        <input type="text" id="message" placeholder="Message" style="width: 300px" />
+        <button onclick="sendMessage()">Send</button>
+    </div>
+
+    <div>
+        <h3>Messages</h3>
+        <div id="messages" style="border:1px solid #ccc; height:300px; overflow:auto; padding:10px"></div>
+    </div>
+
+    <script>
+        let connection = null;
+
+        function connect() {
+            const token = document.getElementById('token').value;
+            if (!token) {
+                alert('Enter token');
+                return;
+            }
+
+            // Определяем базовый URL (для локальной разработки)
+            const baseUrl = window.location.origin; // или https://localhost:5001
+            const hubUrl = `${baseUrl}/hubs/chat`;
+
+            console.log('Connecting to:', hubUrl);
+
+            connection = new signalR.HubConnectionBuilder()
+                .withUrl(hubUrl, {
+                    accessTokenFactory: () => token,
+                    transport: signalR.HttpTransportType.WebSockets
+                })
+                .withAutomaticReconnect()
+                .build();
+
+            connection.on("MessageCreated", (message) => {
+                const div = document.getElementById('messages');
+                div.innerHTML += `<div><b>${message.senderName}:</b> ${message.text} <small>(${new Date(message.createdAt).toLocaleTimeString()})</small></div>`;
+                div.scrollTop = div.scrollHeight;
+            });
+
+            connection.on("TypingChanged", (chatId, userId, isTyping) => {
+                console.log(`User ${userId} is ${isTyping ? 'typing...' : 'stopped typing'}`);
+            });
+
+            connection.on("UserOnlineChanged", (userId, isOnline) => {
+                console.log(`User ${userId} is ${isOnline ? 'online' : 'offline'}`);
+            });
+
+            connection.start()
+                .then(() => {
+                    document.getElementById('status').innerText = 'Connected';
+                    document.getElementById('status').style.color = 'green';
+                    console.log('Connected!');
+                })
+                .catch(err => {
+                    console.error('Connection error:', err);
+                    alert('Connection failed: ' + err);
+                });
+        }
+
+        function disconnect() {
+            if (connection) {
+                connection.stop();
+                connection = null;
+                document.getElementById('status').innerText = 'Disconnected';
+                document.getElementById('status').style.color = 'red';
+            }
+        }
+
+        function joinChat() {
+            const chatId = document.getElementById('chatId').value;
+            if (connection && chatId) {
+                connection.invoke("JoinChat", chatId).catch(err => console.error(err));
+                console.log('Joined chat:', chatId);
+            }
+        }
+
+        function leaveChat() {
+            const chatId = document.getElementById('chatId').value;
+            if (connection && chatId) {
+                connection.invoke("LeaveChat", chatId).catch(err => console.error(err));
+            }
+        }
+
+        function sendMessage() {
+            const chatId = document.getElementById('chatId').value;
+            const message = document.getElementById('message').value;
+            if (connection && chatId && message) {
+                connection.invoke("SendMessage", chatId, message).catch(err => console.error(err));
+                document.getElementById('message').value = '';
+            }
+        }
+    </script>
+</body>
+</html>
