@@ -2,29 +2,31 @@
 using BasicApi.Services;
 using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
-namespace BasicApi.Controllers;
+namespace BasicApi.Features.Auth;
 
-[ApiController]
-[Route("api/[controller]")]
-public class AuthController(IUserRepository userRepository, IJwtService jwtService) : ControllerBase
+public class AuthHandler(
+    IUserRepository userRepository,
+    IJwtService jwtService)
 {
-    [AllowAnonymous]
-    [HttpPost("login")]
-    public async Task<IActionResult> Login([FromBody] LoginRequestDto request)
+    public async Task<IActionResult> LoginAsync(
+        LoginRequestDto request)
     {
-        if (!ModelState.IsValid)
-            return BadRequest(ModelState);
-
         var user = await userRepository.GetByUsernameOrEmailAsync(request.UsernameOrEmail);
+
         if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
-            return Unauthorized(new ErrorResponseDto { Message = "Invalid username/email or password" });
+        {
+            return new UnauthorizedObjectResult(new ErrorResponseDto
+            {
+                Message = "Invalid username/email or password"
+            });
+        }
 
         var token = jwtService.GenerateToken(user.Id, user.Username, user.Email);
 
-        return Ok(new AuthResponseDto
+        return new OkObjectResult(new AuthResponseDto
         {
             UserId = user.Id,
             Username = user.Username,
@@ -35,20 +37,29 @@ public class AuthController(IUserRepository userRepository, IJwtService jwtServi
         });
     }
 
-    [AllowAnonymous]
-    [HttpPost("register")]
-    public async Task<IActionResult> Register([FromBody] RegisterRequestDto request)
+    public async Task<IActionResult> RegisterAsync(
+        RegisterRequestDto request)
     {
-        if (!ModelState.IsValid)
-            return BadRequest(ModelState);
-
         var existingUser = await userRepository.GetByUsernameOrEmailAsync(request.Username);
-        if (existingUser != null)
-            return BadRequest(new ErrorResponseDto { Message = "Username already exists" });
 
-        existingUser = await userRepository.GetByUsernameOrEmailAsync(request.Email);
         if (existingUser != null)
-            return BadRequest(new ErrorResponseDto { Message = "Email already exists" });
+        {
+            return new BadRequestObjectResult(new ErrorResponseDto
+            {
+                Message = "Username already exists"
+            });
+        }
+
+        // Проверка уникальности email
+        existingUser = await userRepository.GetByUsernameOrEmailAsync(request.Email);
+
+        if (existingUser != null)
+        {
+            return new BadRequestObjectResult(new ErrorResponseDto
+            {
+                Message = "Email already exists"
+            });
+        }
 
         var user = new User
         {
@@ -64,7 +75,7 @@ public class AuthController(IUserRepository userRepository, IJwtService jwtServi
         var userId = await userRepository.CreateAsync(user);
         var token = jwtService.GenerateToken(userId, user.Username, user.Email);
 
-        return Ok(new AuthResponseDto
+        return new OkObjectResult(new AuthResponseDto
         {
             UserId = userId,
             Username = user.Username,
@@ -73,14 +84,5 @@ public class AuthController(IUserRepository userRepository, IJwtService jwtServi
             Token = token,
             ExpiresAt = jwtService.GetExpiryDate()
         });
-    }
-
-    [HttpPost("logout")]
-    [Authorize] // ← а logout уже требует токен
-    public IActionResult Logout()
-    {
-        // Для MVP — токен инвалидируется на клиенте
-        // Здесь можно добавить blacklist токенов позже
-        return Ok(new { Message = "Logged out successfully" });
     }
 }

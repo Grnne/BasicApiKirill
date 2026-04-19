@@ -1,5 +1,8 @@
 ﻿using System.Data;
 using System.Text;
+using BasicApi.Features.Auth;
+using BasicApi.Features.Chats;
+using BasicApi.Features.Users;
 using BasicApi.Services;
 using BasicApi.Storage.Interfaces;
 using BasicApi.Storage.Migrations;
@@ -31,6 +34,9 @@ public static class ServiceExtensions
         services.AddScoped<IMessageRepository, MessageRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IChatService, ChatService>();
+        services.AddScoped<AuthHandler>();
+        services.AddScoped<ChatsHandler>();
+        services.AddScoped<UsersHandler>();
 
         // JWT
         services.AddScoped<IJwtService, JwtService>();
