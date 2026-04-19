@@ -1,6 +1,6 @@
 ﻿services:
   postgres:
-    image: postgres:17-alpine
+    image: postgres:latest
     container_name: chat_postgres
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
@@ -9,7 +9,7 @@
     ports:
       - "${DB_PORT:-5432}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql 
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-postgres}"]
       interval: 5s

@@ -35,4 +35,16 @@ public class UserRepository(IDbConnection connection) : IUserRepository
 
         return await connection.ExecuteScalarAsync<Guid>(sql, user);
     }
+
+    public async Task<Guid?> GetIdByUsernameOrEmailAsync(string usernameOrEmail, CancellationToken ct = default)
+    {
+        const string sql = @"
+            SELECT 
+                id as Id
+            FROM users 
+            WHERE username = @Value OR email = @Value
+            LIMIT 1";
+
+        return await connection.QueryFirstOrDefaultAsync<Guid>(sql, new { Value = usernameOrEmail });
+    }
 }

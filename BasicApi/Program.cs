@@ -12,18 +12,6 @@ public class Program
 
         builder.Services.AddApiServices(builder.Configuration);
 
-        // Добавить CORS для SignalR
-        builder.Services.AddCors(options =>
-        {
-            options.AddPolicy("AllowAll", policy =>
-            {
-                policy.AllowAnyHeader()
-                      .AllowAnyMethod()
-                      .AllowCredentials()
-                      .SetIsOriginAllowed(_ => true); // для разработки
-            });
-        });
-
         var app = builder.Build();
 
         // Миграции при старте
