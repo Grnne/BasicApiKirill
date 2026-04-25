@@ -1,4 +1,5 @@
 ﻿using System.Data;
+using BasicApi.Storage.Dto;
 using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
 using Dapper;
@@ -24,6 +25,75 @@ public class MessageRepository(IDbConnection connection) : IMessageRepository
         return await connection.QueryAsync<Message>(sql, new { chatId, before, limit });
     }
 
+    public async Task<CursorResult<Message>> GetMessagesCursorAsync(Guid chatId, string? cursor, int limit)
+    {
+        // Decode cursor — if null, start from the most recent messages
+        DateTime? beforeTime = null;
+        Guid? beforeId = null;
+
+        if (!string.IsNullOrEmpty(cursor))
+        {
+            var decoded = CursorDto.Decode(cursor);
+            beforeTime = decoded.CreatedAt;
+            beforeId = decoded.Id;
+        }
+
+        // Fetch limit+1 to detect if there are more pages
+        var fetchSize = limit + 1;
+        string sql;
+        object parameters;
+
+        // Use composite pagination: (created_at, id) < (@beforeTime, @beforeId)
+        // The row-level comparison ensures deterministic ordering even when
+        // multiple messages share the same timestamp.
+        if (beforeTime is not null && beforeId is not null)
+        {
+            sql = @"
+                SELECT * FROM messages
+                WHERE chat_id = @chatId
+                  AND is_deleted = false
+                  AND (created_at < @beforeTime
+                       OR (created_at = @beforeTime AND id < @beforeId))
+                ORDER BY created_at DESC, id DESC
+                LIMIT @fetchSize";
+
+            parameters = new { chatId, beforeTime, beforeId, fetchSize };
+        }
+        else
+        {
+            sql = @"
+                SELECT * FROM messages
+                WHERE chat_id = @chatId
+                  AND is_deleted = false
+                ORDER BY created_at DESC, id DESC
+                LIMIT @fetchSize";
+
+            parameters = new { chatId, fetchSize };
+        }
+
+        var rows = (await connection.QueryAsync<Message>(sql, parameters)).ToList();
+
+        // Determine page items and the "extra" record
+        List<Message> items;
+        Message? extra = null;
+
+        if (rows.Count > limit)
+        {
+            items = rows.Take(limit).ToList();
+            extra = rows[limit];
+        }
+        else
+        {
+            items = rows;
+        }
+
+        return new CursorResult<Message>
+        {
+            Items = items,
+            Extra = extra
+        };
+    }
+
     public async Task<Guid> CreateAsync(Message message)
     {
         const string sql = @"
@@ -37,8 +107,8 @@ public class MessageRepository(IDbConnection connection) : IMessageRepository
     public async Task UpdateLastReadAsync(Guid chatId, Guid userId, Guid messageId)
     {
         const string sql = @"
-            UPDATE chat_members 
-            SET last_read_message_id = @messageId 
+            UPDATE chat_members
+            SET last_read_message_id = @messageId
             WHERE chat_id = @chatId AND user_id = @userId";
 
         await connection.ExecuteAsync(sql, new { chatId, userId, messageId });

@@ -1,6 +1,8 @@
 ﻿using System.Reflection;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.OpenApi;
+using Microsoft.OpenApi.Models;
 
 namespace BasicApi.Extensions;
 
@@ -42,6 +44,27 @@ public static class SwaggerExtensions
             c.AddSecurityRequirement(document => new OpenApiSecurityRequirement
             {
                 [new OpenApiSecuritySchemeReference(JwtBearerDefaults.AuthenticationScheme, document)] = []
+            });
+
+            // Add ProblemDetails schema for error responses
+            c.MapType<ProblemDetails>(() => new OpenApiSchema
+            {
+                Type = "object",
+                Properties = new Dictionary<string, OpenApiSchema>
+                {
+                    ["type"] = new() { Type = "string", Description = "URI identifying the problem type" },
+                    ["title"] = new() { Type = "string", Description = "Short human-readable summary" },
+                    ["status"] = new() { Type = "integer", Description = "HTTP status code" },
+                    ["detail"] = new() { Type = "string", Description = "Detailed error message" },
+                    ["instance"] = new() { Type = "string", Description = "Request path that caused the error" },
+                    ["traceId"] = new() { Type = "string", Description = "Correlation ID for debugging" },
+                    ["errors"] = new()
+                    {
+                        Type = "object",
+                        AdditionalProperties = new() { Type = "array", Items = new() { Type = "string" } },
+                        Description = "Validation errors (field → messages)"
+                    }
+                }
             });
 
             var xmlFile = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";

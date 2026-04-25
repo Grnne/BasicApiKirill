@@ -1,4 +1,5 @@
-﻿using BasicApi.Storage.Interfaces;
+﻿using BasicApi.Middleware;
+using BasicApi.Storage.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BasicApi.Features.Users;
@@ -11,9 +12,15 @@ public class UsersHandler(IUserRepository userRepository)
 
         if (!userId.HasValue || userId == Guid.Empty)
         {
-            return new BadRequestObjectResult(new { message = "User not found" });
+            return new NotFoundObjectResult(new ProblemDetails
+            {
+                Title = "Not Found",
+                Status = StatusCodes.Status404NotFound,
+                Detail = "User not found",
+                Type = "https://tools.ietf.org/html/rfc9110#section-15.5.5"
+            });
         }
 
-        return new OkObjectResult(userId.Value);
+        return new OkObjectResult(new { userId = userId.Value });
     }
 }

@@ -1,8 +1,7 @@
-﻿// Services/Implementations/ChatService.cs
+﻿using BasicApi.Middleware;
 using BasicApi.Models.Dto.Chat;
 using BasicApi.Models.Dto.Message;
 using BasicApi.Storage.Interfaces;
-
 namespace BasicApi.Services;
 
 public class ChatService(IChatRepository chatRepository, IMessageRepository messageRepository) : IChatService
@@ -14,13 +13,14 @@ public class ChatService(IChatRepository chatRepository, IMessageRepository mess
 
         foreach (var chat in chats)
         {
-            // Получаем последнее сообщение
-            var lastMessage = (await messageRepository.GetMessagesAsync(chat.Id, null, 1)).FirstOrDefault();
+            // Get the last message using cursor-based approach for efficiency
+            var lastMessageResult = await messageRepository.GetMessagesCursorAsync(chat.Id, null, 1);
+            var lastMessage = lastMessageResult.Items.FirstOrDefault();
 
-            // Получаем непрочитанные сообщения
+            // Get unread count
             var unreadCount = await messageRepository.GetUnreadCountAsync(chat.Id, userId);
 
-            // Для private чата получаем имя собеседника
+            // For private chats, get companion name
             string? companionName = null;
             if (chat.Type == "private")
             {
@@ -40,7 +40,7 @@ public class ChatService(IChatRepository chatRepository, IMessageRepository mess
                     SenderName = await chatRepository.GetUserNameAsync(lastMessage.SenderId),
                     Text = lastMessage.Text,
                     CreatedAt = lastMessage.CreatedAt,
-                    IsRead = false // TODO: проверить прочитано ли
+                    IsRead = false // TODO: resolve actual read status
                 } : null,
                 UnreadCount = unreadCount,
                 LastActivityAt = lastMessage?.CreatedAt ?? chat.CreatedAt
@@ -52,7 +52,8 @@ public class ChatService(IChatRepository chatRepository, IMessageRepository mess
 
     public async Task<ChatDetailDto> GetChatDetailsAsync(Guid chatId, Guid userId)
     {
-        var chat = await chatRepository.GetByIdAsync(chatId) ?? throw new Exception("Chat not found");
+        var chat = await chatRepository.GetByIdAsync(chatId)
+            ?? throw new NotFoundException("Chat not found");
         var participants = await chatRepository.GetChatParticipantsAsync(chatId);
 
         return new ChatDetailDto
@@ -87,10 +88,53 @@ public class ChatService(IChatRepository chatRepository, IMessageRepository mess
                 SenderName = await chatRepository.GetUserNameAsync(message.SenderId),
                 Text = message.Text,
                 CreatedAt = message.CreatedAt,
-                IsRead = false // TODO: проверить read status
+                IsRead = false // TODO: resolve actual read status
             });
         }
 
         return [.. result.OrderBy(m => m.CreatedAt)];
     }
+
+    public async Task<CursorPaginatedResponse<MessageDto>> GetChatMessagesCursorAsync(
+        Guid chatId, Guid userId, string? cursor, int limit)
+    {
+        // Authorization check — caller must be a member
+        var isMember = await chatRepository.IsMemberAsync(chatId, userId);
+        if (!isMember)
+            throw new UnauthorizedAccessException("User is not a member of this chat");
+
+        // Fetch page from storage (cursor-based)
+        var result = await messageRepository.GetMessagesCursorAsync(chatId, cursor, limit);
+
+        // Map entities to DTOs
+        var messages = new List<MessageDto>();
+        foreach (var message in result.Items)
+        {
+            messages.Add(new MessageDto
+            {
+                Id = message.Id,
+                SenderId = message.SenderId,
+                SenderName = await chatRepository.GetUserNameAsync(message.SenderId),
+                Text = message.Text,
+                CreatedAt = message.CreatedAt,
+                IsRead = false // TODO: resolve actual read status
+            });
+        }
+
+        // Build next cursor from the last message in the page
+        string? nextCursor = null;
+        if (messages.Count > 0)
+        {
+            var last = messages[^1];
+            nextCursor = new Storage.Dto.CursorDto(last.CreatedAt, last.Id).Encode();
+        }
+
+        return new CursorPaginatedResponse<MessageDto>
+        {
+            Items = [.. messages.OrderBy(m => m.CreatedAt)],
+            NextCursor = nextCursor,
+            HasMore = result.HasMore
+        };
+    }
 }
+

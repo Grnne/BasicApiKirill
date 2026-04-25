@@ -1,4 +1,5 @@
-﻿using BasicApi.Models.Dto.Auth;
+﻿using BasicApi.Middleware;
+using BasicApi.Models.Dto.Auth;
 using BasicApi.Services;
 using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
@@ -18,9 +19,12 @@ public class AuthHandler(
 
         if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
         {
-            return new UnauthorizedObjectResult(new ErrorResponseDto
+            return new UnauthorizedObjectResult(new ProblemDetails
             {
-                Message = "Invalid username/email or password"
+                Title = "Unauthorized",
+                Status = StatusCodes.Status401Unauthorized,
+                Detail = "Invalid username/email or password",
+                Type = "https://tools.ietf.org/html/rfc9110#section-15.5.2"
             });
         }
 
@@ -44,9 +48,12 @@ public class AuthHandler(
 
         if (existingUser != null)
         {
-            return new BadRequestObjectResult(new ErrorResponseDto
+            return new ConflictObjectResult(new ProblemDetails
             {
-                Message = "Username already exists"
+                Title = "Conflict",
+                Status = StatusCodes.Status409Conflict,
+                Detail = "Username already exists",
+                Type = "https://tools.ietf.org/html/rfc9110#section-15.5.10"
             });
         }
 
@@ -55,9 +62,12 @@ public class AuthHandler(
 
         if (existingUser != null)
         {
-            return new BadRequestObjectResult(new ErrorResponseDto
+            return new ConflictObjectResult(new ProblemDetails
             {
-                Message = "Email already exists"
+                Title = "Conflict",
+                Status = StatusCodes.Status409Conflict,
+                Detail = "Email already exists",
+                Type = "https://tools.ietf.org/html/rfc9110#section-15.5.10"
             });
         }
 
@@ -75,7 +85,7 @@ public class AuthHandler(
         var userId = await userRepository.CreateAsync(user);
         var token = jwtService.GenerateToken(userId, user.Username, user.Email);
 
-        return new OkObjectResult(new AuthResponseDto
+        return new CreatedResult($"/api/auth/login", new AuthResponseDto
         {
             UserId = userId,
             Username = user.Username,

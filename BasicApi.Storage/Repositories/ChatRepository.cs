@@ -98,19 +98,20 @@ public class ChatRepository(IDbConnection connection) : IChatRepository
         return await connection.ExecuteScalarAsync<bool>(sql, new { chatId, userId });
     }
 
-    public async Task<int> GetUnreadCountAsync(Guid chatId, Guid userId)
+        public async Task<int> GetUnreadCountAsync(Guid chatId, Guid userId)
     {
         const string sql = @"
-            SELECT COUNT(*) 
+            SELECT COUNT(*)
             FROM messages m
-            WHERE m.chat_id = @chatId 
-            AND m.created_at > COALESCE((
-                SELECT created_at 
-                FROM messages 
-                WHERE id = cm.last_read_message_id
-            ), '1970-01-01'::timestamp)
-            FROM chat_members cm
-            WHERE cm.chat_id = @chatId AND cm.user_id = @userId";
+            WHERE m.chat_id = @chatId
+              AND m.is_deleted = false
+              AND m.created_at > COALESCE(
+                  (SELECT created_at FROM messages WHERE id = (
+                      SELECT last_read_message_id FROM chat_members
+                      WHERE chat_id = @chatId AND user_id = @userId
+                  )),
+                  '1970-01-01'::timestamp
+              )";
 
         return await connection.ExecuteScalarAsync<int>(sql, new { chatId, userId });
     }

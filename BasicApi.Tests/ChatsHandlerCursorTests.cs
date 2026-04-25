@@ -1,0 +1,141 @@
+using BasicApi.Features.Chats;
+using BasicApi.Models.Dto.Message;
+using BasicApi.Services;
+using BasicApi.Storage.Interfaces;
+using Microsoft.AspNetCore.Mvc;
+using Moq;
+
+namespace BasicApi.Tests;
+
+public class ChatsHandlerCursorTests
+{
+    private readonly Mock<IChatService> _chatServiceMock;
+    private readonly Mock<IChatRepository> _chatRepoMock;
+    private readonly Mock<IMessageRepository> _msgRepoMock;
+    private readonly ChatsHandler _handler;
+
+    public ChatsHandlerCursorTests()
+    {
+        _chatServiceMock = new Mock<IChatService>();
+        _chatRepoMock = new Mock<IChatRepository>();
+        _msgRepoMock = new Mock<IMessageRepository>();
+        _handler = new ChatsHandler(
+            _chatServiceMock.Object,
+            _chatRepoMock.Object,
+            _msgRepoMock.Object);
+    }
+
+    [Fact]
+    public async Task GetMessagesCursorAsync_WhenMember_ReturnsOkWithPaginatedResponse()
+    {
+        // Arrange
+        var chatId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var messages = new List<MessageDto>
+        {
+            new() { Id = Guid.NewGuid(), SenderId = userId, Text = "Hello", CreatedAt = DateTime.UtcNow.AddMinutes(-5) },
+            new() { Id = Guid.NewGuid(), SenderId = userId, Text = "World", CreatedAt = DateTime.UtcNow.AddMinutes(-2) },
+        };
+
+        var response = new CursorPaginatedResponse<MessageDto>
+        {
+            Items = messages,
+            NextCursor = "some-cursor-value",
+            HasMore = true
+        };
+
+        _chatServiceMock
+            .Setup(s => s.GetChatMessagesCursorAsync(chatId, userId, It.IsAny<string?>(), 20))
+            .ReturnsAsync(response);
+
+        // Act
+        var result = await _handler.GetMessagesCursorAsync(chatId, userId, null, 20);
+
+        // Assert
+        var okResult = Assert.IsType<OkObjectResult>(result);
+        var paginated = Assert.IsType<CursorPaginatedResponse<MessageDto>>(okResult.Value);
+        Assert.Equal(2, paginated.Items.Count);
+        Assert.NotNull(paginated.NextCursor);
+        Assert.True(paginated.HasMore);
+    }
+
+    [Fact]
+    public async Task GetMessagesCursorAsync_WhenNotMember_ThrowsUnauthorizedAccess()
+    {
+        // Arrange
+        _chatServiceMock
+            .Setup(s => s.GetChatMessagesCursorAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<int>()))
+            .ThrowsAsync(new UnauthorizedAccessException("User is not a member of this chat"));
+
+        // Act & Assert — the handler no longer catches this; it bubbles to middleware
+        // which returns ProblemDetails with 403
+        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            _handler.GetMessagesCursorAsync(Guid.NewGuid(), Guid.NewGuid(), null, 20));
+        Assert.Contains("not a member", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task GetMessagesCursorAsync_WhenNoMorePages_ReturnsHasMoreFalseAndNullCursor()
+    {
+        // Arrange
+        var chatId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var message = new MessageDto
+        {
+            Id = Guid.NewGuid(),
+            SenderId = userId,
+            Text = "Only message",
+            CreatedAt = DateTime.UtcNow
+        };
+
+        var response = new CursorPaginatedResponse<MessageDto>
+        {
+            Items = [message],
+            NextCursor = null,
+            HasMore = false
+        };
+
+        _chatServiceMock
+            .Setup(s => s.GetChatMessagesCursorAsync(chatId, userId, "prev-cursor", 50))
+            .ReturnsAsync(response);
+
+        // Act
+        var result = await _handler.GetMessagesCursorAsync(chatId, userId, "prev-cursor", 50);
+
+        // Assert
+        var okResult = Assert.IsType<OkObjectResult>(result);
+        var paginated = Assert.IsType<CursorPaginatedResponse<MessageDto>>(okResult.Value);
+        Assert.Single(paginated.Items);
+        Assert.Null(paginated.NextCursor);
+        Assert.False(paginated.HasMore);
+    }
+
+    [Fact]
+    public async Task GetMessagesCursorAsync_WhenEmptyChat_ReturnsEmptyPage()
+    {
+        // Arrange
+        var chatId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+
+        var response = new CursorPaginatedResponse<MessageDto>
+        {
+            Items = [],
+            NextCursor = null,
+            HasMore = false
+        };
+
+        _chatServiceMock
+            .Setup(s => s.GetChatMessagesCursorAsync(chatId, userId, null, 20))
+            .ReturnsAsync(response);
+
+        // Act
+        var result = await _handler.GetMessagesCursorAsync(chatId, userId, null, 20);
+
+        // Assert
+        var okResult = Assert.IsType<OkObjectResult>(result);
+        var paginated = Assert.IsType<CursorPaginatedResponse<MessageDto>>(okResult.Value);
+        Assert.Empty(paginated.Items);
+        Assert.Null(paginated.NextCursor);
+        Assert.False(paginated.HasMore);
+    }
+}
