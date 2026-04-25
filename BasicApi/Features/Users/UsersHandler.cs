@@ -11,15 +11,7 @@ public class UsersHandler(IUserRepository userRepository)
         var userId = await userRepository.GetIdByUsernameOrEmailAsync(usernameOrEmail);
 
         if (!userId.HasValue || userId == Guid.Empty)
-        {
-            return new NotFoundObjectResult(new ProblemDetails
-            {
-                Title = "Not Found",
-                Status = StatusCodes.Status404NotFound,
-                Detail = "User not found",
-                Type = "https://tools.ietf.org/html/rfc9110#section-15.5.5"
-            });
-        }
+            throw new NotFoundException("User not found");
 
         return new OkObjectResult(new { userId = userId.Value });
     }

@@ -6,7 +6,7 @@ namespace BasicApi.Features.Users;
 [ApiController]
 [Route("api/[controller]")]
 [Produces("application/json")]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+[ProducesResponseType(StatusCodes.Status401Unauthorized)]
 [Tags("Users")]
 public class UsersController(UsersHandler handlers) : ControllerBase
 {

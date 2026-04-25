@@ -8,23 +8,6 @@ namespace BasicApi.Storage.Repositories;
 
 public class MessageRepository(IDbConnection connection) : IMessageRepository
 {
-    public async Task<IEnumerable<Message>> GetMessagesAsync(Guid chatId, DateTime? before, int limit)
-    {
-        var sql = @"
-            SELECT * FROM messages 
-            WHERE chat_id = @chatId 
-            AND is_deleted = false";
-
-        if (before.HasValue)
-        {
-            sql += " AND created_at < @before";
-        }
-
-        sql += " ORDER BY created_at DESC LIMIT @limit";
-
-        return await connection.QueryAsync<Message>(sql, new { chatId, before, limit });
-    }
-
     public async Task<CursorResult<Message>> GetMessagesCursorAsync(Guid chatId, string? cursor, int limit)
     {
         // Decode cursor — if null, start from the most recent messages
@@ -208,6 +191,24 @@ public class MessageRepository(IDbConnection connection) : IMessageRepository
             WHERE cm.chat_id = @chatId AND cm.user_id = @userId
         )";
 
-        return await connection.ExecuteScalarAsync<int>(sql, new { chatId, userId });
+                return await connection.ExecuteScalarAsync<int>(sql, new { chatId, userId });
+    }
+
+    /// <summary>
+    /// Finds the most recent message at or before the given date.
+    /// Used to build a cursor for the "jump to date" endpoint.
+    /// </summary>
+    public async Task<Message?> GetFirstMessageBeforeDateAsync(Guid chatId, DateTime date)
+    {
+        const string sql = @"
+            SELECT *
+            FROM messages
+            WHERE chat_id = @chatId
+              AND created_at <= @date
+              AND is_deleted = false
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1";
+
+        return await connection.QueryFirstOrDefaultAsync<Message>(sql, new { chatId, date });
     }
 }

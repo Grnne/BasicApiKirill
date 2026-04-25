@@ -4,7 +4,6 @@ using BasicApi.Services;
 using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace BasicApi.Features.Auth;
 
@@ -13,20 +12,12 @@ public class AuthHandler(
     IJwtService jwtService)
 {
     public async Task<IActionResult> LoginAsync(
-        LoginRequestDto request)
+    LoginRequestDto request)
     {
         var user = await userRepository.GetByUsernameOrEmailAsync(request.UsernameOrEmail);
 
         if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
-        {
-            return new UnauthorizedObjectResult(new ProblemDetails
-            {
-                Title = "Unauthorized",
-                Status = StatusCodes.Status401Unauthorized,
-                Detail = "Invalid username/email or password",
-                Type = "https://tools.ietf.org/html/rfc9110#section-15.5.2"
-            });
-        }
+            throw new UnauthorizedAccessException("Invalid username/email or password");
 
         var token = jwtService.GenerateToken(user.Id, user.Username, user.Email);
 
@@ -47,29 +38,13 @@ public class AuthHandler(
         var existingUser = await userRepository.GetByUsernameOrEmailAsync(request.Username);
 
         if (existingUser != null)
-        {
-            return new ConflictObjectResult(new ProblemDetails
-            {
-                Title = "Conflict",
-                Status = StatusCodes.Status409Conflict,
-                Detail = "Username already exists",
-                Type = "https://tools.ietf.org/html/rfc9110#section-15.5.10"
-            });
-        }
+            throw new ConflictException("Username already exists");
 
         // Проверка уникальности email
         existingUser = await userRepository.GetByUsernameOrEmailAsync(request.Email);
 
         if (existingUser != null)
-        {
-            return new ConflictObjectResult(new ProblemDetails
-            {
-                Title = "Conflict",
-                Status = StatusCodes.Status409Conflict,
-                Detail = "Email already exists",
-                Type = "https://tools.ietf.org/html/rfc9110#section-15.5.10"
-            });
-        }
+            throw new ConflictException("Email already exists");
 
         var user = new User
         {

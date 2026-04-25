@@ -51,32 +51,6 @@ public class ChatService(IChatRepository chatRepository, IMessageRepository mess
         };
     }
 
-    public async Task<List<MessageDto>> GetChatMessagesAsync(Guid chatId, Guid userId, DateTime? before, int limit)
-    {
-        var isMember = await chatRepository.IsMemberAsync(chatId, userId);
-        if (!isMember)
-            throw new UnauthorizedAccessException("User is not a member of this chat");
-
-        // TODO: add GetMessagesWithSenderAsync for legacy endpoint if needed
-        var messages = await messageRepository.GetMessagesAsync(chatId, before, limit);
-        var result = new List<MessageDto>();
-
-        foreach (var message in messages)
-        {
-            result.Add(new MessageDto
-            {
-                Id = message.Id,
-                SenderId = message.SenderId,
-                SenderName = await chatRepository.GetUserNameAsync(message.SenderId),
-                Text = message.Text,
-                CreatedAt = message.CreatedAt,
-                IsRead = false // TODO: resolve actual read status
-            });
-        }
-
-        return [.. result.OrderBy(m => m.CreatedAt)];
-    }
-
     public async Task<CursorPaginatedResponse<MessageDto>> GetChatMessagesCursorAsync(
         Guid chatId, Guid userId, string? cursor, int limit)
     {
@@ -96,7 +70,7 @@ public class ChatService(IChatRepository chatRepository, IMessageRepository mess
             SenderName = m.SenderName,
             Text = m.Text,
             CreatedAt = m.CreatedAt,
-                IsRead = false // TODO: resolve actual read status
+            IsRead = false // TODO: resolve actual read status
         }).ToList();
         // Build next cursor from the last message in the page
         string? nextCursor = null;

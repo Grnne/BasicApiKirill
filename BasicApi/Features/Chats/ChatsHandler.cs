@@ -1,6 +1,7 @@
 ﻿using BasicApi.Middleware;
 using BasicApi.Models.Dto.Message;
 using BasicApi.Services;
+using BasicApi.Storage.Dto;
 using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
 using Microsoft.AspNetCore.Mvc;
@@ -21,18 +22,12 @@ public class ChatsHandler(
     public async Task<IActionResult> CreatePrivateChatAsync(Guid currentUserId, Guid otherUserId)
     {
         if (currentUserId == otherUserId)
-            return new BadRequestObjectResult(new ProblemDetails
-            {
-                Title = "Bad Request",
-                Status = StatusCodes.Status400BadRequest,
-                Detail = "Cannot create chat with yourself",
-                Type = "https://tools.ietf.org/html/rfc9110#section-15.5.1"
-            });
+            throw new BadRequestException("Cannot create chat with yourself");
 
         var existingChat = await chatRepository.GetPrivateChatAsync(currentUserId, otherUserId);
 
         if (existingChat != null)
-            return new OkObjectResult(new { chatId = existingChat.Id, message = "Chat already exists" });
+            return new OkObjectResult(new { chatId = existingChat.Id });
 
         var chat = new Chat
         {
@@ -45,23 +40,13 @@ public class ChatsHandler(
         var memberIds = new[] { currentUserId, otherUserId };
         var chatId = await chatRepository.CreateAsync(chat, memberIds);
 
-        return new CreatedAtActionResult(
-            actionName: nameof(GetChatAsync),
-            controllerName: null,
-            routeValues: new { chatId },
-            value: new { chatId });
+        return new OkObjectResult(new { chatId });
     }
 
     public async Task<IActionResult> GetChatAsync(Guid chatId, Guid userId)
     {
         var chat = await chatService.GetChatDetailsAsync(chatId, userId);
         return new OkObjectResult(chat);
-    }
-
-    public async Task<IActionResult> GetMessagesAsync(Guid chatId, Guid userId, DateTime? before, int limit)
-    {
-        var messages = await chatService.GetChatMessagesAsync(chatId, userId, before, limit);
-        return new OkObjectResult(messages);
     }
 
     /// <summary>
@@ -75,11 +60,36 @@ public class ChatsHandler(
         return new OkObjectResult(result);
     }
 
+    /// <summary>
+    /// Jump to messages around a specific date.
+    /// Finds the nearest message at or before the given date and returns a page around it.
+    /// Returns a CursorPaginatedResponse — use nextCursor to scroll further back.
+    /// </summary>
+    public async Task<IActionResult> GetMessagesAtAsync(
+        Guid chatId, Guid userId, DateTime date, int limit)
+    {
+        // Authorization check — caller must be a member
+        var isMember = await chatRepository.IsMemberAsync(chatId, userId);
+        if (!isMember)
+            throw new UnauthorizedAccessException("User is not a member of this chat");
+
+        // Find the most recent message at or before the requested date
+        var pivot = await messageRepository.GetFirstMessageBeforeDateAsync(chatId, date);
+
+        // If no messages before this date, return the most recent page (cursor = null)
+        string? cursor = pivot is not null
+            ? new CursorDto(pivot.CreatedAt, pivot.Id).Encode()
+            : null;
+
+        var result = await chatService.GetChatMessagesCursorAsync(chatId, userId, cursor, limit);
+        return new OkObjectResult(result);
+    }
+
     public async Task<IActionResult> MarkReadAsync(Guid chatId, Guid userId, Guid lastMessageId)
     {
         var isMember = await chatRepository.IsMemberAsync(chatId, userId);
         if (!isMember)
-            return new ForbidResult();
+            throw new UnauthorizedAccessException("User is not a member of this chat");
 
         await messageRepository.UpdateLastReadAsync(chatId, userId, lastMessageId);
         return new OkResult();

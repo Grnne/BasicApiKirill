@@ -71,14 +71,27 @@ public class ChatsController(ChatsHandler handlers) : ControllerBase
         => await handlers.GetMessagesCursorAsync(chatId, User.GetUserId(), cursor, Math.Clamp(limit, 1, 100));
 
     /// <summary>
-    /// Get message history (legacy — prefer cursor-based endpoint)
+    /// Get messages around a specific date.
     /// </summary>
-    [HttpGet("{chatId}/messages")]
-    [ProducesResponseType(typeof(IEnumerable<MessageDto>), StatusCodes.Status200OK)]
+    /// <remarks>
+    /// Returns a page of messages cursor-based, with the most recent message at or before
+    /// the given date as the last item in the page.
+    /// Use the returned `nextCursor` to scroll further back.
+    /// 
+    /// Purpose: "Jump to March 15", "Open chat where I left off", "Go to unread messages".
+    /// </remarks>
+    /// <param name="chatId">Chat ID</param>
+    /// <param name="date">Target date (ISO 8601). Finds messages at or before this date.</param>
+    /// <param name="limit">Number of messages per page (default 20, max 100).</param>
+    [HttpGet("{chatId}/messages/at")]
+    [ProducesResponseType(typeof(CursorPaginatedResponse<MessageDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> GetMessages(Guid chatId, [FromQuery] DateTime? before, [FromQuery] int limit = 50)
-        => await handlers.GetMessagesAsync(chatId, User.GetUserId(), before, limit);
+    public async Task<IActionResult> GetMessagesAt(
+        Guid chatId,
+        [FromQuery] DateTime date,
+        [FromQuery] int limit = 20)
+        => await handlers.GetMessagesAtAsync(chatId, User.GetUserId(), date, Math.Clamp(limit, 1, 100));
 
     /// <summary>
     /// Mark messages as read
