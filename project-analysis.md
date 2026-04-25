@@ -1,25 +1,35 @@
 # Project Analysis: BasicApi
 
-> Real-time chat Web API with JWT authentication, SignalR, and PostgreSQL persistence
+> Real-time chat API with JWT authentication, cursor-based pagination, and PostgreSQL storage
 
 ## Overview
 
-BasicApi is a real-time chat application built on ASP.NET Core 10, using SignalR for WebSocket-based real-time messaging and PostgreSQL for persistent storage via Dapper (micro-ORM). The solution follows a two-project architecture: a Web API project (`BasicApi`) containing controllers, SignalR hubs, services, and DTOs; and a class library (`BasicApi.Storage`) handling all data access — entities, repositories, Dapper SQL queries, FluentMigrator migrations, and a connection factory.
+BasicApi is a .NET 10 ASP.NET Core Web API that implements a real-time private messaging system with SignalR hubs for live communication. The project follows a **feature-based vertical slice architecture** within the main API project, with a separate storage layer handling all data access via Dapper and PostgreSQL.
 
-The application implements JWT bearer token authentication for both REST endpoints and SignalR hub connections (tokens passed via query string for WebSocket). It supports user registration/login with BCrypt password hashing, private chat creation with participant tracking, message history retrieval with cursor-based pagination, and real-time messaging with typing indicators and online presence. The entire stack is Dockerized with docker-compose, running the API and a PostgreSQL  database in linked containers.
+The solution consists of three projects: `BasicApi` (ASP.NET Core host with controllers, SignalR hubs, and business logic), `BasicApi.Storage` (data access layer with Dapper repositories, FluentMigrator migrations, and Npgsql), and `BasicApi.Tests` (xUnit test suite with Moq). The API uses JWT bearer tokens for authentication, supports cursor-based pagination for message history, and is fully containerized with Docker Compose for local development with PostgreSQL.
 
 ## Project Structure
 
 ```
 BasicApi/
 ├── BasicApi.sln
+├── .env (configuration)
+├── .gitignore
 ├── docker-compose.yml
-├── BasicApi/                          # Web API entry point
+├── readme.md
+├── test-client.html
+├── CursorPaginationChanges.md
+├── launchSettings.json
+├── BasicApi/
 │   ├── BasicApi.csproj
 │   ├── Program.cs
 │   ├── Dockerfile
 │   ├── Controllers/
 │   │   └── ProductsController.cs
+│   ├── Extensions/
+│   │   ├── ServiceExtensions.cs
+│   │   ├── SwaggerExtensions.cs
+│   │   └── ClaimsPrincipalExtensions.cs
 │   ├── Features/
 │   │   ├── Auth/
 │   │   │   ├── AuthController.cs
@@ -32,146 +42,178 @@ BasicApi/
 │   │       └── UsersHandler.cs
 │   ├── Hubs/
 │   │   └── ChatHub.cs
+│   ├── Middleware/
+│   │   └── ExceptionHandlingMiddleware.cs
 │   ├── Models/
 │   │   ├── Product.cs
 │   │   ├── User.cs
 │   │   └── Dto/
-│   │       ├── Auth/       (4 files)
-│   │       ├── Chat/       (4 files)
-│   │       └── Message/    (3 files)
-│   ├── Services/
-│   │   ├── IChatService.cs
-│   │   ├── ChatService.cs
-│   │   ├── IJwtService.cs
-│   │   └── JwtService.cs
-│   └── Extensions/
-│       ├── ServiceExtensions.cs
-│       ├── SwaggerExtensions.cs
-│       └── ClaimsPrincipalExtensions.cs
-├── BasicApi.Storage/                  # Data access library
+│   │       ├── Auth/
+│   │       │   ├── AuthResponseDto.cs
+│   │       │   ├── LoginRequestDto.cs
+│   │       │   ├── RegisterRequestDto.cs
+│   │       │   └── ErrorResponseDto.cs
+│   │       ├── Chat/
+│   │       │   ├── ChatDetailDto.cs
+│   │       │   ├── ChatListItemDto.cs
+│   │       │   ├── ChatParticipantDto.cs
+│   │       │   └── CreatePrivateChatDto.cs
+│   │       └── Message/
+│   │           ├── MessageDto.cs
+│   │           ├── SendMessageDto.cs
+│   │           ├── MarkMessageReadDto.cs
+│   │           └── CursorPaginatedResponse.cs
+│   └── Services/
+│       ├── IChatService.cs
+│       ├── ChatService.cs
+│       ├── IJwtService.cs
+│       └── JwtService.cs
+├── BasicApi.Storage/
 │   ├── BasicApi.Storage.csproj
+│   ├── Dto/
+│   │   ├── ChatParticipantDto.cs
+│   │   ├── CursorDto.cs
+│   │   └── CursorResult.cs
 │   ├── Entities/
-│   │   ├── User.cs
 │   │   ├── Chat.cs
 │   │   ├── ChatMember.cs
-│   │   └── Message.cs
+│   │   ├── Message.cs
+│   │   └── User.cs
 │   ├── Interfaces/
-│   │   ├── IDbConnectionFactory.cs
-│   │   ├── IUserRepository.cs
 │   │   ├── IChatRepository.cs
-│   │   └── IMessageRepository.cs
-│   ├── Repositories/
-│   │   ├── UserRepository.cs
-│   │   ├── ChatRepository.cs
-│   │   └── MessageRepository.cs
-│   ├── Services/
-│   │   └── NpgsqlConnectionFactory.cs
+│   │   ├── IDbConnectionFactory.cs
+│   │   ├── IMessageRepository.cs
+│   │   └── IUserRepository.cs
 │   ├── Migrations/
 │   │   └── InitialCreate.cs
-│   └── Dto/
-│       └── ChatParticipantDto.cs
-└── test-client.html
+│   ├── Repositories/
+│   │   ├── ChatRepository.cs
+│   │   ├── MessageRepository.cs
+│   │   └── UserRepository.cs
+│   └── Services/
+│       └── NpgsqlConnectionFactory.cs
+└── BasicApi.Tests/
+    ├── BasicApi.Tests.csproj
+    ├── ChatServiceCursorTests.cs
+    ├── ChatsHandlerCursorTests.cs
+    └── CursorDtoTests.cs
 ```
 
 ## Architecture Breakdown
 
-### 🔵 BasicApi — Web API entry point
-- **Target:** .NET 10, ASP.NET Core (Microsoft.NET.Sdk.Web)
+### 🔵 BasicApi — entry point, main app
+- **Target:** .NET 10, ASP.NET Core
 - **NuGet:**
-  - `Microsoft.AspNetCore.Authentication.JwtBearer` 10.0.6 — JWT auth
-  - `BCrypt.Net-Next` 4.1.0 — password hashing
-  - `System.IdentityModel.Tokens.Jwt` 8.17.0 — JWT token handling
-  - `Swashbuckle.AspNetCore` 10.1.7 — Swagger/OpenAPI
-  - `FluentMigrator` / `FluentMigrator.Runner` / `FluentMigrator.Runner.Postgres` 8.0.1 — migrations
-  - `Microsoft.VisualStudio.Azure.Containers.Tools.Targets` 1.22.1 — Docker tooling
+  - `Microsoft.AspNetCore.Authentication.JwtBearer` 10.0.6
+  - `BCrypt.Net-Next` 4.1.0
+  - `System.IdentityModel.Tokens.Jwt` 8.17.0
+  - `Swashbuckle.AspNetCore` 10.1.7
+  - `FluentMigrator` / `FluentMigrator.Runner` / `FluentMigrator.Runner.Postgres` 8.0.1
 - **Key Flow:**
   ```
-  Program.Main → AddApiServices() → Controllers/SignalR → Auth (JWT) → Repositories → PostgreSQL
-   ├─ Swagger/OpenAPI docs
-   ├─ SignalR ChatHub (real-time messaging)
-   ├─ REST: Auth, Chats, Users, Products endpoints
-   └─ FluentMigrator runs at startup
+  Program.Main → AddApiServices() → builder.Build()
+  → ExceptionHandlingMiddleware → FluentMigrateUp (dev) → StaticFiles
+  → CORS → Swagger → HttpsRedirection → Auth → Authorization
+  → MapHub<ChatHub>("/hubs/chat") → MapControllers()
   ```
 - **Key Files:**
-  - `Program.cs` (~30 lines) — app bootstrap, middleware pipeline, migration runner at startup
-  - `Extensions/ServiceExtensions.cs` (~85 lines) — DI container setup (all services, repos, JWT, CORS, FluentMigrator)
-  - `Extensions/SwaggerExtensions.cs` (~65 lines) — Swagger config with JWT security definition using new Swashbuckle 10 / OpenApi v2 syntax
-  - `Features/Auth/AuthHandler.cs` (~70 lines) — login/register logic
-  - `Features/Chats/ChatsHandler.cs` (~80 lines) — chat CRUD orchestration
-  - `Hubs/ChatHub.cs` (~100 lines) — SignalR hub (connect, disconnect, join/leave groups, send message, typing)
-  - `Services/JwtService.cs` (~75 lines) — JWT token generation and validation
-  - `Services/ChatService.cs` (~85 lines) — chat business logic (user chats, details, messages)
+  - `Program.cs` (49 lines) — Application bootstrap, middleware pipeline ordering, migration execution
+  - `Extensions/ServiceExtensions.cs` (99 lines) — DI registration for all services, JWT config, CORS, FluentMigrator setup
+  - `Extensions/SwaggerExtensions.cs` (86 lines) — Swagger/OpenAPI configuration with JWT security definitions
+  - `Middleware/ExceptionHandlingMiddleware.cs` (105 lines) — Global exception handler mapping exceptions to ProblemDetails RFC 9110 responses
 
-### 🟢 BasicApi.Storage — Data access / Infrastructure library
-- **Target:** .NET 10 (Microsoft.NET.Sdk)
-- **NuGet:**
-  - `Dapper` 2.1.72 — micro-ORM for ADO.NET
-  - `Npgsql` 10.0.2 — PostgreSQL provider
-  - `FluentMigrator` / `FluentMigrator.Runner` / `FluentMigrator.Runner.Postgres` 8.0.1
-- **Purpose:** Data persistence layer — entities, repositories, migrations, connection management
+### 🟢 BasicApi.Storage — data access / infrastructure
+- **Target:** .NET 10 class library
+- **NuGet:** `Dapper` 2.1.72, `Npgsql` 10.0.2, `FluentMigrator` 8.0.1
+- **Purpose:** Data access layer with repository pattern, PostgreSQL via Dapper, automatic migrations
 - **Key Files:**
-  - `Entities/User.cs`, `Entities/Chat.cs`, `Entities/ChatMember.cs`, `Entities/Message.cs` — domain/entity models
-  - `Interfaces/IUserRepository.cs`, `IChatRepository.cs`, `IMessageRepository.cs` — repository contracts
-  - `Repositories/UserRepository.cs` (~50 lines) — user queries (by username/email, create, get ID)
-  - `Repositories/ChatRepository.cs` (~120 lines) — chat queries (user chats, create with members, participants, companion name)
-  - `Repositories/MessageRepository.cs` (~60 lines) — message queries (get with cursor pagination, create, mark read, unread count)
-  - `Services/NpgsqlConnectionFactory.cs` (~15 lines) — creates and opens Npgsql connections
-  - `Migrations/InitialCreate.cs` (~100 lines) — FluentMigrator migration that creates all tables, indexes, foreign keys
+  - `Repositories/MessageRepository.cs` — Cursor-based pagination with composite key `(created_at, id)` for deterministic ordering (120 lines)
+  - `Repositories/ChatRepository.cs` — Chat CRUD, member management, unread counts with SQL subqueries (160 lines)
+  - `Repositories/UserRepository.cs` — User lookup by username/email, user creation (48 lines)
+  - `Migrations/InitialCreate.cs` — Database schema: users, chats, chat_members, messages tables with foreign keys and indexes (98 lines)
+  - `Dto/CursorDto.cs` — URL-safe Base64 encoding of composite `(DateTime, Guid)` cursor for pagination (63 lines)
+  - `Dto/CursorResult.cs` — Generic wrapper fetching `limit+1` rows to detect `HasMore` without a second query (20 lines)
 
-### 🟣 (No test project exists)
-- **Framework:** N/A — there are no tests in this solution
-- **Test coverage:** None
+### 🟣 BasicApi.Tests — unit tests
+- **Framework:** xUnit 2.9.3
+- **Infrastructure:**
+  - `Moq` 4.20.72 for mocking dependencies
+  - `Microsoft.NET.Test.Sdk` 17.14.1
+  - `coverlet.collector` 6.0.4 for code coverage
+- **Test coverage:**
+  - `ChatServiceCursorTests.cs` (174 lines) — 7 tests covering:
+    - Authorization check (throws `UnauthorizedAccessException` for non-members)
+    - Message mapping from entities to DTOs with sender names
+    - `HasMore` flag and cursor generation when extra records exist
+    - `HasMore=false` with cursor present for last page
+    - Chronological (ASC) ordering of returned messages
+    - Empty chat returns empty page with no cursor
+    - Valid cursor passthrough to repository layer
+  - `ChatsHandlerCursorTests.cs` (123 lines) — 4 tests covering:
+    - Handler returns `OkObjectResult` with `CursorPaginatedResponse`
+    - UnauthorizedAccessException bubbles to global middleware
+    - No-more-pages scenario with `HasMore=false`
+    - Empty chat returns empty page
+  - `CursorDtoTests.cs` (113 lines) — 8 tests covering:
+    - Encode/decode round-trip preserves values
+    - URL-safe encoding (no `+`, `/`, `=` characters)
+    - Invalid/empty/null string decoding error handling
+    - `CompareTo` for same values, different times, and same-time-different-IDs
 
 ## Key Design Patterns Observed
 
 | Pattern | Where | Description |
 |---------|-------|-------------|
-| Repository | `BasicApi.Storage/Repositories/*` | All data access encapsulated behind repository interfaces (`IUserRepository`, `IChatRepository`, `IMessageRepository`) |
-| Handler / Mediator (lightweight) | `BasicApi/Features/*/Handlers.cs` | Controllers delegate to handler classes that orchestrate services/repos and return `IActionResult` — a simple mediator-like separation |
-| Strategy (DI-based) | `BasicApi/Extensions/ServiceExtensions.cs` | All dependencies registered via DI (`AddScoped`, `AddSingleton`); `IDbConnectionFactory` allows swapping connection implementations |
-| Singleton | `NpgsqlConnectionFactory` | Registered as singleton; creates a new `IDbConnection` per resolution (scoped `IDbConnection`) |
-| Unit of Work (implicit) | `ChatRepository.CreateAsync()` | Uses explicit `BeginTransaction()` / `Commit()` / `Rollback()` for chat + member inserts |
-| Fluent Builder (migrations) | `BasicApi.Storage/Migrations/InitialCreate.cs` | FluentMigrator's fluent API for table/foreign key/index definitions |
+| Feature-based vertical slices | `BasicApi/Features/{Feature}/` | Each feature (Auth, Chats, Users) has its own Controller + Handler, keeping related logic together |
+| Repository pattern | `BasicApi.Storage/Repositories/*` | Data access abstracted behind interfaces (`IChatRepository`, `IMessageRepository`, `IUserRepository`) |
+| Handler pattern (thin controllers) | `Features/*/Handler.cs` | Controllers delegate to injected handlers, keeping controllers focused on HTTP concerns only |
+| Global error handling middleware | `Middleware/ExceptionHandlingMiddleware.cs` | Centralized exception-to-ProblemDetails mapping with RFC 9110 type URIs |
+| Cursor-based pagination | `MessageRepository`, `CursorDto`, `CursorPaginatedResponse` | Composite key `(created_at, id)` encoding for deterministic pagination |
+| Connection factory pattern | `IDbConnectionFactory` / `NpgsqlConnectionFactory` | Abstraction over connection creation for testability and DI |
+| Singleton-scoped connection factory | `ServiceExtensions.cs` | Single connection factory with scoped `IDbConnection` per request |
+| Strategy-like DI via interfaces | `IJwtService`, `IChatService` | Services programmed to interfaces for testability |
 
 ## Strengths
 
-- **Clean separation of concerns** — Web API project is purely about HTTP/SignalR concerns; data access is fully isolated in a separate class library project with no framework dependencies
-- **Real-time messaging with SignalR** — properly handles JWT token passing via query string for WebSocket connections, with group-based chat rooms and online presence tracking
-- **Docker-first deployment** — full docker-compose setup with PostgreSQL health check, environment variable configuration, and proper dependency ordering
-- **Swagger documentation** — comprehensive OpenAPI docs with JWT authentication support, XML comments, and request/response examples
-- **Database migrations** — FluentMigrator with auto-run at startup ensures schema is always up to date
-- **Password security** — BCrypt hashing for passwords, not plain text
-- **Cursor-based pagination** — messages can be fetched "before" a timestamp, preventing common issues with offset-based pagination
+- **Clean separation of concerns**: Three-project solution clearly separates API host, data access, and tests
+- **Production-grade pagination**: Cursor-based pagination with composite key prevents missed/duplicate records even with identical timestamps; URL-safe Base64 encoding; `limit+1` fetch strategy avoids extra count queries
+- **Resilient error handling**: Global middleware maps specific exception types to appropriate HTTP status codes with RFC 9110 ProblemDetails; stack traces stripped in production
+- **Container-first development**: Docker Compose with PostgreSQL healthchecks, volume persistence, and environment variable configuration
+- **Thin controllers**: Handlers encapsulate business logic, controllers only handle HTTP binding and routing
+- **Comprehensive test suite**: 19 unit tests covering pagination edge cases, cursor encoding/decoding, authorization, and boundary conditions
+- **Self-documenting API**: Swagger UI with JWT authentication support, XML documentation comments on all endpoints
+- **Automated migrations**: FluentMigrator runs on startup in development, ensuring schema is always up to date
 
 ## Areas for Improvement
 
 | Concern | Current State | Suggested Improvement |
 |---------|--------------|----------------------|
-| **No tests** | Zero test projects exist | Add xUnit/NUnit test project(s) covering AuthHandler, ChatService, repositories with in-memory or testcontainers for PostgreSQL |
-| **ProductsController is a demo stub** | Uses in-memory `static List<Product>` with no persistence | Either remove it or implement real storage through the Storage project |
-| **Duplicate DTO models** | `ChatParticipantDto` exists both in `BasicApi.Models.Dto.Chat` and `BasicApi.Storage.Dto` with the same shape | Consolidate into a single shared DTO; having two identical models creates maintenance overhead |
-| **Scoped IDbConnection** | `IDbConnection` is registered as scoped but `NpgsqlConnectionFactory.CreateConnection()` opens a new connection each time; repos receive the same scoped connection but can't participate in ambient transactions across repositories | Consider using a connection-owning `UnitOfWork` pattern or `DbConnection` that is opened once per scope and shared |
-| **FluentMigrator runs on every startup** | `MigrateUp()` runs unconditionally in `Program.cs` | Add an environment check so it only auto-migrates in Development; use a dedicated migration tool/script for production |
-| **SQL injection risk in MessageRepository** | Uses `sql +=` string concatenation for the optional `@before` parameter filter | The parameterized query is safe (Dapper handles the param), but the concatenation approach is fragile; use a single parameterized SQL string with coalescing logic instead |
-| **Error handling** | No global exception middleware; `ChatService` throws raw `Exception("Chat not found")` and `UnauthorizedAccessException` | Add a global error handling middleware (or `UseExceptionHandler`) that maps exceptions to proper HTTP status codes consistently |
-| **No logging/observability** | No structured logging (Serilog/NLog), no metrics, no tracing | Add structured logging and consider OpenTelemetry for distributed tracing |
-| **No CI/CD pipeline** | `.github/workflows` directory exists but is empty | Add a GitHub Actions workflow for build, test, and deploy |
-| **Unread count SQL bug** | `GetUnreadCountAsync` in `ChatRepository` has a malformed SQL query — it uses `FROM chat_members` within a subquery after a `FROM messages` | Fix the SQL syntax; the query currently won't compile/run correctly |
-| **No HTTPS in Docker** | Docker container only listens on HTTP `:8080` | For production, add HTTPS support or terminate TLS at a reverse proxy (nginx, Traefik) |
+| N+1 query problem in chat list | `ChatService.GetUserChatsAsync` iterates each chat to fetch last message, unread count, companion name, and sender name — potentially 1 + 4N queries | Use SQL window functions or a single query with JOINs and subqueries to batch-fetch all data |
+| `IDbConnection` scoping | `IDbConnection` is registered as `Scoped` but opened eagerly in `NpgsqlConnectionFactory`; Dapper repositories receive an already-open connection via constructor injection | Keep connection factory as single responsibility; let repositories manage their own connection lifecycle or use `IAsyncRepository` patterns with `DbConnection` created per method |
+| Mixed architecture styles | `ProductsController` uses in-memory static list with no persistence while Features use full DB-backed flow; `BasicApi.Models.User.cs` is a dead placeholder file | Remove dead code (`ProductsController`, `Models/User.cs`, `Models/Product.cs`) entirely or migrate Products to a proper Feature with storage |
+| No explicit validation middleware | Validation relies on `[ApiController]` automatic 400 responses and `[Required]` attributes; custom validation errors in handlers return `ProblemDetails` manually | Implement a `FluentValidation` pipeline or custom `ValidationProblemDetails` middleware for consistent validation response format |
+| Connection string exposed in code | `ServiceExtensions.cs` reads `ConnectionStrings:DefaultConnection` and throws `InvalidOperationException` if missing; multiple services read it | Use `IOptions<DatabaseOptions>` pattern with named configuration sections for stronger typing |
+| `IsRead` always false | Both `GetChatMessagesCursorAsync` and `GetChatMessagesAsync` have `IsRead = false` with a TODO comment | Implement actual read-status resolution via the `chat_members.last_read_message_id` field already in the schema |
+| No CI/CD pipeline | `.github/workflows/` directory exists but is empty | Add GitHub Actions workflow for build → test → docker build & push → deploy |
+| No logging framework | No logging configuration visible; `FluentMigrator` logging is set to console | Integrate structured logging (Serilog) with request/response logging middleware |
+| `DbConnection` not `IAsyncDisposable` | `NpgsqlConnectionFactory.CreateConnection()` opens connection synchronously and returns `IDbConnection` (not `DbDataSource`) | Use `NpgsqlDataSource` (which is `IDisposable` and connection-pool-aware) and the new `NpgsqlDataSource.Create()` API |
+| Missing cancellation tokens | Repository methods in `IUserRepository` accept `CancellationToken` but `IChatRepository` and `IMessageRepository` do not | Add `CancellationToken` support to all async repository methods and pass it from controllers via `HttpContext.RequestAborted` |
 
 ## Technology Stack
 
 | Technology | Version | Purpose |
 |------------|---------|---------|
-| .NET | 10.0 | Runtime framework |
-| ASP.NET Core | 10.0 | Web API framework with minimal APIs and controllers |
-| C# | 13 (default for .NET 10) | Programming language |
-| SignalR | Built-in | Real-time WebSocket communication |
-| PostgreSQL | latest (Docker image) | Relational database |
+| .NET | 10.0 | Application framework |
+| ASP.NET Core | 10.0 | Web API host, middleware pipeline, SignalR |
+| PostgreSQL | latest (Docker) | Primary database |
 | Dapper | 2.1.72 | Micro-ORM for data access |
 | Npgsql | 10.0.2 | PostgreSQL ADO.NET provider |
 | FluentMigrator | 8.0.1 | Database migration management |
 | BCrypt.Net-Next | 4.1.0 | Password hashing |
-| JWT Bearer Auth | 10.0.6 | Token-based authentication |
-| Swashbuckle.AspNetCore | 10.1.7 | Swagger/OpenAPI documentation |
-| Docker / docker-compose | — | Containerization and orchestration |
+| JWT Bearer (ASP.NET) | 10.0.6 | Authentication / token validation |
+| Swashbuckle / OpenAPI | 10.1.7 | API documentation / Swagger UI |
+| SignalR | built-in | Real-time WebSocket messaging |
+| xUnit | 2.9.3 | Unit testing framework |
+| Moq | 4.20.72 | Mocking framework for tests |
+| Docker | latest | Containerization and local development |
+| Docker Compose | latest | Multi-container orchestration |
