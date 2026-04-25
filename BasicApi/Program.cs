@@ -18,17 +18,13 @@ public class Program
         // Global error handling — MUST be first middleware
         app.UseMiddleware<ExceptionHandlingMiddleware>();
 
-        // Run migrations only in development
-        if (app.Environment.IsDevelopment())
-        {
+        // Run migrations
             using (var scope = app.Services.CreateScope())
             {
                 scope.ServiceProvider
                     .GetRequiredService<IMigrationRunner>()
                     .MigrateUp();
             }
-        }
-
         app.UseDefaultFiles();
         app.UseStaticFiles();
 
