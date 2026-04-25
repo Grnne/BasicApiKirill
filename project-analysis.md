@@ -1,13 +1,3 @@
-# Project Analysis: BasicApi
-
-> Real-time chat API with JWT authentication, cursor-based pagination, and PostgreSQL storage
-
-## Overview
-
-BasicApi is a .NET 10 ASP.NET Core Web API that implements a real-time private messaging system with SignalR hubs for live communication. The project follows a **feature-based vertical slice architecture** within the main API project, with a separate storage layer handling all data access via Dapper and PostgreSQL.
-
-The solution consists of three projects: `BasicApi` (ASP.NET Core host with controllers, SignalR hubs, and business logic), `BasicApi.Storage` (data access layer with Dapper repositories, FluentMigrator migrations, and Npgsql), and `BasicApi.Tests` (xUnit test suite with Moq). The API uses JWT bearer tokens for authentication, supports cursor-based pagination for message history, and is fully containerized with Docker Compose for local development with PostgreSQL.
-
 ## Project Structure
 
 ```
@@ -71,9 +61,11 @@ BasicApi/
 ├── BasicApi.Storage/
 │   ├── BasicApi.Storage.csproj
 │   ├── Dto/
+│   │   ├── ChatListResult.cs            ← batched chat list DTO (N+1 fix)
 │   │   ├── ChatParticipantDto.cs
 │   │   ├── CursorDto.cs
-│   │   └── CursorResult.cs
+│   │   ├── CursorResult.cs
+│   │   └── MessageWithSender.cs         ← message + sender name DTO (N+1 fix)
 │   ├── Entities/
 │   │   ├── Chat.cs
 │   │   ├── ChatMember.cs
@@ -127,12 +119,14 @@ BasicApi/
 - **NuGet:** `Dapper` 2.1.72, `Npgsql` 10.0.2, `FluentMigrator` 8.0.1
 - **Purpose:** Data access layer with repository pattern, PostgreSQL via Dapper, automatic migrations
 - **Key Files:**
-  - `Repositories/MessageRepository.cs` — Cursor-based pagination with composite key `(created_at, id)` for deterministic ordering (120 lines)
-  - `Repositories/ChatRepository.cs` — Chat CRUD, member management, unread counts with SQL subqueries (160 lines)
+  - `Repositories/MessageRepository.cs` — Cursor-based pagination with composite key `(created_at, id)` for deterministic ordering; includes `GetMessagesWithSenderCursorAsync` with JOIN to avoid N+1 (155 lines)
+  - `Repositories/ChatRepository.cs` — Chat CRUD, member management, unread counts with SQL subqueries; includes `GetUserChatsBatchedAsync` that returns all chat-list data in one query via `LEFT JOIN LATERAL` (195 lines)
   - `Repositories/UserRepository.cs` — User lookup by username/email, user creation (48 lines)
   - `Migrations/InitialCreate.cs` — Database schema: users, chats, chat_members, messages tables with foreign keys and indexes (98 lines)
   - `Dto/CursorDto.cs` — URL-safe Base64 encoding of composite `(DateTime, Guid)` cursor for pagination (63 lines)
   - `Dto/CursorResult.cs` — Generic wrapper fetching `limit+1` rows to detect `HasMore` without a second query (20 lines)
+  - `Dto/ChatListResult.cs` — Flat DTO for batched chat-list query, packing chat metadata, last message, companion name, and unread count into one row (28 lines)
+  - `Dto/MessageWithSender.cs` — Message entity extended with sender display name via SQL JOIN, eliminating per-message user lookups (17 lines)
 
 ### 🟣 BasicApi.Tests — unit tests
 - **Framework:** xUnit 2.9.3
@@ -143,12 +137,12 @@ BasicApi/
 - **Test coverage:**
   - `ChatServiceCursorTests.cs` (174 lines) — 7 tests covering:
     - Authorization check (throws `UnauthorizedAccessException` for non-members)
-    - Message mapping from entities to DTOs with sender names
+    - Message mapping from entities to DTOs with sender names (using `MessageWithSender`)
     - `HasMore` flag and cursor generation when extra records exist
     - `HasMore=false` with cursor present for last page
     - Chronological (ASC) ordering of returned messages
     - Empty chat returns empty page with no cursor
-    - Valid cursor passthrough to repository layer
+    - Valid cursor passthrough to repository layer (verifies `GetMessagesWithSenderCursorAsync` call)
   - `ChatsHandlerCursorTests.cs` (123 lines) — 4 tests covering:
     - Handler returns `OkObjectResult` with `CursorPaginatedResponse`
     - UnauthorizedAccessException bubbles to global middleware
@@ -172,6 +166,8 @@ BasicApi/
 | Connection factory pattern | `IDbConnectionFactory` / `NpgsqlConnectionFactory` | Abstraction over connection creation for testability and DI |
 | Singleton-scoped connection factory | `ServiceExtensions.cs` | Single connection factory with scoped `IDbConnection` per request |
 | Strategy-like DI via interfaces | `IJwtService`, `IChatService` | Services programmed to interfaces for testability |
+| Batched query pattern (N+1 fix) | `ChatRepository.GetUserChatsBatchedAsync` | Single SQL query with `LEFT JOIN LATERAL` + subqueries replaces 1 + 4N individual queries |
+| JOIN-based sender resolution (N+1 fix) | `MessageRepository.GetMessagesWithSenderCursorAsync` | `LEFT JOIN users` in the pagination query eliminates per-message `GetUserNameAsync` calls |
 
 ## Strengths
 
@@ -180,15 +176,17 @@ BasicApi/
 - **Resilient error handling**: Global middleware maps specific exception types to appropriate HTTP status codes with RFC 9110 ProblemDetails; stack traces stripped in production
 - **Container-first development**: Docker Compose with PostgreSQL healthchecks, volume persistence, and environment variable configuration
 - **Thin controllers**: Handlers encapsulate business logic, controllers only handle HTTP binding and routing
-- **Comprehensive test suite**: 19 unit tests covering pagination edge cases, cursor encoding/decoding, authorization, and boundary conditions
+- **Comprehensive test suite**: 20 unit tests covering pagination edge cases, cursor encoding/decoding, authorization, and boundary conditions
 - **Self-documenting API**: Swagger UI with JWT authentication support, XML documentation comments on all endpoints
 - **Automated migrations**: FluentMigrator runs on startup in development, ensuring schema is always up to date
+- **N+1 query problems eliminated**: Batched chat list query (1 SQL instead of 1 + 4N) and JOIN-based message sender resolution (1 SQL instead of 1 + N) significantly reduce database round-trips
 
 ## Areas for Improvement
 
 | Concern | Current State | Suggested Improvement |
 |---------|--------------|----------------------|
-| N+1 query problem in chat list | `ChatService.GetUserChatsAsync` iterates each chat to fetch last message, unread count, companion name, and sender name — potentially 1 + 4N queries | Use SQL window functions or a single query with JOINs and subqueries to batch-fetch all data |
+| ~~N+1 query problem in chat list~~ | ~~`ChatService.GetUserChatsAsync` iterates each chat to fetch last message, unread count, companion name, and sender name — potentially 1 + 4N queries~~ | ✅ **FIXED** — `GetUserChatsBatchedAsync` does it in 1 query via `LEFT JOIN LATERAL` |
+| ~~N+1 query problem in cursor messages~~ | ~~`GetChatMessagesCursorAsync` calls `GetUserNameAsync` for each message in a page~~ | ✅ **FIXED** — `GetMessagesWithSenderCursorAsync` returns sender name via `LEFT JOIN users` |
 | `IDbConnection` scoping | `IDbConnection` is registered as `Scoped` but opened eagerly in `NpgsqlConnectionFactory`; Dapper repositories receive an already-open connection via constructor injection | Keep connection factory as single responsibility; let repositories manage their own connection lifecycle or use `IAsyncRepository` patterns with `DbConnection` created per method |
 | Mixed architecture styles | `ProductsController` uses in-memory static list with no persistence while Features use full DB-backed flow; `BasicApi.Models.User.cs` is a dead placeholder file | Remove dead code (`ProductsController`, `Models/User.cs`, `Models/Product.cs`) entirely or migrate Products to a proper Feature with storage |
 | No explicit validation middleware | Validation relies on `[ApiController]` automatic 400 responses and `[Required]` attributes; custom validation errors in handlers return `ProblemDetails` manually | Implement a `FluentValidation` pipeline or custom `ValidationProblemDetails` middleware for consistent validation response format |

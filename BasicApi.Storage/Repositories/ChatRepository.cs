@@ -8,7 +8,7 @@ namespace BasicApi.Storage.Repositories;
 
 public class ChatRepository(IDbConnection connection) : IChatRepository
 {
-    public async Task<IEnumerable<Chat>> GetUserChatsAsync(Guid userId)
+        public async Task<IEnumerable<Chat>> GetUserChatsAsync(Guid userId)
     {
         const string sql = @"
             SELECT DISTINCT 
@@ -22,6 +22,70 @@ public class ChatRepository(IDbConnection connection) : IChatRepository
             ORDER BY c.created_at DESC";
 
         return await connection.QueryAsync<Chat>(sql, new { userId });
+    }
+
+    public async Task<List<ChatListResult>> GetUserChatsBatchedAsync(Guid userId)
+    {
+        const string sql = @"
+            SELECT
+                c.id AS ChatId,
+                c.type AS Type,
+                c.title AS Title,
+                c.created_at AS CreatedAt,
+
+                -- Companion name (for private chats)
+                comp.display_name AS CompanionName,
+
+                -- Unread count
+                COALESCE((
+                    SELECT COUNT(*)
+                    FROM messages m_unread
+                    WHERE m_unread.chat_id = c.id
+                      AND m_unread.is_deleted = false
+                      AND m_unread.created_at > COALESCE(
+                          (SELECT created_at FROM messages WHERE id = cm_last.last_read_message_id),
+                          '1970-01-01'::timestamp
+                      )
+                ), 0) AS UnreadCount,
+
+                -- Last message fields via LATERAL
+                lm.id AS LastMessageId,
+                lm.sender_id AS LastMessageSenderId,
+                lm.text AS LastMessageText,
+                lm.created_at AS LastMessageCreatedAt,
+                sender_u.display_name AS LastMessageSenderName
+
+            FROM chats c
+            INNER JOIN chat_members cm ON c.id = cm.chat_id AND cm.user_id = @userId
+
+            -- Last read message for unread count
+            LEFT JOIN chat_members cm_last
+                ON cm_last.chat_id = c.id AND cm_last.user_id = @userId
+
+            -- Companion for private chats
+            LEFT JOIN LATERAL (
+                SELECT u.display_name
+                FROM chat_members cm2
+                INNER JOIN users u ON u.id = cm2.user_id
+                WHERE cm2.chat_id = c.id AND cm2.user_id != @userId
+                LIMIT 1
+            ) comp ON c.type = 'private'
+
+            -- Last message via LATERAL (single row)
+            LEFT JOIN LATERAL (
+                SELECT m.id, m.sender_id, m.text, m.created_at
+                FROM messages m
+                WHERE m.chat_id = c.id AND m.is_deleted = false
+                ORDER BY m.created_at DESC, m.id DESC
+                LIMIT 1
+            ) lm ON TRUE
+
+            -- Sender name for last message
+            LEFT JOIN users sender_u ON sender_u.id = lm.sender_id
+
+            ORDER BY COALESCE(lm.created_at, c.created_at) DESC";
+
+        return (await connection.QueryAsync<ChatListResult>(sql, new { userId })).AsList();
     }
 
     public async Task<Chat?> GetByIdAsync(Guid chatId)

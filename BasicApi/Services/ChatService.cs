@@ -8,46 +8,27 @@ public class ChatService(IChatRepository chatRepository, IMessageRepository mess
 {
     public async Task<List<ChatListItemDto>> GetUserChatsAsync(Guid userId)
     {
-        var chats = await chatRepository.GetUserChatsAsync(userId);
-        var result = new List<ChatListItemDto>();
+        // Single batched query replaces the previous N+1 pattern
+        var rows = await chatRepository.GetUserChatsBatchedAsync(userId);
 
-        foreach (var chat in chats)
+        return [.. rows.Select(r => new ChatListItemDto
         {
-            // Get the last message using cursor-based approach for efficiency
-            var lastMessageResult = await messageRepository.GetMessagesCursorAsync(chat.Id, null, 1);
-            var lastMessage = lastMessageResult.Items.FirstOrDefault();
-
-            // Get unread count
-            var unreadCount = await messageRepository.GetUnreadCountAsync(chat.Id, userId);
-
-            // For private chats, get companion name
-            string? companionName = null;
-            if (chat.Type == "private")
+            ChatId = r.ChatId,
+            Type = r.Type,
+            Title = r.Title,
+            CompanionName = r.CompanionName,
+            UnreadCount = r.UnreadCount,
+            LastActivityAt = r.LastMessageCreatedAt ?? r.CreatedAt,
+            LastMessage = r.LastMessageId is not null ? new MessageDto
             {
-                companionName = await chatRepository.GetCompanionNameAsync(chat.Id, userId);
-            }
-
-            result.Add(new ChatListItemDto
-            {
-                ChatId = chat.Id,
-                Type = chat.Type,
-                Title = chat.Title,
-                CompanionName = companionName,
-                LastMessage = lastMessage != null ? new MessageDto
-                {
-                    Id = lastMessage.Id,
-                    SenderId = lastMessage.SenderId,
-                    SenderName = await chatRepository.GetUserNameAsync(lastMessage.SenderId),
-                    Text = lastMessage.Text,
-                    CreatedAt = lastMessage.CreatedAt,
-                    IsRead = false // TODO: resolve actual read status
-                } : null,
-                UnreadCount = unreadCount,
-                LastActivityAt = lastMessage?.CreatedAt ?? chat.CreatedAt
-            });
-        }
-
-        return [.. result.OrderByDescending(c => c.LastActivityAt)];
+                Id = r.LastMessageId!.Value,
+                SenderId = r.LastMessageSenderId!.Value,
+                SenderName = r.LastMessageSenderName ?? "Unknown",
+                Text = r.LastMessageText ?? string.Empty,
+                CreatedAt = r.LastMessageCreatedAt!.Value,
+                IsRead = false
+            } : null
+        })];
     }
 
     public async Task<ChatDetailDto> GetChatDetailsAsync(Guid chatId, Guid userId)
@@ -76,6 +57,7 @@ public class ChatService(IChatRepository chatRepository, IMessageRepository mess
         if (!isMember)
             throw new UnauthorizedAccessException("User is not a member of this chat");
 
+        // TODO: add GetMessagesWithSenderAsync for legacy endpoint if needed
         var messages = await messageRepository.GetMessagesAsync(chatId, before, limit);
         var result = new List<MessageDto>();
 
@@ -103,24 +85,19 @@ public class ChatService(IChatRepository chatRepository, IMessageRepository mess
         if (!isMember)
             throw new UnauthorizedAccessException("User is not a member of this chat");
 
-        // Fetch page from storage (cursor-based)
-        var result = await messageRepository.GetMessagesCursorAsync(chatId, cursor, limit);
+        // Fetch page from storage (cursor-based) with sender names via JOIN
+        var result = await messageRepository.GetMessagesWithSenderCursorAsync(chatId, cursor, limit);
 
         // Map entities to DTOs
-        var messages = new List<MessageDto>();
-        foreach (var message in result.Items)
+        var messages = result.Items.Select(m => new MessageDto
         {
-            messages.Add(new MessageDto
-            {
-                Id = message.Id,
-                SenderId = message.SenderId,
-                SenderName = await chatRepository.GetUserNameAsync(message.SenderId),
-                Text = message.Text,
-                CreatedAt = message.CreatedAt,
+            Id = m.Id,
+            SenderId = m.SenderId,
+            SenderName = m.SenderName,
+            Text = m.Text,
+            CreatedAt = m.CreatedAt,
                 IsRead = false // TODO: resolve actual read status
-            });
-        }
-
+        }).ToList();
         // Build next cursor from the last message in the page
         string? nextCursor = null;
         if (messages.Count > 0)

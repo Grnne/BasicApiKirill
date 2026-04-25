@@ -1,7 +1,6 @@
 using BasicApi.Models.Dto.Message;
 using BasicApi.Services;
 using BasicApi.Storage.Dto;
-using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
 using Moq;
 
@@ -19,6 +18,18 @@ public class ChatServiceCursorTests
         _msgRepoMock = new Mock<IMessageRepository>();
         _service = new ChatService(_chatRepoMock.Object, _msgRepoMock.Object);
     }
+
+    private static MessageWithSender ToMessageWithSender(Storage.Entities.Message msg, string senderName)
+        => new()
+        {
+            Id = msg.Id,
+            ChatId = msg.ChatId,
+            SenderId = msg.SenderId,
+            Text = msg.Text,
+            CreatedAt = msg.CreatedAt,
+            IsDeleted = msg.IsDeleted,
+            SenderName = senderName
+        };
 
     [Fact]
     public async Task GetChatMessagesCursorAsync_WhenNotMember_ThrowsUnauthorizedAccess()
@@ -44,10 +55,10 @@ public class ChatServiceCursorTests
         var senderId = Guid.NewGuid();
         var now = DateTime.UtcNow;
 
-        var messages = new List<Message>
+        var messages = new List<MessageWithSender>
         {
-            new() { Id = Guid.NewGuid(), ChatId = chatId, SenderId = senderId, Text = "Alpha", CreatedAt = now.AddMinutes(-10) },
-            new() { Id = Guid.NewGuid(), ChatId = chatId, SenderId = senderId, Text = "Bravo", CreatedAt = now.AddMinutes(-5) },
+            ToMessageWithSender(new() { Id = Guid.NewGuid(), ChatId = chatId, SenderId = senderId, Text = "Alpha", CreatedAt = now.AddMinutes(-10) }, "TestUser"),
+            ToMessageWithSender(new() { Id = Guid.NewGuid(), ChatId = chatId, SenderId = senderId, Text = "Bravo", CreatedAt = now.AddMinutes(-5) }, "TestUser"),
         };
 
         _chatRepoMock
@@ -55,16 +66,12 @@ public class ChatServiceCursorTests
             .ReturnsAsync(true);
 
         _msgRepoMock
-            .Setup(r => r.GetMessagesCursorAsync(chatId, null, 20))
-            .ReturnsAsync(new CursorResult<Message>
+            .Setup(r => r.GetMessagesWithSenderCursorAsync(chatId, null, 20))
+            .ReturnsAsync(new CursorResult<MessageWithSender>
             {
                 Items = messages,
                 Extra = null
             });
-
-        _chatRepoMock
-            .Setup(r => r.GetUserNameAsync(senderId))
-            .ReturnsAsync("TestUser");
 
         // Act
         var result = await _service.GetChatMessagesCursorAsync(chatId, userId, null, 20);
@@ -85,34 +92,27 @@ public class ChatServiceCursorTests
         var senderId = Guid.NewGuid();
         var now = DateTime.UtcNow;
 
-        var messages = new List<Message>
+        var messages = new List<MessageWithSender>
         {
-            new() { Id = Guid.NewGuid(), ChatId = chatId, SenderId = senderId, Text = "Page 1 A", CreatedAt = now.AddMinutes(-10) },
-            new() { Id = Guid.NewGuid(), ChatId = chatId, SenderId = senderId, Text = "Page 1 B", CreatedAt = now.AddMinutes(-9) },
+            ToMessageWithSender(new() { Id = Guid.NewGuid(), ChatId = chatId, SenderId = senderId, Text = "Page 1 A", CreatedAt = now.AddMinutes(-10) }, "User"),
+            ToMessageWithSender(new() { Id = Guid.NewGuid(), ChatId = chatId, SenderId = senderId, Text = "Page 1 B", CreatedAt = now.AddMinutes(-9) }, "User"),
         };
 
-        // Extra record signals more pages exist
-        var extra = new Message
-        {
-            Id = Guid.NewGuid(), ChatId = chatId, SenderId = senderId,
-            Text = "Page 2 A", CreatedAt = now.AddMinutes(-20)
-        };
+        var extra = ToMessageWithSender(
+            new() { Id = Guid.NewGuid(), ChatId = chatId, SenderId = senderId, Text = "Page 2 A", CreatedAt = now.AddMinutes(-20) },
+            "User");
 
         _chatRepoMock
             .Setup(r => r.IsMemberAsync(chatId, userId))
             .ReturnsAsync(true);
 
         _msgRepoMock
-            .Setup(r => r.GetMessagesCursorAsync(chatId, null, 2))
-            .ReturnsAsync(new CursorResult<Message>
+            .Setup(r => r.GetMessagesWithSenderCursorAsync(chatId, null, 2))
+            .ReturnsAsync(new CursorResult<MessageWithSender>
             {
                 Items = messages,
                 Extra = extra
             });
-
-        _chatRepoMock
-            .Setup(r => r.GetUserNameAsync(senderId))
-            .ReturnsAsync("User");
 
         // Act
         var result = await _service.GetChatMessagesCursorAsync(chatId, userId, null, 2);
@@ -132,9 +132,9 @@ public class ChatServiceCursorTests
         var senderId = Guid.NewGuid();
         var now = DateTime.UtcNow;
 
-        var messages = new List<Message>
+        var messages = new List<MessageWithSender>
         {
-            new() { Id = Guid.NewGuid(), ChatId = chatId, SenderId = senderId, Text = "Only message", CreatedAt = now.AddMinutes(-5) },
+            ToMessageWithSender(new() { Id = Guid.NewGuid(), ChatId = chatId, SenderId = senderId, Text = "Only message", CreatedAt = now.AddMinutes(-5) }, "User"),
         };
 
         _chatRepoMock
@@ -142,26 +142,18 @@ public class ChatServiceCursorTests
             .ReturnsAsync(true);
 
         _msgRepoMock
-            .Setup(r => r.GetMessagesCursorAsync(chatId, null, 20))
-            .ReturnsAsync(new CursorResult<Message>
+            .Setup(r => r.GetMessagesWithSenderCursorAsync(chatId, null, 20))
+            .ReturnsAsync(new CursorResult<MessageWithSender>
             {
                 Items = messages,
                 Extra = null
             });
-
-        _chatRepoMock
-            .Setup(r => r.GetUserNameAsync(senderId))
-            .ReturnsAsync("User");
 
         // Act
         var result = await _service.GetChatMessagesCursorAsync(chatId, userId, null, 20);
 
         // Assert
         Assert.False(result.HasMore);
-        // Cursor is present because it encodes the position of the last item.
-        // The client uses NextCursor + HasMore: HasMore=false means "no need to fetch now",
-        // but the cursor is given so if new messages arrive later, the client can still
-        // use this cursor position.
         Assert.NotNull(result.NextCursor);
     }
 
@@ -174,11 +166,10 @@ public class ChatServiceCursorTests
         var senderId = Guid.NewGuid();
         var now = DateTime.UtcNow;
 
-        // Storage returns in DESC order (newest first)
-        var messages = new List<Message>
+        var messages = new List<MessageWithSender>
         {
-            new() { Id = Guid.NewGuid(), ChatId = chatId, SenderId = senderId, Text = "Second", CreatedAt = now.AddMinutes(-5) },
-            new() { Id = Guid.NewGuid(), ChatId = chatId, SenderId = senderId, Text = "First",  CreatedAt = now.AddMinutes(-10) },
+            ToMessageWithSender(new() { Id = Guid.NewGuid(), ChatId = chatId, SenderId = senderId, Text = "Second", CreatedAt = now.AddMinutes(-5) }, "User"),
+            ToMessageWithSender(new() { Id = Guid.NewGuid(), ChatId = chatId, SenderId = senderId, Text = "First",  CreatedAt = now.AddMinutes(-10) }, "User"),
         };
 
         _chatRepoMock
@@ -186,16 +177,12 @@ public class ChatServiceCursorTests
             .ReturnsAsync(true);
 
         _msgRepoMock
-            .Setup(r => r.GetMessagesCursorAsync(chatId, null, 20))
-            .ReturnsAsync(new CursorResult<Message>
+            .Setup(r => r.GetMessagesWithSenderCursorAsync(chatId, null, 20))
+            .ReturnsAsync(new CursorResult<MessageWithSender>
             {
                 Items = messages,
                 Extra = null
             });
-
-        _chatRepoMock
-            .Setup(r => r.GetUserNameAsync(senderId))
-            .ReturnsAsync("User");
 
         // Act
         var result = await _service.GetChatMessagesCursorAsync(chatId, userId, null, 20);
@@ -215,8 +202,8 @@ public class ChatServiceCursorTests
             .ReturnsAsync(true);
 
         _msgRepoMock
-            .Setup(r => r.GetMessagesCursorAsync(It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<int>()))
-            .ReturnsAsync(new CursorResult<Message>
+            .Setup(r => r.GetMessagesWithSenderCursorAsync(It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<int>()))
+            .ReturnsAsync(new CursorResult<MessageWithSender>
             {
                 Items = [],
                 Extra = null
@@ -242,9 +229,9 @@ public class ChatServiceCursorTests
         var beforeId = Guid.NewGuid();
         var cursor = new CursorDto(beforeDate, beforeId).Encode();
 
-        var messages = new List<Message>
+        var messages = new List<MessageWithSender>
         {
-            new() { Id = Guid.NewGuid(), ChatId = chatId, SenderId = senderId, Text = "Older msg", CreatedAt = beforeDate.AddDays(-1) },
+            ToMessageWithSender(new() { Id = Guid.NewGuid(), ChatId = chatId, SenderId = senderId, Text = "Older msg", CreatedAt = beforeDate.AddDays(-1) }, "User"),
         };
 
         _chatRepoMock
@@ -252,16 +239,12 @@ public class ChatServiceCursorTests
             .ReturnsAsync(true);
 
         _msgRepoMock
-            .Setup(r => r.GetMessagesCursorAsync(chatId, cursor, 20))
-            .ReturnsAsync(new CursorResult<Message>
+            .Setup(r => r.GetMessagesWithSenderCursorAsync(chatId, cursor, 20))
+            .ReturnsAsync(new CursorResult<MessageWithSender>
             {
                 Items = messages,
                 Extra = null
             });
-
-        _chatRepoMock
-            .Setup(r => r.GetUserNameAsync(senderId))
-            .ReturnsAsync("User");
 
         // Act
         var result = await _service.GetChatMessagesCursorAsync(chatId, userId, cursor, 20);
@@ -270,9 +253,8 @@ public class ChatServiceCursorTests
         Assert.Single(result.Items);
         Assert.Equal("Older msg", result.Items[0].Text);
 
-        // Verify the cursor was passed through
         _msgRepoMock.Verify(
-            r => r.GetMessagesCursorAsync(chatId, cursor, 20),
+            r => r.GetMessagesWithSenderCursorAsync(chatId, cursor, 20),
             Times.Once);
     }
 }

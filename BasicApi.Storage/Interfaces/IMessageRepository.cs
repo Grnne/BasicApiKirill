@@ -14,6 +14,12 @@ public interface IMessageRepository
     /// </summary>
     Task<CursorResult<Message>> GetMessagesCursorAsync(Guid chatId, string? cursor, int limit);
 
+    /// <summary>
+    /// Retrieves messages with sender name via JOIN — avoids N+1.
+    /// Uses cursor-based pagination.
+    /// </summary>
+    Task<CursorResult<MessageWithSender>> GetMessagesWithSenderCursorAsync(Guid chatId, string? cursor, int limit);
+
     Task<Guid> CreateAsync(Message message);
     Task UpdateLastReadAsync(Guid chatId, Guid userId, Guid messageId);
     Task<int> GetUnreadCountAsync(Guid chatId, Guid userId);
