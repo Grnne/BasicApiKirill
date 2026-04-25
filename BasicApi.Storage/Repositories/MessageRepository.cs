@@ -6,7 +6,7 @@ using Dapper;
 
 namespace BasicApi.Storage.Repositories;
 
-public class MessageRepository(IDbConnection connection) : IMessageRepository
+public class MessageRepository(IDbConnectionFactory connectionFactory) : IMessageRepository
 {
     public async Task<CursorResult<Message>> GetMessagesCursorAsync(Guid chatId, string? cursor, int limit)
     {
@@ -54,6 +54,7 @@ public class MessageRepository(IDbConnection connection) : IMessageRepository
             parameters = new { chatId, fetchSize };
         }
 
+        using var connection = connectionFactory.CreateConnection();
         var rows = (await connection.QueryAsync<Message>(sql, parameters)).ToList();
 
         // Determine page items and the "extra" record
@@ -135,6 +136,7 @@ public class MessageRepository(IDbConnection connection) : IMessageRepository
             parameters = new { chatId, fetchSize };
         }
 
+        using var connection = connectionFactory.CreateConnection();
         var rows = (await connection.QueryAsync<MessageWithSender>(sql, parameters)).ToList();
 
         List<MessageWithSender> items;
@@ -163,6 +165,7 @@ public class MessageRepository(IDbConnection connection) : IMessageRepository
             INSERT INTO messages (id, chat_id, sender_id, text, created_at, is_deleted) 
             VALUES (@Id, @ChatId, @SenderId, @Text, @CreatedAt, @IsDeleted)";
 
+                using var connection = connectionFactory.CreateConnection();
         await connection.ExecuteAsync(sql, message);
         return message.Id;
     }
@@ -174,6 +177,7 @@ public class MessageRepository(IDbConnection connection) : IMessageRepository
             SET last_read_message_id = @messageId
             WHERE chat_id = @chatId AND user_id = @userId";
 
+                using var connection = connectionFactory.CreateConnection();
         await connection.ExecuteAsync(sql, new { chatId, userId, messageId });
     }
     public async Task<int> GetUnreadCountAsync(Guid chatId, Guid userId)
@@ -191,6 +195,7 @@ public class MessageRepository(IDbConnection connection) : IMessageRepository
             WHERE cm.chat_id = @chatId AND cm.user_id = @userId
         )";
 
+        using var connection = connectionFactory.CreateConnection();
                 return await connection.ExecuteScalarAsync<int>(sql, new { chatId, userId });
     }
 
@@ -209,6 +214,7 @@ public class MessageRepository(IDbConnection connection) : IMessageRepository
             ORDER BY created_at DESC, id DESC
             LIMIT 1";
 
+        using var connection = connectionFactory.CreateConnection();
         return await connection.QueryFirstOrDefaultAsync<Message>(sql, new { chatId, date });
     }
 }

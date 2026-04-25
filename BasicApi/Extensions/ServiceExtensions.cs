@@ -1,5 +1,4 @@
-﻿using System.Data;
-using System.Text;
+﻿using System.Text;
 using BasicApi.Features.Auth;
 using BasicApi.Features.Chats;
 using BasicApi.Features.Users;
@@ -26,9 +25,7 @@ public static class ServiceExtensions
         var connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("DefaultConnection is not configured");
 
-        services.AddSingleton<IDbConnectionFactory>(new NpgsqlConnectionFactory(connectionString));
-        services.AddScoped<IDbConnection>(provider =>
-            provider.GetRequiredService<IDbConnectionFactory>().CreateConnection());
+                services.AddSingleton<IDbConnectionFactory>(new NpgsqlConnectionFactory(connectionString));
 
         services.AddScoped<IChatRepository, ChatRepository>();
         services.AddScoped<IMessageRepository, MessageRepository>();

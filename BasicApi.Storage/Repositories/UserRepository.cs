@@ -5,7 +5,7 @@ using Dapper;
 
 namespace BasicApi.Storage.Repositories;
 
-public class UserRepository(IDbConnection connection) : IUserRepository
+public class UserRepository(IDbConnectionFactory connectionFactory) : IUserRepository
 {
     public async Task<User?> GetByUsernameOrEmailAsync(string usernameOrEmail, CancellationToken ct = default)
     {
@@ -23,6 +23,7 @@ public class UserRepository(IDbConnection connection) : IUserRepository
             WHERE username = @Value OR email = @Value
             LIMIT 1";
 
+        using var connection = connectionFactory.CreateConnection();
         return await connection.QueryFirstOrDefaultAsync<User>(sql, new { Value = usernameOrEmail });
     }
 
@@ -33,6 +34,7 @@ public class UserRepository(IDbConnection connection) : IUserRepository
             VALUES (@Id, @Username, @Email, @PasswordHash, @DisplayName, @CreatedAt, @LastLoginAt, @IsActive)
             RETURNING id";
 
+        using var connection = connectionFactory.CreateConnection();
         return await connection.ExecuteScalarAsync<Guid>(sql, user);
     }
 
@@ -45,6 +47,7 @@ public class UserRepository(IDbConnection connection) : IUserRepository
             WHERE username = @Value OR email = @Value
             LIMIT 1";
 
+        using var connection = connectionFactory.CreateConnection();
         return await connection.QueryFirstOrDefaultAsync<Guid>(sql, new { Value = usernameOrEmail });
     }
 }

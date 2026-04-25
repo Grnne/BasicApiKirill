@@ -6,7 +6,7 @@ using Dapper;
 
 namespace BasicApi.Storage.Repositories;
 
-public class ChatRepository(IDbConnection connection) : IChatRepository
+public class ChatRepository(IDbConnectionFactory connectionFactory) : IChatRepository
 {
         public async Task<IEnumerable<Chat>> GetUserChatsAsync(Guid userId)
     {
@@ -21,6 +21,7 @@ public class ChatRepository(IDbConnection connection) : IChatRepository
             WHERE cm.user_id = @userId
             ORDER BY c.created_at DESC";
 
+        using var connection = connectionFactory.CreateConnection();
         return await connection.QueryAsync<Chat>(sql, new { userId });
     }
 
@@ -85,6 +86,7 @@ public class ChatRepository(IDbConnection connection) : IChatRepository
 
             ORDER BY COALESCE(lm.created_at, c.created_at) DESC";
 
+                using var connection = connectionFactory.CreateConnection();
         return (await connection.QueryAsync<ChatListResult>(sql, new { userId })).AsList();
     }
 
@@ -99,6 +101,7 @@ public class ChatRepository(IDbConnection connection) : IChatRepository
             FROM chats 
             WHERE id = @chatId";
 
+        using var connection = connectionFactory.CreateConnection();
         return await connection.QueryFirstOrDefaultAsync<Chat>(sql, new { chatId });
     }
 
@@ -117,11 +120,14 @@ public class ChatRepository(IDbConnection connection) : IChatRepository
                 AND cm1.user_id = @userId1 
                 AND cm2.user_id = @userId2";
 
+        using var connection = connectionFactory.CreateConnection();
         return await connection.QueryFirstOrDefaultAsync<Chat>(sql, new { userId1, userId2 });
     }
 
     public async Task<Guid> CreateAsync(Chat chat, Guid[] memberIds)
     {
+        using var connection = connectionFactory.CreateConnection();
+        connection.Open();
         using var transaction = connection.BeginTransaction();
 
         try
@@ -159,6 +165,7 @@ public class ChatRepository(IDbConnection connection) : IChatRepository
     public async Task<bool> IsMemberAsync(Guid chatId, Guid userId)
     {
         const string sql = "SELECT COUNT(1) FROM chat_members WHERE chat_id = @chatId AND user_id = @userId";
+                using var connection = connectionFactory.CreateConnection();
         return await connection.ExecuteScalarAsync<bool>(sql, new { chatId, userId });
     }
 
@@ -177,6 +184,7 @@ public class ChatRepository(IDbConnection connection) : IChatRepository
                   '1970-01-01'::timestamp
               )";
 
+                using var connection = connectionFactory.CreateConnection();
         return await connection.ExecuteScalarAsync<int>(sql, new { chatId, userId });
     }
 
@@ -188,12 +196,14 @@ public class ChatRepository(IDbConnection connection) : IChatRepository
             INNER JOIN users u ON cm.user_id = u.id
             WHERE cm.chat_id = @chatId AND cm.user_id != @userId";
 
+                using var connection = connectionFactory.CreateConnection();
         return await connection.QueryFirstOrDefaultAsync<string?>(sql, new { chatId, userId });
     }
 
     public async Task<string> GetUserNameAsync(Guid userId)
     {
         const string sql = "SELECT display_name FROM users WHERE id = @userId";
+                using var connection = connectionFactory.CreateConnection();
         var name = await connection.QueryFirstOrDefaultAsync<string>(sql, new { userId });
         return name ?? "Unknown";
     }
@@ -209,6 +219,7 @@ public class ChatRepository(IDbConnection connection) : IChatRepository
             INNER JOIN users u ON cm.user_id = u.id
             WHERE cm.chat_id = @chatId";
 
+                using var connection = connectionFactory.CreateConnection();
         var result = await connection.QueryAsync<ChatParticipantDto>(sql, new { chatId });
         return [.. result];
     }

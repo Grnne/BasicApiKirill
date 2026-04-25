@@ -9,8 +9,6 @@ public class NpgsqlConnectionFactory(string connectionString) : IDbConnectionFac
 {
     public IDbConnection CreateConnection()
     {
-        var connection = new NpgsqlConnection(connectionString);
-        connection.Open();
-        return connection;
+        return new NpgsqlConnection(connectionString);
     }
 }

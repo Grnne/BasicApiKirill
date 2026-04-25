@@ -1,4 +1,5 @@
 ﻿using BasicApi.Middleware;
+using BasicApi.Models.Dto.Chat;
 using BasicApi.Models.Dto.Message;
 using BasicApi.Services;
 using BasicApi.Storage.Dto;
@@ -26,8 +27,8 @@ public class ChatsHandler(
 
         var existingChat = await chatRepository.GetPrivateChatAsync(currentUserId, otherUserId);
 
-        if (existingChat != null)
-            return new OkObjectResult(new { chatId = existingChat.Id });
+                if (existingChat != null)
+            return new OkObjectResult(new CreateChatResponseDto { ChatId = existingChat.Id });
 
         var chat = new Chat
         {
@@ -40,7 +41,7 @@ public class ChatsHandler(
         var memberIds = new[] { currentUserId, otherUserId };
         var chatId = await chatRepository.CreateAsync(chat, memberIds);
 
-        return new OkObjectResult(new { chatId });
+        return new OkObjectResult(new CreateChatResponseDto { ChatId = chatId });
     }
 
     public async Task<IActionResult> GetChatAsync(Guid chatId, Guid userId)
@@ -60,19 +61,15 @@ public class ChatsHandler(
         return new OkObjectResult(result);
     }
 
-    /// <summary>
+        /// <summary>
     /// Jump to messages around a specific date.
     /// Finds the nearest message at or before the given date and returns a page around it.
     /// Returns a CursorPaginatedResponse — use nextCursor to scroll further back.
+    /// Authorization is handled inside ChatService.GetChatMessagesCursorAsync.
     /// </summary>
     public async Task<IActionResult> GetMessagesAtAsync(
         Guid chatId, Guid userId, DateTime date, int limit)
     {
-        // Authorization check — caller must be a member
-        var isMember = await chatRepository.IsMemberAsync(chatId, userId);
-        if (!isMember)
-            throw new UnauthorizedAccessException("User is not a member of this chat");
-
         // Find the most recent message at or before the requested date
         var pivot = await messageRepository.GetFirstMessageBeforeDateAsync(chatId, date);
 

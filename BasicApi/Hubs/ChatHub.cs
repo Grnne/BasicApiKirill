@@ -1,4 +1,5 @@
-﻿using System.Security.Claims;
+﻿using System.Collections.Concurrent;
+using System.Security.Claims;
 using BasicApi.Models.Dto.Chat;
 using BasicApi.Models.Dto.Message;
 using BasicApi.Storage.Entities;
@@ -11,14 +12,19 @@ namespace BasicApi.Hubs;
 [Authorize]
 public class ChatHub(IChatRepository chatRepository, IMessageRepository messageRepository) : Hub
 {
-    private static readonly Dictionary<Guid, string> _onlineUsers = []; // userId -> connectionId
+    // Хранит userId → connectionId для отслеживания онлайн-статуса.
+    // ConcurrentDictionary — thread-safe, поддерживает множественные одновременные подключения.
+    // ВАЖНО: При горизонтальном масштабировании (несколько инстансов) необходимо заменить
+    // на Redis backplane или SignalR Redis Scaleout, т.к. статический словарь не шарится между серверами.
+    private static readonly ConcurrentDictionary<Guid, string> _onlineUsers = new();
 
     public override async Task OnConnectedAsync()
     {
         var userId = GetUserId();
         if (userId.HasValue)
         {
-            _onlineUsers[userId.Value] = Context.ConnectionId;
+            // AddOrUpdate — атомарно: заменяет connectionId при повторном входе (две вкладки)
+            _onlineUsers.AddOrUpdate(userId.Value, Context.ConnectionId, (_, _) => Context.ConnectionId);
             await Clients.All.SendAsync("UserOnlineChanged", userId.Value, true);
         }
         await base.OnConnectedAsync();
@@ -29,8 +35,18 @@ public class ChatHub(IChatRepository chatRepository, IMessageRepository messageR
         var userId = GetUserId();
         if (userId.HasValue)
         {
-            _onlineUsers.Remove(userId.Value);
-            await Clients.All.SendAsync("UserOnlineChanged", userId.Value, false);
+            // TryRemove + проверка — удаляем ТОЛЬКО если это наш connectionId
+            // При двух вкладках: одна закрылась, другая осталась — не снимаем статус "online"
+            if (_onlineUsers.TryRemove(userId.Value, out var removedId)
+                && removedId == Context.ConnectionId)
+            {
+                // Проверяем, нет ли других активных connectionId для этого userId
+                // (если пользователь зашёл с другого устройства/вкладки)
+                if (!_onlineUsers.ContainsKey(userId.Value))
+                {
+                    await Clients.All.SendAsync("UserOnlineChanged", userId.Value, false);
+                }
+            }
         }
         await base.OnDisconnectedAsync(exception);
     }

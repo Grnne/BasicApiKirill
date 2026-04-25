@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿using BasicApi.Models.Dto.Users;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BasicApi.Features.Users;
@@ -15,7 +16,7 @@ public class UsersController(UsersHandler handlers) : ControllerBase
     /// </summary>
     [Authorize]
     [HttpGet("GetUserId/{usernameOrEmail}")]
-    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(UserIdResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetUserId(string usernameOrEmail)
         => await handlers.GetUserIdAsync(usernameOrEmail);

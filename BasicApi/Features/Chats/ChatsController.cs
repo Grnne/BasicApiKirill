@@ -26,8 +26,8 @@ public class ChatsController(ChatsHandler handlers) : ControllerBase
     /// Create a private chat with another user
     /// </summary>
     [HttpPost("private/{userId}")]
-    [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(string), StatusCodes.Status201Created)]
+        [ProducesResponseType(typeof(CreateChatResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CreateChatResponseDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CreatePrivateChat(Guid userId)
