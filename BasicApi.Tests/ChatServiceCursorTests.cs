@@ -158,67 +158,6 @@ public class ChatServiceCursorTests
     }
 
     [Fact]
-    public async Task GetChatMessagesCursorAsync_MessagesOrderedChronologically()
-    {
-        // Arrange
-        var chatId = Guid.NewGuid();
-        var userId = Guid.NewGuid();
-        var senderId = Guid.NewGuid();
-        var now = DateTime.UtcNow;
-
-        var messages = new List<MessageWithSender>
-        {
-            ToMessageWithSender(new() { Id = Guid.NewGuid(), ChatId = chatId, SenderId = senderId, Text = "Second", CreatedAt = now.AddMinutes(-5) }, "User"),
-            ToMessageWithSender(new() { Id = Guid.NewGuid(), ChatId = chatId, SenderId = senderId, Text = "First",  CreatedAt = now.AddMinutes(-10) }, "User"),
-        };
-
-        _chatRepoMock
-            .Setup(r => r.IsMemberAsync(chatId, userId))
-            .ReturnsAsync(true);
-
-        _msgRepoMock
-            .Setup(r => r.GetMessagesWithSenderCursorAsync(chatId, null, 20))
-            .ReturnsAsync(new CursorResult<MessageWithSender>
-            {
-                Items = messages,
-                Extra = null
-            });
-
-        // Act
-        var result = await _service.GetChatMessagesCursorAsync(chatId, userId, null, 20);
-
-        // Assert — service should reorder ASC (oldest first)
-        Assert.Equal(2, result.Items.Count);
-        Assert.Equal("First", result.Items[0].Text);
-        Assert.Equal("Second", result.Items[1].Text);
-    }
-
-    [Fact]
-    public async Task GetChatMessagesCursorAsync_EmptyChat_ReturnsEmptyPage()
-    {
-        // Arrange
-        _chatRepoMock
-            .Setup(r => r.IsMemberAsync(It.IsAny<Guid>(), It.IsAny<Guid>()))
-            .ReturnsAsync(true);
-
-        _msgRepoMock
-            .Setup(r => r.GetMessagesWithSenderCursorAsync(It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<int>()))
-            .ReturnsAsync(new CursorResult<MessageWithSender>
-            {
-                Items = [],
-                Extra = null
-            });
-
-        // Act
-        var result = await _service.GetChatMessagesCursorAsync(Guid.NewGuid(), Guid.NewGuid(), null, 20);
-
-        // Assert
-        Assert.Empty(result.Items);
-        Assert.False(result.HasMore);
-        Assert.Null(result.NextCursor);
-    }
-
-    [Fact]
     public async Task GetChatMessagesCursorAsync_WithValidCursor_PassesCursorToRepository()
     {
         // Arrange

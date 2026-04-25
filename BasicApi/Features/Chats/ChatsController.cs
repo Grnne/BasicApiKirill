@@ -18,18 +18,19 @@ public class ChatsController(ChatsHandler handlers) : ControllerBase
     /// </summary>
     [HttpGet]
     [ProducesResponseType(typeof(IEnumerable<ChatListItemDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetUserChats()
         => await handlers.GetUserChatsAsync(User.GetUserId());
 
     /// <summary>
-    /// Create a private chat with another user
+    /// Create a private chat with another user.
+    /// Returns 200 if chat already exists, 201 if a new chat was created.
     /// </summary>
     [HttpPost("private/{userId}")]
         [ProducesResponseType(typeof(CreateChatResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(CreateChatResponseDto), StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CreatePrivateChat(Guid userId)
         => await handlers.CreatePrivateChatAsync(User.GetUserId(), userId);
 
@@ -38,9 +39,9 @@ public class ChatsController(ChatsHandler handlers) : ControllerBase
     /// </summary>
     [HttpGet("{chatId}")]
     [ProducesResponseType(typeof(ChatDetailDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetChat(Guid chatId)
         => await handlers.GetChatAsync(chatId, User.GetUserId());
 
@@ -62,8 +63,8 @@ public class ChatsController(ChatsHandler handlers) : ControllerBase
     /// <param name="limit">Number of messages per page (default 20, max 100).</param>
     [HttpGet("{chatId}/messages/cursor")]
     [ProducesResponseType(typeof(CursorPaginatedResponse<MessageDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetMessagesCursor(
         Guid chatId,
         [FromQuery] string? cursor,
@@ -85,8 +86,8 @@ public class ChatsController(ChatsHandler handlers) : ControllerBase
     /// <param name="limit">Number of messages per page (default 20, max 100).</param>
     [HttpGet("{chatId}/messages/at")]
     [ProducesResponseType(typeof(CursorPaginatedResponse<MessageDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetMessagesAt(
         Guid chatId,
         [FromQuery] DateTime date,
@@ -98,8 +99,7 @@ public class ChatsController(ChatsHandler handlers) : ControllerBase
     /// </summary>
     [HttpPost("{chatId}/read")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> MarkRead(Guid chatId, [FromBody] MarkMessageReadDto dto)
         => await handlers.MarkReadAsync(chatId, User.GetUserId(), dto.LastMessageId);
 }

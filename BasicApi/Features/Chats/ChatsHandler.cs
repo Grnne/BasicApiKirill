@@ -41,7 +41,7 @@ public class ChatsHandler(
         var memberIds = new[] { currentUserId, otherUserId };
         var chatId = await chatRepository.CreateAsync(chat, memberIds);
 
-        return new OkObjectResult(new CreateChatResponseDto { ChatId = chatId });
+        return new CreatedResult($"/api/chats/{chatId}", new CreateChatResponseDto { ChatId = chatId });
     }
 
     public async Task<IActionResult> GetChatAsync(Guid chatId, Guid userId)
