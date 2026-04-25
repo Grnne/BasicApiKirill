@@ -4,7 +4,7 @@ using BasicApi.Storage.Dto;
 using BasicApi.Storage.Interfaces;
 using Moq;
 
-namespace BasicApi.Tests;
+namespace BasicApi.Tests.Services;
 
 public class ChatServiceCursorTests
 {

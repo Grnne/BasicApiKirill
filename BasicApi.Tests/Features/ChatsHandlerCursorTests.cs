@@ -5,7 +5,7 @@ using BasicApi.Storage.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 
-namespace BasicApi.Tests;
+namespace BasicApi.Tests.Features;
 
 public class ChatsHandlerCursorTests
 {
