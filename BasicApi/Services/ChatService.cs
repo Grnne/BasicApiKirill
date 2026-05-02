@@ -1,4 +1,4 @@
-﻿using BasicApi.Middleware;
+﻿using BasicApi.Middleware.Exceptions;
 using BasicApi.Models.Dto.Chat;
 using BasicApi.Models.Dto.Message;
 using BasicApi.Storage.Interfaces;
@@ -31,10 +31,16 @@ public class ChatService(IChatRepository chatRepository, IMessageRepository mess
         })];
     }
 
-    public async Task<ChatDetailDto> GetChatDetailsAsync(Guid chatId, Guid userId)
+        public async Task<ChatDetailDto> GetChatDetailsAsync(Guid chatId, Guid userId)
     {
         var chat = await chatRepository.GetByIdAsync(chatId)
-            ?? throw new NotFoundException("Chat not found");
+            ?? throw new NotFoundException("Chat not found", "CHAT_NOT_FOUND");
+
+        // Authorization check — caller must be a member
+        var isMember = await chatRepository.IsMemberAsync(chatId, userId);
+        if (!isMember)
+            throw new ForbiddenException("User is not a member of this chat", "NOT_A_MEMBER");
+
         var participants = await chatRepository.GetChatParticipantsAsync(chatId);
 
         return new ChatDetailDto
@@ -57,7 +63,7 @@ public class ChatService(IChatRepository chatRepository, IMessageRepository mess
         // Authorization check — caller must be a member
         var isMember = await chatRepository.IsMemberAsync(chatId, userId);
         if (!isMember)
-            throw new UnauthorizedAccessException("User is not a member of this chat");
+            throw new ForbiddenException("User is not a member of this chat", "NOT_A_MEMBER");
 
         // Fetch page from storage (cursor-based) with sender names via JOIN
         var result = await messageRepository.GetMessagesWithSenderCursorAsync(chatId, cursor, limit);

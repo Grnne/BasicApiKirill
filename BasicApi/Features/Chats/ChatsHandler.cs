@@ -1,4 +1,4 @@
-﻿using BasicApi.Middleware;
+﻿using BasicApi.Middleware.Exceptions;
 using BasicApi.Models.Dto.Chat;
 using BasicApi.Models.Dto.Message;
 using BasicApi.Services;
@@ -22,8 +22,8 @@ public class ChatsHandler(
 
     public async Task<IActionResult> CreatePrivateChatAsync(Guid currentUserId, Guid otherUserId)
     {
-        if (currentUserId == otherUserId)
-            throw new BadRequestException("Cannot create chat with yourself");
+                if (currentUserId == otherUserId)
+            throw new BadRequestException("Cannot create chat with yourself", "SELF_CHAT");
 
         var existingChat = await chatRepository.GetPrivateChatAsync(currentUserId, otherUserId);
 
@@ -41,7 +41,7 @@ public class ChatsHandler(
         var memberIds = new[] { currentUserId, otherUserId };
         var chatId = await chatRepository.CreateAsync(chat, memberIds);
 
-        return new CreatedResult($"/api/chats/{chatId}", new CreateChatResponseDto { ChatId = chatId });
+                return new CreatedResult(string.Empty, new CreateChatResponseDto { ChatId = chatId });
     }
 
     public async Task<IActionResult> GetChatAsync(Guid chatId, Guid userId)
@@ -52,7 +52,7 @@ public class ChatsHandler(
 
     /// <summary>
     /// Cursor-based paginated messages endpoint.
-    /// Exceptions (UnauthorizedAccessException, etc.) are handled by the global middleware.
+    /// Exceptions are handled by the global middleware.
     /// </summary>
     public async Task<IActionResult> GetMessagesCursorAsync(
         Guid chatId, Guid userId, string? cursor, int limit)
@@ -85,8 +85,8 @@ public class ChatsHandler(
     public async Task<IActionResult> MarkReadAsync(Guid chatId, Guid userId, Guid lastMessageId)
     {
         var isMember = await chatRepository.IsMemberAsync(chatId, userId);
-        if (!isMember)
-            throw new UnauthorizedAccessException("User is not a member of this chat");
+                if (!isMember)
+            throw new ForbiddenException("User is not a member of this chat", "NOT_A_MEMBER");
 
         await messageRepository.UpdateLastReadAsync(chatId, userId, lastMessageId);
         return new OkResult();

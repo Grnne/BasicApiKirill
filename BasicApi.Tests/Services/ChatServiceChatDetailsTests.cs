@@ -1,4 +1,4 @@
-using BasicApi.Middleware;
+using BasicApi.Middleware.Exceptions;
 using BasicApi.Services;
 using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
@@ -43,6 +43,7 @@ public class ChatServiceChatDetailsTests
         };
 
         _chatRepoMock.Setup(r => r.GetByIdAsync(chatId)).ReturnsAsync(chat);
+        _chatRepoMock.Setup(r => r.IsMemberAsync(chatId, userId)).ReturnsAsync(true);
         _chatRepoMock.Setup(r => r.GetChatParticipantsAsync(chatId)).ReturnsAsync(participants);
 
         // Act

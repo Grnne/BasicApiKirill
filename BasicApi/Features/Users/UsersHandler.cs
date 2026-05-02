@@ -1,4 +1,4 @@
-﻿using BasicApi.Middleware;
+﻿using BasicApi.Middleware.Exceptions;
 using BasicApi.Models.Dto.Users;
 using BasicApi.Storage.Interfaces;
 using Microsoft.AspNetCore.Mvc;
@@ -12,7 +12,7 @@ public class UsersHandler(IUserRepository userRepository)
         var userId = await userRepository.GetIdByUsernameOrEmailAsync(usernameOrEmail);
 
         if (!userId.HasValue || userId == Guid.Empty)
-            throw new NotFoundException("User not found");
+            throw new NotFoundException("User not found", "USER_NOT_FOUND");
 
         return new OkObjectResult(new UserIdResponseDto { UserId = userId.Value });
     }

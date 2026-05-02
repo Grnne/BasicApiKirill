@@ -1,4 +1,4 @@
-﻿using BasicApi.Middleware;
+﻿using BasicApi.Middleware.Exceptions;
 using BasicApi.Models.Dto.Auth;
 using BasicApi.Services;
 using BasicApi.Storage.Entities;
@@ -16,8 +16,8 @@ public class AuthHandler(
     {
         var user = await userRepository.GetByUsernameOrEmailAsync(request.UsernameOrEmail);
 
-        if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
-            throw new UnauthorizedAccessException("Invalid username/email or password");
+                if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+            throw new UnauthorizedException("Invalid username/email or password", "INVALID_CREDENTIALS");
 
         var token = jwtService.GenerateToken(user.Id, user.Username, user.Email);
 
@@ -37,14 +37,14 @@ public class AuthHandler(
     {
         var existingUser = await userRepository.GetByUsernameOrEmailAsync(request.Username);
 
-        if (existingUser != null)
-            throw new ConflictException("Username already exists");
+                if (existingUser != null)
+            throw new ConflictException("Username already exists", "USERNAME_TAKEN");
 
         // Проверка уникальности email
         existingUser = await userRepository.GetByUsernameOrEmailAsync(request.Email);
 
-        if (existingUser != null)
-            throw new ConflictException("Email already exists");
+                if (existingUser != null)
+            throw new ConflictException("Email already exists", "EMAIL_TAKEN");
 
         var user = new User
         {
@@ -60,7 +60,7 @@ public class AuthHandler(
         var userId = await userRepository.CreateAsync(user);
         var token = jwtService.GenerateToken(userId, user.Username, user.Email);
 
-        return new CreatedResult($"/api/auth/login", new AuthResponseDto
+        return new CreatedResult(string.Empty, new AuthResponseDto
         {
             UserId = userId,
             Username = user.Username,

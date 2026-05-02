@@ -1,6 +1,6 @@
-using System.Net;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using BasicApi.Middleware.Exceptions;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BasicApi.Middleware;
@@ -33,32 +33,39 @@ public class ExceptionHandlingMiddleware
         {
             await _next(context);
         }
+        catch (UnauthorizedException ex)
+        {
+            SetWwwAuthenticateHeader(context);
+            await WriteProblemDetailsAsync(context, StatusCodes.Status401Unauthorized,
+                "Unauthorized", ex.Message, errorCode: ex.ErrorCode);
+        }
+        catch (ForbiddenException ex)
+        {
+            await WriteProblemDetailsAsync(context, StatusCodes.Status403Forbidden,
+                "Forbidden", ex.Message, errorCode: ex.ErrorCode);
+        }
         catch (NotFoundException ex)
         {
             await WriteProblemDetailsAsync(context, StatusCodes.Status404NotFound,
-                "Not Found", ex.Message);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            await WriteProblemDetailsAsync(context, StatusCodes.Status403Forbidden,
-                "Forbidden", ex.Message);
+                "Not Found", ex.Message, errorCode: ex.ErrorCode);
         }
         catch (BadRequestException ex)
         {
             await WriteProblemDetailsAsync(context, StatusCodes.Status400BadRequest,
-                "Bad Request", ex.Message);
+                "Bad Request", ex.Message, errorCode: ex.ErrorCode);
         }
         catch (ConflictException ex)
         {
             await WriteProblemDetailsAsync(context, StatusCodes.Status409Conflict,
-                "Conflict", ex.Message);
+                "Conflict", ex.Message, errorCode: ex.ErrorCode);
         }
         catch (Exception ex)
         {
             await WriteProblemDetailsAsync(context, StatusCodes.Status500InternalServerError,
                 "Internal Server Error",
                 _env.IsDevelopment() ? ex.Message : "An unexpected error occurred.",
-                _env.IsDevelopment() ? ex.StackTrace : null);
+                errorCode: "INTERNAL_ERROR",
+                stackTrace: _env.IsDevelopment() ? ex.StackTrace : null);
         }
     }
 
@@ -67,6 +74,7 @@ public class ExceptionHandlingMiddleware
         int statusCode,
         string title,
         string detail,
+        string? errorCode = null,
         string? stackTrace = null)
     {
         context.Response.ContentType = "application/problem+json";
@@ -74,7 +82,7 @@ public class ExceptionHandlingMiddleware
 
         var problemDetails = new ProblemDetails
         {
-            Type = GetProblemTypeUri(statusCode),
+            Type = "about:blank",
             Title = title,
             Status = statusCode,
             Detail = detail,
@@ -85,6 +93,11 @@ public class ExceptionHandlingMiddleware
             }
         };
 
+        if (errorCode is not null)
+        {
+            problemDetails.Extensions["errorCode"] = errorCode;
+        }
+
         if (stackTrace is not null)
         {
             problemDetails.Extensions["stackTrace"] = stackTrace;
@@ -94,28 +107,9 @@ public class ExceptionHandlingMiddleware
         await context.Response.WriteAsync(json);
     }
 
-    private static string GetProblemTypeUri(int statusCode) => statusCode switch
+    private static void SetWwwAuthenticateHeader(HttpContext context)
     {
-        StatusCodes.Status400BadRequest => "https://tools.ietf.org/html/rfc9110#section-15.5.1",
-        StatusCodes.Status401Unauthorized => "https://tools.ietf.org/html/rfc9110#section-15.5.2",
-        StatusCodes.Status403Forbidden => "https://tools.ietf.org/html/rfc9110#section-15.5.4",
-        StatusCodes.Status404NotFound => "https://tools.ietf.org/html/rfc9110#section-15.5.5",
-        StatusCodes.Status409Conflict => "https://tools.ietf.org/html/rfc9110#section-15.5.10",
-        StatusCodes.Status500InternalServerError => "https://tools.ietf.org/html/rfc9110#section-15.6.1",
-        _ => "about:blank"
-    };
+        context.Response.Headers.WWWAuthenticate = "Bearer realm=\"basicapi\", error=\"invalid_token\", error_description=\"Authentication required\"";
+    }
 }
 
-// Custom exception types for explicit mapping
-
-public class NotFoundException(string message) : Exception(message)
-{
-}
-
-public class BadRequestException(string message) : Exception(message)
-{
-}
-
-public class ConflictException(string message) : Exception(message)
-{
-}

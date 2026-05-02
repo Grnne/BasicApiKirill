@@ -1,5 +1,5 @@
 using BasicApi.Features.Users;
-using BasicApi.Middleware;
+using BasicApi.Middleware.Exceptions;
 using BasicApi.Storage.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using Moq;

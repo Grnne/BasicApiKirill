@@ -1,4 +1,5 @@
 using BasicApi.Features.Chats;
+using BasicApi.Middleware.Exceptions;
 using BasicApi.Models.Dto.Message;
 using BasicApi.Services;
 using BasicApi.Storage.Interfaces;
@@ -65,11 +66,11 @@ public class ChatsHandlerCursorTests
         // Arrange
         _chatServiceMock
             .Setup(s => s.GetChatMessagesCursorAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<int>()))
-            .ThrowsAsync(new UnauthorizedAccessException("User is not a member of this chat"));
+                        .ThrowsAsync(new ForbiddenException("User is not a member of this chat"));
 
         // Act & Assert — the handler no longer catches this; it bubbles to middleware
         // which returns ProblemDetails with 403
-        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+        var ex = await Assert.ThrowsAsync<ForbiddenException>(() =>
             _handler.GetMessagesCursorAsync(Guid.NewGuid(), Guid.NewGuid(), null, 20));
         Assert.Contains("not a member", ex.Message, StringComparison.OrdinalIgnoreCase);
     }

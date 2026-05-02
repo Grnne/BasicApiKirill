@@ -1,5 +1,5 @@
 using BasicApi.Features.Chats;
-using BasicApi.Middleware;
+using BasicApi.Middleware.Exceptions;
 using BasicApi.Models.Dto.Chat;
 using BasicApi.Models.Dto.Message;
 using BasicApi.Services;
@@ -116,7 +116,7 @@ public class ChatsHandlerTests
             .ReturnsAsync(false);
 
         // Act & Assert
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+        await Assert.ThrowsAsync<ForbiddenException>(() =>
             _handler.MarkReadAsync(chatId, userId, Guid.NewGuid()));
     }
 

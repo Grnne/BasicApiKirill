@@ -1,5 +1,5 @@
 using BasicApi.Features.Auth;
-using BasicApi.Middleware;
+using BasicApi.Middleware.Exceptions;
 using BasicApi.Models.Dto.Auth;
 using BasicApi.Services;
 using BasicApi.Storage.Entities;
@@ -80,7 +80,7 @@ public class AuthHandlerTests
             .ReturnsAsync(user);
 
         // Act & Assert
-        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+        var ex = await Assert.ThrowsAsync<UnauthorizedException>(() =>
             _handler.LoginAsync(new LoginRequestDto
             {
                 UsernameOrEmail = "testuser",
@@ -91,7 +91,7 @@ public class AuthHandlerTests
     }
 
     [Fact]
-    public async Task LoginAsync_UserNotFound_ThrowsUnauthorizedAccess()
+    public async Task LoginAsync_UserNotFound_ThrowsUnauthorized()
     {
         // Arrange
         _userRepoMock
@@ -99,7 +99,7 @@ public class AuthHandlerTests
             .ReturnsAsync((User?)null);
 
         // Act & Assert
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+        await Assert.ThrowsAsync<UnauthorizedException>(() =>
             _handler.LoginAsync(new LoginRequestDto
             {
                 UsernameOrEmail = "unknown",

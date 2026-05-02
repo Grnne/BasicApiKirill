@@ -1,3 +1,4 @@
+using BasicApi.Middleware.Exceptions;
 using BasicApi.Models.Dto.Message;
 using BasicApi.Services;
 using BasicApi.Storage.Dto;
@@ -32,7 +33,7 @@ public class ChatServiceCursorTests
         };
 
     [Fact]
-    public async Task GetChatMessagesCursorAsync_WhenNotMember_ThrowsUnauthorizedAccess()
+        public async Task GetChatMessagesCursorAsync_WhenNotMember_ThrowsForbiddenAccess()
     {
         // Arrange
         _chatRepoMock
@@ -40,7 +41,7 @@ public class ChatServiceCursorTests
             .ReturnsAsync(false);
 
         // Act & Assert
-        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+        var ex = await Assert.ThrowsAsync<ForbiddenException>(() =>
             _service.GetChatMessagesCursorAsync(Guid.NewGuid(), Guid.NewGuid(), null, 20));
 
         Assert.Contains("not a member", ex.Message, StringComparison.OrdinalIgnoreCase);

@@ -1,7 +1,8 @@
-﻿using System.Text;
+using System.Text;
 using BasicApi.Features.Auth;
 using BasicApi.Features.Chats;
 using BasicApi.Features.Users;
+using BasicApi.Middleware.Exceptions;
 using BasicApi.Services;
 using BasicApi.Storage.Interfaces;
 using BasicApi.Storage.Migrations;
@@ -9,6 +10,8 @@ using BasicApi.Storage.Repositories;
 using BasicApi.Storage.Services;
 using FluentMigrator.Runner;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 
 namespace BasicApi.Extensions;
@@ -17,7 +20,44 @@ public static class ServiceExtensions
 {
     public static IServiceCollection AddApiServices(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddControllers();
+                                services.AddControllers()
+            .ConfigureApiBehaviorOptions(options =>
+        {
+                        options.InvalidModelStateResponseFactory = context =>
+            {
+                var errors = context.ModelState
+                    .Where(e => e.Value?.Errors.Count > 0)
+                    .ToDictionary(
+                        e => e.Key,
+                        e => e.Value!.Errors.Select(x => new
+                        {
+                            code = GetValidationErrorCode(x.ErrorMessage),
+                            message = x.ErrorMessage
+                        }).ToArray()
+                    );
+
+                var problemDetails = new ProblemDetails
+                {
+                    Type = "about:blank",
+                    Title = "Bad Request",
+                    Status = StatusCodes.Status400BadRequest,
+                    Detail = "One or more validation errors occurred.",
+                    Instance = context.HttpContext.Request.Path,
+                    Extensions =
+                    {
+                        ["traceId"] = context.HttpContext.TraceIdentifier,
+                        ["errorCode"] = "VALIDATION_ERROR",
+                        ["errors"] = errors
+                    }
+                };
+
+                return new ObjectResult(problemDetails)
+                {
+                    StatusCode = StatusCodes.Status400BadRequest,
+                    ContentTypes = { "application/problem+json" }
+                };
+            };
+        });
         services.AddSwaggerWithDocs(configuration);
         services.AddJwtAuth(configuration);
         services.AddSignalR();
@@ -46,7 +86,7 @@ public static class ServiceExtensions
                 .ScanIn(typeof(InitialCreate).Assembly).For.Migrations())
             .AddLogging(lb => lb.AddConsole());
 
-        //Корсика
+        //�������
         services.AddCors(options =>
         {
             options.AddPolicy("AllowAll", policy =>
@@ -81,7 +121,7 @@ public static class ServiceExtensions
                     ClockSkew = TimeSpan.Zero
                 };
 
-                // SignalR передаёт токен через query string
+                                // SignalR ������� ����� ����� query string
                 options.Events = new JwtBearerEvents
                 {
                     OnMessageReceived = context =>
@@ -96,11 +136,62 @@ public static class ServiceExtensions
                         }
 
                         return Task.CompletedTask;
+                    },
+                    OnChallenge = context =>
+                    {
+                        // ��������� ����������� ������ 401 ����� �� .NET
+                        // � ������ ����������, ������� ������� ExceptionHandlingMiddleware
+                        context.HandleResponse();
+
+                        throw new UnauthorizedException("Authentication required", "TOKEN_MISSING_OR_EXPIRED");
+                    },
+                    OnForbidden = context =>
+                    {
+                        // ��������� ����������� ������ 403 ����� �� .NET
+                        // � ������ ����������, ������� ������� ExceptionHandlingMiddleware
+                        throw new ForbiddenException("Access denied", "ACCESS_DENIED");
                     }
                 };
             });
 
         services.AddAuthorization();
         return services;
+    }
+
+    /// <summary>
+    /// Maps ASP.NET default validation error messages to machine-readable codes.
+    /// This allows clients to handle validation errors programmatically without parsing human text.
+    /// </summary>
+    private static string GetValidationErrorCode(string errorMessage)
+    {
+        if (errorMessage.Contains("required", StringComparison.OrdinalIgnoreCase) ||
+            errorMessage.Contains("must be provided", StringComparison.OrdinalIgnoreCase))
+            return "REQUIRED";
+
+        if (errorMessage.Contains("maximum length", StringComparison.OrdinalIgnoreCase) ||
+            errorMessage.Contains("max length", StringComparison.OrdinalIgnoreCase) ||
+            errorMessage.Contains("too long", StringComparison.OrdinalIgnoreCase))
+            return "MAX_LENGTH";
+
+        if (errorMessage.Contains("minimum length", StringComparison.OrdinalIgnoreCase) ||
+            errorMessage.Contains("min length", StringComparison.OrdinalIgnoreCase) ||
+            errorMessage.Contains("at least", StringComparison.OrdinalIgnoreCase))
+            return "MIN_LENGTH";
+
+        if (errorMessage.Contains("invalid", StringComparison.OrdinalIgnoreCase) ||
+            errorMessage.Contains("not valid", StringComparison.OrdinalIgnoreCase) ||
+            errorMessage.Contains("a valid", StringComparison.OrdinalIgnoreCase))
+            return "INVALID_FORMAT";
+
+        if (errorMessage.Contains("range", StringComparison.OrdinalIgnoreCase) ||
+            errorMessage.Contains("between", StringComparison.OrdinalIgnoreCase))
+            return "OUT_OF_RANGE";
+
+        if (errorMessage.Contains("match", StringComparison.OrdinalIgnoreCase) ||
+            errorMessage.Contains("must match", StringComparison.OrdinalIgnoreCase) ||
+            errorMessage.Contains("do not match", StringComparison.OrdinalIgnoreCase))
+            return "MISMATCH";
+
+        return "VALIDATION_ERROR";
     }
 }
