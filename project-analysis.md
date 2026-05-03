@@ -86,7 +86,8 @@ BasicApi/
 │   │   └── MessageWithSender.cs
 │   └── Migrations/
 │       ├── InitialCreate.cs
-│       └── AddFullTextSearch.cs
+│       ├── AddFullTextSearch.cs
+│       ├── AddChatSearchIndex.cs
 └── BasicApi.Tests/                   # Unit tests
     ├── BasicApi.Tests.csproj         # xUnit + Moq
     ├── CursorDtoTests.cs
@@ -143,6 +144,8 @@ Program.Main → AddApiServices() → AddControllers / Swagger / JWT / SignalR /
   - `Dto/CursorDto.cs` (~70 lines) — `readonly struct` encoding `(DateTime, Guid)` as URL-safe Base64 (32 bytes)
   - `Dto/CursorResult.cs` (~18 lines) — generic wrapper with `HasMore` detection via extra record
   - `Migrations/InitialCreate.cs` (~110 lines) — FluentMigrator migration creating 4 tables with indexes and foreign keys
+  - `Migrations/AddFullTextSearch.cs` — Migration 2: adds GIN trigram index for full-text search on messages.text
+  - `Migrations/AddChatSearchIndex.cs` — Migration 3: adds pg_trgm extension + GIN indexes on chats.title, users.display_name, users.username for ILIKE search
   - `Services/NpgsqlConnectionFactory.cs` (~12 lines) — simple factory pattern for creating connections
 
 ### 🟣 BasicApi.Tests — Unit Tests
@@ -227,6 +230,19 @@ Program.Main → AddApiServices() → AddControllers / Swagger / JWT / SignalR /
 | **`IsRead` always false** | `MessageDto.IsRead` is hardcoded as `false` with `// TODO: resolve actual read status` | Join with `chat_members.last_read_message_id` to compute real read status per user |
 | **`TotalCount` only on first page** | `SearchMessagesCursorAsync` executes `COUNT(*)` only when `cursor == null`; subsequent pages return `0` | For accurate total across pages, cache count client-side or add dedicated `/search/count` endpoint |
 | **Raw SQL in repositories** | All queries are inline strings with Dapper | Consider using a SQL files approach or a lightweight query builder for maintainability; or at minimum use `Dapper.SqlBuilder` for dynamic queries |
+| **SQL injection risk from dynamic WHERE clause** | `BuildSearchWhereClause` in `ChatRepository.cs` concatenates raw query ILIKE conditions into SQL string | Parameterized via Dapper `@query` but the WHERE clause structure is raw string concatenation — `$"{ChatListBaseSql}\n{whereClause}"`. Low risk due to parameterization but high complexity |
+| **LINQ `.ToList()` inside hot path** | `ChatService.GetChatMessagesCursorAsync` calls `.ToList()` after `Select()`, then `OrderBy()` again — messages already sorted from SQL | Remove the redundant `.OrderBy(m => m.CreatedAt)` — the SQL already returns in `ORDER BY created_at DESC` |
+| **Redundant `IsMemberAsync` call** | `GetChatDetailsAsync` fetches chat by ID first, then checks membership. If chat doesn't exist, the membership check is wasted | Swap order: check membership first (returns false if chat doesn't exist), or combine both into a single query |
+| **N+1 member insert in `CreateAsync`** | `ChatRepository.CreateAsync` uses a `foreach` loop with individual `INSERT` for each chat member in a transaction | Use a single `INSERT INTO chat_members (chat_id, user_id, joined_at) VALUES ...` with Dapper's `ExecuteAsync` + collection parameter |
+| **Chat search SQL has implicit `AND` ambiguity** | WHERE clause for no-type-filter generates: `WHERE (c.type = 'group' AND title ILIKE ... OR c.type = 'private' AND (...))`. `OR` binds correctly after `AND` but fragile | Add explicit parentheses: `WHERE ((c.type = 'group' AND ...) OR (c.type = 'private' AND ...))` |
+| **Race condition in private chat creation** | Between `GetPrivateChatAsync` returning null and `CreateAsync` executing, another request could create the same chat | Use a unique constraint or advisory lock to prevent duplicate private chat creation |
+| **`IsMemberAsync` uses `COUNT(1)` instead of `EXISTS`** | `SELECT COUNT(1) FROM chat_members` scans all matching rows just to return true/false | Use `SELECT EXISTS(SELECT 1 FROM chat_members ...)` for early exit on first match |
+| **No `user_id` index on `chat_members`** | PK is only `(chat_id, user_id)` — no index for queries filtering by `user_id` alone | Add `CREATE INDEX IF NOT EXISTS ix_chat_members_user_id ON chat_members(user_id)` |
+| **No cascade / set-null for orphaned messages on user delete** | `FK_Messages_Users` uses `OnDelete(Rule.None)` — if a user is deleted, orphaned messages with dangling `sender_id` remain | Allow nullable `sender_id` with SET NULL on delete, or cascade |
+| **`CancellationToken` declared but never passed to Dapper** | UserRepository accepts `CancellationToken ct` but never passes it to `QueryAsync`/`ExecuteAsync` | Pass `ct` as the last parameter to all Dapper calls |
+| **Missing `AddChatSearchIndex` in project structure doc** | Doc lists only `InitialCreate.cs` and `AddFullTextSearch.cs` under Migrations/, but `AddChatSearchIndex.cs` (Migration 3) exists | Update project structure to include the third migration |
+| **Unused `GetUserChatsAsync` in `IChatRepository`** | Interface declares `GetUserChatsAsync` but it's never called — only `GetUserChatsBatchedAsync` is used | Remove the unused method or mark as deprecated |
+| **`test-endpoints.ps1` shebang/env mismatch** | `#!/usr/bin/env pwsh` suggests running with pwsh 7+, but used with `powershell.exe` (PS 5.1) on Windows. Unicode box-drawing chars break in CP866 | Use only ASCII characters for Windows PS 5.1 compatibility, or ensure pwsh 7+ is used |
 
 ## Technology Stack
 

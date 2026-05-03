@@ -10,6 +10,7 @@ public class ChatListResult
     public string Type { get; set; } = string.Empty;
     public string? Title { get; set; }
     public string? CompanionName { get; set; }
+    public string? CompanionUsername { get; set; }
     public int UnreadCount { get; set; }
     public DateTime CreatedAt { get; set; }
 
@@ -20,3 +21,4 @@ public class ChatListResult
     public DateTime? LastMessageCreatedAt { get; set; }
     public string? LastMessageSenderName { get; set; }
 }
+

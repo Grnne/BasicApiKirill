@@ -128,13 +128,55 @@ public class ChatService(IChatRepository chatRepository, IMessageRepository mess
             nextCursor = new Storage.Dto.CursorDto(last.CreatedAt, last.Id).Encode();
         }
 
-        return new SearchMessagesResponseDto
+                return new SearchMessagesResponseDto
         {
             Items = [.. messages.OrderBy(m => m.CreatedAt)],
             NextCursor = nextCursor,
             HasMore = result.HasMore,
             Query = query,
             TotalCount = totalCount
+        };
+    }
+
+        public async Task<SearchChatsResponseDto> SearchChatsAsync(Guid userId, string query, string? type, int limit)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            throw new BadRequestException("Query cannot be empty", "INVALID_QUERY");
+
+        // Helper to map ChatListResult rows to ChatListItemDto
+        List<ChatListItemDto> MapRows(List<Storage.Dto.ChatListResult> rows) =>
+            [.. rows.Select(r => new ChatListItemDto
+            {
+                ChatId = r.ChatId,
+                Type = r.Type,
+                Title = r.Title,
+                CompanionName = r.CompanionName,
+                UnreadCount = r.UnreadCount,
+                LastActivityAt = r.LastMessageCreatedAt ?? r.CreatedAt,
+                LastMessage = r.LastMessageId is not null ? new MessageDto
+                {
+                    Id = r.LastMessageId!.Value,
+                    SenderId = r.LastMessageSenderId!.Value,
+                    SenderName = r.LastMessageSenderName ?? "Unknown",
+                    Text = r.LastMessageText ?? string.Empty,
+                    CreatedAt = r.LastMessageCreatedAt!.Value,
+                    IsRead = false
+                } : null
+            })];
+
+                var typeFilter = type?.ToLowerInvariant();
+
+        // Single unified query — branching by type is now inside the repository
+        var rowsTask = chatRepository.SearchChatsBatchedAsync(userId, query, typeFilter, limit);
+        var countTask = chatRepository.CountChatsByQueryAsync(userId, query, typeFilter);
+
+        await Task.WhenAll(rowsTask, countTask);
+
+        return new SearchChatsResponseDto
+        {
+            Items = MapRows(rowsTask.Result),
+            Query = query,
+            TotalCount = countTask.Result
         };
     }
 }

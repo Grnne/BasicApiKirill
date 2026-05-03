@@ -148,4 +148,137 @@ public class ChatsHandlerTests
             s => s.GetChatMessagesCursorAsync(chatId, userId, It.Is<string?>(c => c != null), 20),
             Times.Once);
     }
+
+    // ========== Search Chats ==========
+
+    [Fact]
+    public async Task SearchChatsAsync_GroupType_ReturnsOkWithResults()
+    {
+        // Arrange
+        var userId = Guid.NewGuid();
+        var query = "team";
+        var response = new SearchChatsResponseDto
+        {
+            Items =
+            [
+                new ChatListItemDto
+                {
+                    ChatId = Guid.NewGuid(),
+                    Type = "group",
+                    Title = "Team Alpha",
+                    UnreadCount = 3,
+                    LastActivityAt = DateTime.UtcNow
+                }
+            ],
+            Query = query,
+            TotalCount = 1
+        };
+
+        _chatServiceMock
+            .Setup(s => s.SearchChatsAsync(userId, query, "group", 20))
+            .ReturnsAsync(response);
+
+        // Act
+        var result = await _handler.SearchChatsAsync(userId, query, "group", 20);
+
+        // Assert
+        var okResult = Assert.IsType<OkObjectResult>(result);
+        var dto = Assert.IsType<SearchChatsResponseDto>(okResult.Value);
+        Assert.Single(dto.Items);
+        Assert.Equal("Team Alpha", dto.Items[0].Title);
+        Assert.Equal("group", dto.Items[0].Type);
+        Assert.Equal(query, dto.Query);
+        Assert.Equal(1, dto.TotalCount);
+    }
+
+    [Fact]
+    public async Task SearchChatsAsync_PrivateType_ReturnsOkWithResults()
+    {
+        // Arrange
+        var userId = Guid.NewGuid();
+        var query = "alice";
+        var response = new SearchChatsResponseDto
+        {
+            Items =
+            [
+                new ChatListItemDto
+                {
+                    ChatId = Guid.NewGuid(),
+                    Type = "private",
+                    CompanionName = "Alice Johnson",
+                    UnreadCount = 1,
+                    LastActivityAt = DateTime.UtcNow
+                }
+            ],
+            Query = query,
+            TotalCount = 1
+        };
+
+        _chatServiceMock
+            .Setup(s => s.SearchChatsAsync(userId, query, "private", 20))
+            .ReturnsAsync(response);
+
+        // Act
+        var result = await _handler.SearchChatsAsync(userId, query, "private", 20);
+
+        // Assert
+        var okResult = Assert.IsType<OkObjectResult>(result);
+        var dto = Assert.IsType<SearchChatsResponseDto>(okResult.Value);
+        Assert.Single(dto.Items);
+        Assert.Equal("Alice Johnson", dto.Items[0].CompanionName);
+        Assert.Equal("private", dto.Items[0].Type);
+        Assert.Equal(query, dto.Query);
+    }
+
+    [Fact]
+    public async Task SearchChatsAsync_NoType_ReturnsBothGroupAndPrivate()
+    {
+        // Arrange
+        var userId = Guid.NewGuid();
+        var query = "test";
+
+        var bothResponse = new SearchChatsResponseDto
+        {
+            Items =
+            [
+                new ChatListItemDto { ChatId = Guid.NewGuid(), Type = "group", Title = "Test Group" },
+                new ChatListItemDto { ChatId = Guid.NewGuid(), Type = "private", CompanionName = "Test User" }
+            ],
+            Query = query,
+            TotalCount = 2
+        };
+
+        _chatServiceMock
+            .Setup(s => s.SearchChatsAsync(userId, query, null, 20))
+            .ReturnsAsync(bothResponse);
+
+        // Act
+        var result = await _handler.SearchChatsAsync(userId, query, null, 20);
+
+        // Assert
+        var okResult = Assert.IsType<OkObjectResult>(result);
+        var dto = Assert.IsType<SearchChatsResponseDto>(okResult.Value);
+        Assert.Equal(2, dto.Items.Count);
+        Assert.Equal("group", dto.Items[0].Type);
+        Assert.Equal("private", dto.Items[1].Type);
+        Assert.Equal(query, dto.Query);
+        Assert.Equal(2, dto.TotalCount);
+    }
+
+    [Fact]
+    public async Task SearchChatsAsync_EmptyQuery_ThrowsBadRequest()
+    {
+        // Arrange
+        var userId = Guid.NewGuid();
+
+        _chatServiceMock
+            .Setup(s => s.SearchChatsAsync(userId, "", "group", 20))
+            .ThrowsAsync(new BadRequestException("Query cannot be empty", "INVALID_QUERY"));
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<BadRequestException>(() =>
+            _handler.SearchChatsAsync(userId, "", "group", 20));
+
+        Assert.Contains("empty", ex.Message);
+    }
 }

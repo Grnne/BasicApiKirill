@@ -15,4 +15,21 @@ public interface IChatRepository
     Task<string?> GetCompanionNameAsync(Guid chatId, Guid userId);
     Task<string> GetUserNameAsync(Guid userId);
     Task<List<ChatParticipantDto>> GetChatParticipantsAsync(Guid chatId);
+
+        /// <summary>
+    /// Searches user's chats by query and type.
+    /// When query is null, returns all user chats (no filter).
+    /// When query is provided, searches by ILIKE:
+    ///   - type="group": matches chat title
+    ///   - type="private": matches companion display_name or username
+    ///   - type is null/empty: matches both (no type filter, but query applies to both)
+    /// </summary>
+    Task<List<ChatListResult>> SearchChatsBatchedAsync(Guid userId, string? query, string? typeFilter, int? limit);
+
+    /// <summary>
+    /// Returns total count of user's chats matching a search query and type.
+    /// Same filtering logic as <see cref="SearchChatsBatchedAsync"/>.
+    /// </summary>
+    Task<int> CountChatsByQueryAsync(Guid userId, string? query, string? typeFilter);
 }
+

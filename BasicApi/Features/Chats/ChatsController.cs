@@ -133,4 +133,35 @@ public class ChatsController(ChatsHandler handlers) : ControllerBase
         [FromQuery] string? cursor,
         [FromQuery] int limit = 20)
         => await handlers.SearchMessagesAsync(chatId, User.GetUserId(), q, cursor, Math.Clamp(limit, 1, 100));
+
+    /// <summary>
+    /// Search user's chats by query.
+    /// </summary>
+    /// <remarks>
+    /// Searches the current user's chats.
+    /// For group chats: searches by chat title (ILIKE).
+    /// For private chats: searches by companion display name or username (ILIKE).
+    /// 
+    /// Use the optional <c>type</c> parameter to filter results:
+    /// - <c>type=group</c> — search only group chats
+    /// - <c>type=private</c> — search only private chats
+    /// - omit <c>type</c> — search both
+    /// 
+    /// Sample requests:
+    /// - GET /api/chats/search?q=team&amp;type=group&amp;limit=20
+    /// - GET /api/chats/search?q=alice&amp;type=private&amp;limit=20
+    /// - GET /api/chats/search?q=something&amp;limit=20
+    /// </remarks>
+    /// <param name="q">Search query.</param>
+    /// <param name="type">Optional type filter: "group", "private", or empty for both.</param>
+    /// <param name="limit">Max results (default 20, max 100).</param>
+    [HttpGet("search")]
+    [ProducesResponseType(typeof(SearchChatsResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> SearchChats(
+        [FromQuery] string q,
+        [FromQuery] string? type,
+        [FromQuery] int limit = 20)
+        => await handlers.SearchChatsAsync(User.GetUserId(), q, type, Math.Clamp(limit, 1, 100));
 }

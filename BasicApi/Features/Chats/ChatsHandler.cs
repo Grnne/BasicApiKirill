@@ -95,11 +95,21 @@ public class ChatsHandler(
         /// <summary>
     /// Full-text search for messages within a chat.
     /// Validates the search query and delegates to the service layer.
-    /// </summary>
+        /// </summary>
     public async Task<IActionResult> SearchMessagesAsync(
         Guid chatId, Guid userId, string query, string? cursor, int limit)
     {
         var result = await chatService.SearchChatMessagesCursorAsync(chatId, userId, query, cursor, limit);
+        return new OkObjectResult(result);
+    }
+
+    /// <summary>
+    /// Searches user's chats by query.
+    /// Supports optional type filter (group/private).
+    /// </summary>
+    public async Task<IActionResult> SearchChatsAsync(Guid userId, string query, string? type, int limit)
+    {
+        var result = await chatService.SearchChatsAsync(userId, query, type, limit);
         return new OkObjectResult(result);
     }
 }
