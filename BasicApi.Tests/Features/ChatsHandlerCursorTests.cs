@@ -1,5 +1,6 @@
 using BasicApi.Features.Chats;
 using BasicApi.Middleware.Exceptions;
+using BasicApi.Models.Dto.Chat;
 using BasicApi.Models.Dto.Message;
 using BasicApi.Services;
 using BasicApi.Storage.Interfaces;
@@ -60,7 +61,7 @@ public class ChatsHandlerCursorTests
         Assert.True(paginated.HasMore);
     }
 
-    [Fact]
+        [Fact]
     public async Task GetMessagesCursorAsync_WhenNotMember_ThrowsUnauthorizedAccess()
     {
         // Arrange
@@ -75,5 +76,112 @@ public class ChatsHandlerCursorTests
         Assert.Contains("not a member", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    
+    // ========== Search Messages ==========
+
+    [Fact]
+    public async Task SearchMessagesAsync_WhenSuccessful_ReturnsOkWithSearchResponse()
+    {
+        // Arrange
+        var chatId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var query = "hello";
+        var messages = new List<MessageDto>
+        {
+            new() { Id = Guid.NewGuid(), SenderId = userId, Text = "Hello world", CreatedAt = DateTime.UtcNow.AddMinutes(-5) },
+            new() { Id = Guid.NewGuid(), SenderId = userId, Text = "Say hello", CreatedAt = DateTime.UtcNow.AddMinutes(-2) },
+        };
+
+        var response = new SearchMessagesResponseDto
+        {
+            Items = messages,
+            NextCursor = "cursor-value",
+            HasMore = false,
+            Query = query,
+            TotalCount = 2
+        };
+
+        _chatServiceMock
+            .Setup(s => s.SearchChatMessagesCursorAsync(chatId, userId, query, null, 20))
+            .ReturnsAsync(response);
+
+        // Act
+        var result = await _handler.SearchMessagesAsync(chatId, userId, query, null, 20);
+
+        // Assert
+        var okResult = Assert.IsType<OkObjectResult>(result);
+        var searchResponse = Assert.IsType<SearchMessagesResponseDto>(okResult.Value);
+        Assert.Equal(2, searchResponse.Items.Count);
+        Assert.Equal(query, searchResponse.Query);
+        Assert.Equal(2, searchResponse.TotalCount);
+        Assert.False(searchResponse.HasMore);
+    }
+
+        [Fact]
+    public async Task SearchMessagesAsync_WhenQueryTooShort_ThrowsBadRequest()
+    {
+        // Arrange
+        var chatId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var query = "a";
+
+        _chatServiceMock
+            .Setup(s => s.SearchChatMessagesCursorAsync(chatId, userId, query, null, 20))
+            .ThrowsAsync(new BadRequestException("Query must be at least 2 characters long"));
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<BadRequestException>(() =>
+            _handler.SearchMessagesAsync(chatId, userId, query, null, 20));
+
+        Assert.Contains("Query", ex.Message);
+    }
+
+    [Fact]
+    public async Task SearchMessagesAsync_WhenNotMember_ThrowsForbiddenException()
+    {
+        // Arrange
+        var chatId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+
+        _chatServiceMock
+            .Setup(s => s.SearchChatMessagesCursorAsync(chatId, userId, "hello", null, 20))
+            .ThrowsAsync(new ForbiddenException("User is not a member of this chat"));
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<ForbiddenException>(() =>
+            _handler.SearchMessagesAsync(chatId, userId, "hello", null, 20));
+
+        Assert.Contains("not a member", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task SearchMessagesAsync_WhenEmptyResult_ReturnsEmptyListWithNoCursor()
+    {
+        // Arrange
+        var chatId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var query = "nonexistent";
+
+        var response = new SearchMessagesResponseDto
+        {
+            Items = [],
+            NextCursor = null,
+            HasMore = false,
+            Query = query,
+            TotalCount = 0
+        };
+
+        _chatServiceMock
+            .Setup(s => s.SearchChatMessagesCursorAsync(chatId, userId, query, null, 20))
+            .ReturnsAsync(response);
+
+        // Act
+        var result = await _handler.SearchMessagesAsync(chatId, userId, query, null, 20);
+
+        // Assert
+        var okResult = Assert.IsType<OkObjectResult>(result);
+        var searchResponse = Assert.IsType<SearchMessagesResponseDto>(okResult.Value);
+        Assert.Empty(searchResponse.Items);
+        Assert.Null(searchResponse.NextCursor);
+        Assert.Equal(0, searchResponse.TotalCount);
+    }
 }

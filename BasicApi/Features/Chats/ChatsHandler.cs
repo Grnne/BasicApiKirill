@@ -82,7 +82,7 @@ public class ChatsHandler(
         return new OkObjectResult(result);
     }
 
-    public async Task<IActionResult> MarkReadAsync(Guid chatId, Guid userId, Guid lastMessageId)
+        public async Task<IActionResult> MarkReadAsync(Guid chatId, Guid userId, Guid lastMessageId)
     {
         var isMember = await chatRepository.IsMemberAsync(chatId, userId);
                 if (!isMember)
@@ -90,5 +90,16 @@ public class ChatsHandler(
 
         await messageRepository.UpdateLastReadAsync(chatId, userId, lastMessageId);
         return new OkResult();
+    }
+
+        /// <summary>
+    /// Full-text search for messages within a chat.
+    /// Validates the search query and delegates to the service layer.
+    /// </summary>
+    public async Task<IActionResult> SearchMessagesAsync(
+        Guid chatId, Guid userId, string query, string? cursor, int limit)
+    {
+        var result = await chatService.SearchChatMessagesCursorAsync(chatId, userId, query, cursor, limit);
+        return new OkObjectResult(result);
     }
 }

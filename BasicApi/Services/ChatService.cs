@@ -86,11 +86,55 @@ public class ChatService(IChatRepository chatRepository, IMessageRepository mess
             nextCursor = new Storage.Dto.CursorDto(last.CreatedAt, last.Id).Encode();
         }
 
-        return new CursorPaginatedResponse<MessageDto>
+                return new CursorPaginatedResponse<MessageDto>
         {
             Items = [.. messages.OrderBy(m => m.CreatedAt)],
             NextCursor = nextCursor,
             HasMore = result.HasMore
+        };
+    }
+
+    public async Task<SearchMessagesResponseDto> SearchChatMessagesCursorAsync(
+        Guid chatId, Guid userId, string query, string? cursor, int limit)
+    {
+        // Validate query
+        if (string.IsNullOrWhiteSpace(query) || query.Length < 2)
+            throw new BadRequestException("Query must be at least 2 characters long", "INVALID_QUERY");
+
+        // Authorization check — caller must be a member
+        var isMember = await chatRepository.IsMemberAsync(chatId, userId);
+        if (!isMember)
+            throw new ForbiddenException("User is not a member of this chat", "NOT_A_MEMBER");
+
+                // Fetch page from storage (cursor-based) with full-text search + sender names
+        var (result, totalCount) = await messageRepository.SearchMessagesCursorAsync(chatId, query, cursor, limit);
+
+        // Map entities to DTOs
+        var messages = result.Items.Select(m => new MessageDto
+        {
+            Id = m.Id,
+            SenderId = m.SenderId,
+            SenderName = m.SenderName,
+            Text = m.Text,
+            CreatedAt = m.CreatedAt,
+            IsRead = false // TODO: resolve actual read status
+        }).ToList();
+
+        // Build next cursor from the last message in the page
+        string? nextCursor = null;
+        if (messages.Count > 0)
+        {
+            var last = messages[^1];
+            nextCursor = new Storage.Dto.CursorDto(last.CreatedAt, last.Id).Encode();
+        }
+
+        return new SearchMessagesResponseDto
+        {
+            Items = [.. messages.OrderBy(m => m.CreatedAt)],
+            NextCursor = nextCursor,
+            HasMore = result.HasMore,
+            Query = query,
+            TotalCount = totalCount
         };
     }
 }

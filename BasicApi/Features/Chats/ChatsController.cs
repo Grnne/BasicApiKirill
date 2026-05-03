@@ -94,7 +94,7 @@ public class ChatsController(ChatsHandler handlers) : ControllerBase
         [FromQuery] int limit = 20)
         => await handlers.GetMessagesAtAsync(chatId, User.GetUserId(), date, Math.Clamp(limit, 1, 100));
 
-    /// <summary>
+        /// <summary>
     /// Mark messages as read
     /// </summary>
     [HttpPost("{chatId}/read")]
@@ -102,4 +102,35 @@ public class ChatsController(ChatsHandler handlers) : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> MarkRead(Guid chatId, [FromBody] MarkMessageReadDto dto)
         => await handlers.MarkReadAsync(chatId, User.GetUserId(), dto.LastMessageId);
+
+    /// <summary>
+    /// Full-text search for messages within a chat.
+    /// </summary>
+    /// <remarks>
+    /// Searches messages by text content using PostgreSQL full-text search.
+    /// Returns messages ordered chronologically (oldest first, newest matches).
+    /// Supports cursor-based pagination — use the returned <c>nextCursor</c> to fetch older results.
+    /// 
+    /// The response includes:
+    /// - <c>items</c>: matching messages with sender names
+    /// - <c>nextCursor</c>: pass this as <c>cursor</c> to get the next page (null = no more pages)
+    /// - <c>hasMore</c>: whether more matches exist beyond this page
+    /// - <c>query</c>: the original search query
+    /// - <c>totalCount</c>: total number of matches for this query
+    /// </remarks>
+    /// <param name="chatId">Chat ID to search within.</param>
+    /// <param name="q">Search query (minimum 2 characters).</param>
+    /// <param name="cursor">Cursor from previous response (optional).</param>
+    /// <param name="limit">Number of results per page (default 20, max 100).</param>
+    [HttpGet("{chatId}/messages/search")]
+    [ProducesResponseType(typeof(SearchMessagesResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> SearchMessages(
+        Guid chatId,
+        [FromQuery] string q,
+        [FromQuery] string? cursor,
+        [FromQuery] int limit = 20)
+        => await handlers.SearchMessagesAsync(chatId, User.GetUserId(), q, cursor, Math.Clamp(limit, 1, 100));
 }
