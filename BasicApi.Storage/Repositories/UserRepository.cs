@@ -50,4 +50,50 @@ public class UserRepository(IDbConnectionFactory connectionFactory) : IUserRepos
         using var connection = connectionFactory.CreateConnection();
         return await connection.QueryFirstOrDefaultAsync<Guid>(sql, new { Value = usernameOrEmail });
     }
+
+    public async Task<IEnumerable<User>> SearchByDisplayNameOrUsernameAsync(
+        string query, Guid excludeUserId, int limit, CancellationToken ct = default)
+    {
+        const string sql = @"
+            SELECT
+                id as Id,
+                username as Username,
+                email as Email,
+                password_hash as PasswordHash,
+                display_name as DisplayName,
+                created_at as CreatedAt,
+                last_login_at as LastLoginAt,
+                is_active as IsActive
+            FROM users
+            WHERE is_active = true
+              AND id != @ExcludeUserId
+              AND (display_name ILIKE @Pattern OR username ILIKE @Pattern)
+            ORDER BY display_name, username
+            LIMIT @Limit";
+
+        using var connection = connectionFactory.CreateConnection();
+        return await connection.QueryAsync<User>(sql, new
+        {
+            ExcludeUserId = excludeUserId,
+            Pattern = $"%{query}%",
+            Limit = limit
+        });
+    }
+
+    public async Task<int> CountBySearchQueryAsync(string query, Guid excludeUserId, CancellationToken ct = default)
+    {
+        const string sql = @"
+            SELECT COUNT(*)
+            FROM users
+            WHERE is_active = true
+              AND id != @ExcludeUserId
+              AND (display_name ILIKE @Pattern OR username ILIKE @Pattern)";
+
+        using var connection = connectionFactory.CreateConnection();
+        return await connection.ExecuteScalarAsync<int>(sql, new
+        {
+            ExcludeUserId = excludeUserId,
+            Pattern = $"%{query}%"
+        });
+    }
 }
