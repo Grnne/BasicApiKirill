@@ -17,6 +17,10 @@ public interface IChatRepository
     Task<List<ChatParticipantDto>> GetChatParticipantsAsync(Guid chatId);
 
         /// <summary>
+    /// Returns all unique member IDs across all chats the user participates in.
+    /// </summary>
+    Task<List<Guid>> GetAllChatMembersAsync(Guid userId);
+    /// <summary>
     /// Searches user's chats by query and type.
     /// When query is null, returns all user chats (no filter).
     /// When query is provided, searches by ILIKE:

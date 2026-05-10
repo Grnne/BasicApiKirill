@@ -18,14 +18,18 @@ public class ChatHub(IChatRepository chatRepository, IMessageRepository messageR
     // на Redis backplane или SignalR Redis Scaleout, т.к. статический словарь не шарится между серверами.
     private static readonly ConcurrentDictionary<Guid, string> _onlineUsers = new();
 
-    public override async Task OnConnectedAsync()
+        public override async Task OnConnectedAsync()
     {
         var userId = GetUserId();
         if (userId.HasValue)
         {
-            // AddOrUpdate — атомарно: заменяет connectionId при повторном входе (две вкладки)
             _onlineUsers.AddOrUpdate(userId.Value, Context.ConnectionId, (_, _) => Context.ConnectionId);
-            await Clients.All.SendAsync("UserOnlineChanged", userId.Value, true);
+
+            var allChatMembers = await chatRepository.GetAllChatMembersAsync(userId.Value);
+            foreach (var memberId in allChatMembers)
+            {
+                await Clients.User(memberId.ToString()).SendAsync("UserOnlineChanged", userId.Value, true);
+            }
         }
         await base.OnConnectedAsync();
     }
@@ -35,16 +39,16 @@ public class ChatHub(IChatRepository chatRepository, IMessageRepository messageR
         var userId = GetUserId();
         if (userId.HasValue)
         {
-            // TryRemove + проверка — удаляем ТОЛЬКО если это наш connectionId
-            // При двух вкладках: одна закрылась, другая осталась — не снимаем статус "online"
             if (_onlineUsers.TryRemove(userId.Value, out var removedId)
                 && removedId == Context.ConnectionId)
             {
-                // Проверяем, нет ли других активных connectionId для этого userId
-                // (если пользователь зашёл с другого устройства/вкладки)
                 if (!_onlineUsers.ContainsKey(userId.Value))
                 {
-                    await Clients.All.SendAsync("UserOnlineChanged", userId.Value, false);
+                    var allChatMembers = await chatRepository.GetAllChatMembersAsync(userId.Value);
+                    foreach (var memberId in allChatMembers)
+                    {
+                        await Clients.User(memberId.ToString()).SendAsync("UserOnlineChanged", userId.Value, false);
+                    }
                 }
             }
         }
@@ -106,6 +110,26 @@ public class ChatHub(IChatRepository chatRepository, IMessageRepository messageR
         };
 
         await Clients.Group(chatId.ToString()).SendAsync("MessageCreated", messageDto);
+
+                // Уведомляем всех участников чата об обновлении последнего сообщения в списке чатов
+        // Даже те, кто не открывал чат (не вызывал JoinChat), получат ChatListUpdated
+        var participants = await chatRepository.GetChatParticipantsAsync(chatId);
+        var listUpdateDto = new MessageDto
+        {
+            Id = message.Id,
+            SenderId = message.SenderId,
+            SenderName = senderName,
+            Text = text.Length > 100 ? text[..100] + "…" : text,
+            CreatedAt = message.CreatedAt,
+            IsRead = false
+        };
+
+        foreach (var participant in participants)
+        {
+            if (participant.UserId == userId) continue; // Отправителю не нужно обновлять список
+            await Clients.User(participant.UserId.ToString())
+                .SendAsync("ChatListUpdated", chatId, listUpdateDto);
+        }
     }
 
     // Статус печатания
@@ -117,6 +141,27 @@ public class ChatHub(IChatRepository chatRepository, IMessageRepository messageR
         await Clients.Group(chatId.ToString()).SendAsync("TypingChanged", chatId, userId.Value, isTyping);
     }
 
+    /// <summary>
+    /// Уведомляет указанных пользователей о новом чате через SignalR.
+    /// Вызывается из REST-хендлеров после создания чата.
+    /// </summary>
+    /// <param name="hubContext">IHubContext для отправки событий.</param>
+    /// <param name="chatId">ID созданного чата.</param>
+    /// <param name="dto">Данные о чате (тип, название, имя собеседника).</param>
+    /// <param name="recipientIds">ID пользователей, которым отправить событие.</param>
+    public static async Task NotifyChatCreatedAsync(
+        IHubContext<ChatHub> hubContext,
+        Guid chatId,
+        ChatCreatedEventDto dto,
+        Guid[] recipientIds)
+    {
+        foreach (var userId in recipientIds)
+        {
+            await hubContext.Clients.User(userId.ToString())
+                .SendAsync("ChatCreated", chatId, dto);
+        }
+    }
+
     private Guid? GetUserId()
     {
         var userIdClaim = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -125,3 +170,5 @@ public class ChatHub(IChatRepository chatRepository, IMessageRepository messageR
         return null;
     }
 }
+
+

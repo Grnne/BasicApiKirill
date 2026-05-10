@@ -38,8 +38,16 @@ public class Program
         app.UseAuthentication();
         app.UseAuthorization();
 
-        app.MapHub<ChatHub>("/hubs/chat");
+                app.MapHub<ChatHub>("/hubs/chat");
         app.MapControllers();
+
+        app.MapGet("/signalr-docs", async context =>
+        {
+            context.Response.ContentType = "text/html; charset=utf-8";
+            var html = await File.ReadAllTextAsync(
+                Path.Combine(app.Environment.WebRootPath, "signalr-docs.html"));
+            await context.Response.WriteAsync(html);
+        });
 
         app.MapGet("/", context =>
         {

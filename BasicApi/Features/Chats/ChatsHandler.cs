@@ -1,4 +1,5 @@
-﻿using BasicApi.Middleware.Exceptions;
+﻿using BasicApi.Hubs;
+using BasicApi.Middleware.Exceptions;
 using BasicApi.Models.Dto.Chat;
 using BasicApi.Models.Dto.Message;
 using BasicApi.Services;
@@ -6,13 +7,15 @@ using BasicApi.Storage.Dto;
 using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 
 namespace BasicApi.Features.Chats;
 
 public class ChatsHandler(
     IChatService chatService,
     IChatRepository chatRepository,
-    IMessageRepository messageRepository)
+    IMessageRepository messageRepository,
+    IHubContext<ChatHub> hubContext)
 {
     public async Task<IActionResult> GetUserChatsAsync(Guid userId)
     {
@@ -41,7 +44,18 @@ public class ChatsHandler(
         var memberIds = new[] { currentUserId, otherUserId };
         var chatId = await chatRepository.CreateAsync(chat, memberIds);
 
-                return new CreatedResult(string.Empty, new CreateChatResponseDto { ChatId = chatId });
+                // Уведомляем других участников о новом чате через SignalR
+        var otherUserName = await chatRepository.GetUserNameAsync(otherUserId);
+        await ChatHub.NotifyChatCreatedAsync(hubContext, chatId,
+            new ChatCreatedEventDto
+            {
+                Type = chat.Type,
+                Title = chat.Title,
+                CompanionName = otherUserName
+            },
+            [otherUserId]);
+
+        return new CreatedResult(string.Empty, new CreateChatResponseDto { ChatId = chatId });
     }
 
     public async Task<IActionResult> GetChatAsync(Guid chatId, Guid userId)

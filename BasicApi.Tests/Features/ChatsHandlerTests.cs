@@ -1,10 +1,12 @@
 using BasicApi.Features.Chats;
+using BasicApi.Hubs;
 using BasicApi.Middleware.Exceptions;
 using BasicApi.Models.Dto.Chat;
 using BasicApi.Models.Dto.Message;
 using BasicApi.Services;
 using BasicApi.Storage.Interfaces;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Moq;
 
 namespace BasicApi.Tests.Features;
@@ -14,6 +16,9 @@ public class ChatsHandlerTests
     private readonly Mock<IChatService> _chatServiceMock;
     private readonly Mock<IChatRepository> _chatRepoMock;
     private readonly Mock<IMessageRepository> _msgRepoMock;
+    private readonly Mock<IHubContext<ChatHub>> _hubContextMock;
+    private readonly Mock<IHubClients> _hubClientsMock;
+    private readonly TestClientProxy _clientProxy;
     private readonly ChatsHandler _handler;
 
     public ChatsHandlerTests()
@@ -21,10 +26,23 @@ public class ChatsHandlerTests
         _chatServiceMock = new Mock<IChatService>();
         _chatRepoMock = new Mock<IChatRepository>();
         _msgRepoMock = new Mock<IMessageRepository>();
+        _hubContextMock = new Mock<IHubContext<ChatHub>>();
+        _hubClientsMock = new Mock<IHubClients>();
+        _clientProxy = new TestClientProxy();
+
+        _hubClientsMock
+            .Setup(c => c.User(It.IsAny<string>()))
+            .Returns(_clientProxy);
+
+        _hubContextMock
+            .Setup(c => c.Clients)
+            .Returns(_hubClientsMock.Object);
+
         _handler = new ChatsHandler(
             _chatServiceMock.Object,
             _chatRepoMock.Object,
-            _msgRepoMock.Object);
+            _msgRepoMock.Object,
+            _hubContextMock.Object);
     }
 
     [Fact]
@@ -147,6 +165,102 @@ public class ChatsHandlerTests
         _chatServiceMock.Verify(
             s => s.GetChatMessagesCursorAsync(chatId, userId, It.Is<string?>(c => c != null), 20),
             Times.Once);
+    }
+
+    // ========== Chat Created Event Tests ==========
+
+    [Fact]
+    public async Task CreatePrivateChatAsync_NewChat_SendsChatCreatedToOtherUser()
+    {
+        // Arrange
+        var userId = Guid.NewGuid();
+        var otherUserId = Guid.NewGuid();
+        var otherUserName = "Alice";
+
+        _chatRepoMock
+            .Setup(r => r.GetPrivateChatAsync(userId, otherUserId))
+            .ReturnsAsync((BasicApi.Storage.Entities.Chat?)null);
+
+        BasicApi.Storage.Entities.Chat? capturedChat = null;
+        _chatRepoMock
+            .Setup(r => r.CreateAsync(It.IsAny<BasicApi.Storage.Entities.Chat>(), It.IsAny<Guid[]>()))
+            .Callback<BasicApi.Storage.Entities.Chat, Guid[]>((chat, _) => capturedChat = chat)
+            .ReturnsAsync(() => capturedChat!.Id);
+
+        _chatRepoMock
+            .Setup(r => r.GetUserNameAsync(otherUserId))
+            .ReturnsAsync(otherUserName);
+
+        // Act
+        var result = await _handler.CreatePrivateChatAsync(userId, otherUserId);
+
+        // Assert
+        Assert.IsType<CreatedResult>(result);
+
+        // Hub: ChatCreated отправлен другому участнику
+        _hubClientsMock.Verify(c => c.User(otherUserId.ToString()), Times.Once);
+        var inv = Assert.Single(_clientProxy.Invocations);
+        Assert.Equal("ChatCreated", inv.Method);
+        Assert.Equal(2, inv.Args.Length);
+
+        // Первый аргумент — chatId
+        Assert.Equal(capturedChat!.Id, inv.Args[0]);
+
+        // Второй аргумент — ChatCreatedEventDto с информацией о чате
+        var payload = Assert.IsType<ChatCreatedEventDto>(inv.Args[1]);
+        Assert.Equal("private", payload.Type);
+        Assert.Null(payload.Title);
+        Assert.Equal(otherUserName, payload.CompanionName);
+    }
+
+    [Fact]
+    public async Task CreatePrivateChatAsync_ExistingChat_DoesNotSendChatCreated()
+    {
+        // Arrange
+        var userId = Guid.NewGuid();
+        var otherUserId = Guid.NewGuid();
+        var existingChatId = Guid.NewGuid();
+
+        _chatRepoMock
+            .Setup(r => r.GetPrivateChatAsync(userId, otherUserId))
+            .ReturnsAsync(new BasicApi.Storage.Entities.Chat { Id = existingChatId });
+
+        // Act
+        var result = await _handler.CreatePrivateChatAsync(userId, otherUserId);
+
+        // Assert
+        Assert.IsType<OkObjectResult>(result);
+        Assert.Empty(_clientProxy.Invocations); // Нет SignalR событий для существующего чата
+    }
+
+    [Fact]
+    public async Task CreatePrivateChatAsync_NewChat_SendsToCorrectUserOnly()
+    {
+        // Arrange
+        var userId = Guid.NewGuid();
+        var otherUserId = Guid.NewGuid();
+        var otherUserName = "Bob";
+
+        _chatRepoMock
+            .Setup(r => r.GetPrivateChatAsync(userId, otherUserId))
+            .ReturnsAsync((BasicApi.Storage.Entities.Chat?)null);
+
+        BasicApi.Storage.Entities.Chat? capturedChat = null;
+        _chatRepoMock
+            .Setup(r => r.CreateAsync(It.IsAny<BasicApi.Storage.Entities.Chat>(), It.IsAny<Guid[]>()))
+            .Callback<BasicApi.Storage.Entities.Chat, Guid[]>((chat, _) => capturedChat = chat)
+            .ReturnsAsync(() => capturedChat!.Id);
+
+        _chatRepoMock
+            .Setup(r => r.GetUserNameAsync(otherUserId))
+            .ReturnsAsync(otherUserName);
+
+        // Act
+        await _handler.CreatePrivateChatAsync(userId, otherUserId);
+
+        // Assert — событие уходит ТОЛЬКО другому пользователю, НЕ создателю
+        _hubClientsMock.Verify(c => c.User(userId.ToString()), Times.Never);
+        _hubClientsMock.Verify(c => c.User(otherUserId.ToString()), Times.Once);
     }
 
     // ========== Search Chats ==========
@@ -280,5 +394,21 @@ public class ChatsHandlerTests
             _handler.SearchChatsAsync(userId, "", "group", 20));
 
         Assert.Contains("empty", ex.Message);
+    }
+}
+
+/// <summary>
+/// A test implementation of IClientProxy that records all SendAsync calls.
+/// SignalR's SendCoreAsync on IClientProxy is a real interface method,
+/// not an extension method, so we can implement the interface directly and track invocations.
+/// </summary>
+public class TestClientProxy : IClientProxy
+{
+    public List<(string Method, object?[] Args)> Invocations { get; } = new();
+
+    public Task SendCoreAsync(string method, object?[] args, CancellationToken cancellationToken = default)
+    {
+        Invocations.Add((method, args));
+        return Task.CompletedTask;
     }
 }

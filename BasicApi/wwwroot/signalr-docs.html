@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SignalR ChatHub — документация</title>
+    <style>
+        :root {
+            --bg: #1e1e2e;
+            --surface: #2a2a3e;
+            --surface-2: #363650;
+            --text: #e0e0f0;
+            --text-muted: #a0a0c0;
+            --accent: #7c3aed;
+            --accent-light: #a78bfa;
+            --green: #34d399;
+            --orange: #fbbf24;
+            --blue: #60a5fa;
+            --border: #3a3a54;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            padding: 2rem;
+        }
+        .container { max-width: 960px; margin: 0 auto; }
+
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        h1 small {
+            font-size: 1rem;
+            color: var(--text-muted);
+            font-weight: 400;
+        }
+        .subtitle {
+            color: var(--text-muted);
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .subtitle code {
+            background: var(--surface-2);
+            padding: 0.15rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+        .subtitle a {
+            color: var(--accent-light);
+            text-decoration: none;
+        }
+        .subtitle a:hover { text-decoration: underline; }
+
+        h2 {
+            font-size: 1.4rem;
+            margin: 2rem 0 1rem;
+            color: var(--accent-light);
+        }
+        h3 {
+            font-size: 1.1rem;
+            margin: 1.5rem 0 0.5rem;
+        }
+
+        .method-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.25rem 1.5rem;
+            margin-bottom: 1rem;
+        }
+        .method-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 0.75rem;
+        }
+        .method-name {
+            font-family: 'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--green);
+        }
+        .direction-badge {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            font-weight: 600;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            letter-spacing: 0.05em;
+        }
+        .direction-badge.client-server {
+            background: #1a3a2a;
+            color: var(--green);
+        }
+        .direction-badge.server-client {
+            background: #2a1a3a;
+            color: var(--accent-light);
+        }
+        .direction-badge.bidirectional {
+            background: #2a2a1a;
+            color: var(--orange);
+        }
+
+        .method-description {
+            color: var(--text-muted);
+            font-size: 0.92rem;
+            margin-bottom: 0.75rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+        th, td {
+            text-align: left;
+            padding: 0.5rem 0.75rem;
+            border-bottom: 1px solid var(--border);
+        }
+        th {
+            color: var(--text-muted);
+            font-weight: 500;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        td { color: var(--text); }
+        td.type-cell {
+            font-family: 'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--blue);
+        }
+        td.optional { color: var(--text-muted); font-size: 0.8rem; }
+
+        .event-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-left: 3px solid var(--accent);
+            border-radius: 0 10px 10px 0;
+            padding: 1.25rem 1.5rem;
+            margin-bottom: 1rem;
+        }
+        .event-name {
+            font-family: 'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace;
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: var(--accent-light);
+        }
+
+        .note {
+            background: var(--surface-2);
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            margin: 1rem 0;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            border-left: 3px solid var(--blue);
+        }
+        .note strong { color: var(--text); }
+
+        footer {
+            margin-top: 3rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            text-align: center;
+        }
+        footer a { color: var(--accent-light); text-decoration: none; }
+        footer a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>
+            ⚡ ChatHub
+            <small>SignalR хаб</small>
+        </h1>
+        <div class="subtitle">
+            Подключение: <code>wss://host/hubs/chat?access_token={jwt}</code><br>
+            Аутентификация: JWT Bearer (передаётся в query string <code>access_token</code>)<br>
+            <a href="/swagger">← REST API</a>
+        </div>
+
+        <!-- ==================== CLIENT → SERVER ==================== -->
+        <h2>📤 Client → Server (вызываемые методы)</h2>
+
+        <div class="method-card">
+            <div class="method-header">
+                <span class="direction-badge client-server">Client → Server</span>
+                <span class="method-name">JoinChat(chatId)</span>
+            </div>
+            <div class="method-description">
+                Подписаться на события чата. Вызывается после открытия чата на клиенте.
+                Только участник чата может присоединиться.
+            </div>
+            <table>
+                <thead><tr><th>Параметр</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                    <tr><td><code>chatId</code></td><td class="type-cell">Guid</td><td>ID чата</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="method-card">
+            <div class="method-header">
+                <span class="direction-badge client-server">Client → Server</span>
+                <span class="method-name">LeaveChat(chatId)</span>
+            </div>
+            <div class="method-description">
+                Отписаться от событий чата. Вызывается при закрытии чата на клиенте.
+            </div>
+            <table>
+                <thead><tr><th>Параметр</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                    <tr><td><code>chatId</code></td><td class="type-cell">Guid</td><td>ID чата</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="method-card">
+            <div class="method-header">
+                <span class="direction-badge client-server">Client → Server</span>
+                <span class="method-name">SendMessage(chatId, text)</span>
+            </div>
+            <div class="method-description">
+                Отправить сообщение в чат. Сообщение сохраняется в БД и рассылается всем участникам.
+                Только участник чата может отправлять сообщения.
+            </div>
+            <table>
+                <thead><tr><th>Параметр</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                    <tr><td><code>chatId</code></td><td class="type-cell">Guid</td><td>ID чата</td></tr>
+                    <tr><td><code>text</code></td><td class="type-cell">string</td><td>Текст сообщения</td></tr>
+                </tbody>
+            </table>
+            <div class="note">
+                <strong>Самое важное:</strong> После отправки сервер генерирует 2 события:
+                <strong>MessageCreated</strong> (в группу — полное сообщение) и
+                <strong>ChatListUpdated</strong> (каждому участнику лично — текст обрезан до 100 символов).
+            </div>
+        </div>
+
+        <div class="method-card">
+            <div class="method-header">
+                <span class="direction-badge client-server">Client → Server</span>
+                <span class="method-name">Typing(chatId, isTyping)</span>
+            </div>
+            <div class="method-description">
+                Уведомить собеседников о статусе печатания. Рассылается всем в группе чата.
+            </div>
+            <table>
+                <thead><tr><th>Параметр</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                    <tr><td><code>chatId</code></td><td class="type-cell">Guid</td><td>ID чата</td></tr>
+                    <tr><td><code>isTyping</code></td><td class="type-cell">boolean</td><td><code>true</code> — начал печатать, <code>false</code> — перестал</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- ==================== SERVER → CLIENT ==================== -->
+        <h2>📥 Server → Client (подписка на события)</h2>
+
+        <div class="event-card">
+            <div class="event-header">
+                <span class="direction-badge server-client">Server → Client</span>
+                <span class="event-name">MessageCreated</span>
+            </div>
+            <div class="method-description" style="margin-top: 0.5rem;">
+                Новое сообщение в чате. Получают только те, кто подписался на чат (вызвал <code>JoinChat</code>).
+                Содержит полный текст сообщения.
+            </div>
+            <table>
+                <thead><tr><th>Аргумент</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                    <tr><td><code>message</code></td><td class="type-cell"><a href="/swagger/index.html#/Chats/GetMessagesCursor">MessageDto</a></td><td>Полное сообщение</td></tr>
+                </tbody>
+            </table>
+            <div class="note">
+                <strong>Клиент:</strong> добавить сообщение в ленту + обновить превью в списке чатов.
+            </div>
+        </div>
+
+        <div class="event-card">
+            <div class="event-header">
+                <span class="direction-badge server-client">Server → Client</span>
+                <span class="event-name">ChatListUpdated</span>
+            </div>
+            <div class="method-description" style="margin-top: 0.5rem;">
+                Обновление последнего сообщения в чате. Получают <strong>все участники</strong> чата (даже те, кто не открывал чат).
+                Текст обрезан до 100 символов.
+            </div>
+            <table>
+                <thead><tr><th>Аргумент</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                    <tr><td><code>chatId</code></td><td class="type-cell">Guid</td><td>ID чата</td></tr>
+                    <tr><td><code>message</code></td><td class="type-cell"><a href="/swagger/index.html#/Chats/GetMessagesCursor">MessageDto</a></td><td>Сообщение (текст ≤ 100 символов)</td></tr>
+                </tbody>
+            </table>
+            <div class="note">
+                <strong>Клиент:</strong> только обновить превью в списке чатов, НЕ добавлять в ленту.
+            </div>
+        </div>
+
+        <div class="event-card">
+            <div class="event-header">
+                <span class="direction-badge server-client">Server → Client</span>
+                <span class="event-name">ChatCreated</span>
+            </div>
+            <div class="method-description" style="margin-top: 0.5rem;">
+                Создан новый чат, в который вас добавили. Событие приходит при создании приватного
+                чата (через <code>POST /api/chats/private/{userId}</code>).
+            </div>
+            <table>
+                <thead><tr><th>Аргумент</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                    <tr><td><code>chatId</code></td><td class="type-cell">Guid</td><td>ID нового чата</td></tr>
+                    <tr><td><code>dto</code></td><td class="type-cell"><code>ChatCreatedEventDto</code></td><td>Информация о чате</td></tr>
+                </tbody>
+            </table>
+            <div style="margin-top: 0.5rem;">
+                <strong>ChatCreatedEventDto:</strong>
+            </div>
+            <table>
+                <thead><tr><th>Поле</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                    <tr><td><code>type</code></td><td class="type-cell">string</td><td><code>"private"</code> или <code>"group"</code></td></tr>
+                    <tr><td><code>title</code></td><td class="type-cell">string?</td><td>Название группы (<code>null</code> для приватных)</td></tr>
+                    <tr><td><code>companionName</code></td><td class="type-cell">string?</td><td>Имя собеседника (для приватных)</td></tr>
+                    <tr><td><code>companionUsername</code></td><td class="type-cell">string?</td><td>Username собеседника (для приватных)</td></tr>
+                </tbody>
+            </table>
+            <div class="note">
+                <strong>Клиент:</strong> добавить чат в список чатов + вызвать <code>JoinChat(chatId)</code> для подписки на сообщения.
+            </div>
+        </div>
+
+        <div class="event-card">
+            <div class="event-header">
+                <span class="direction-badge server-client">Server → Client</span>
+                <span class="event-name">UserOnlineChanged</span>
+            </div>
+            <div class="method-description" style="margin-top: 0.5rem;">
+                Статус онлайн/офлайн пользователя. Получают все участники общих чатов.
+            </div>
+            <table>
+                <thead><tr><th>Аргумент</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                    <tr><td><code>userId</code></td><td class="type-cell">Guid</td><td>ID пользователя</td></tr>
+                    <tr><td><code>isOnline</code></td><td class="type-cell">boolean</td><td><code>true</code> — онлайн, <code>false</code> — офлайн</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="event-card">
+            <div class="event-header">
+                <span class="direction-badge server-client">Server → Client</span>
+                <span class="event-name">TypingChanged</span>
+            </div>
+            <div class="method-description" style="margin-top: 0.5rem;">
+                Статус печатания собеседника. Получают все в группе чата.
+            </div>
+            <table>
+                <thead><tr><th>Аргумент</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                    <tr><td><code>chatId</code></td><td class="type-cell">Guid</td><td>ID чата</td></tr>
+                    <tr><td><code>userId</code></td><td class="type-cell">Guid</td><td>ID пользователя</td></tr>
+                    <tr><td><code>isTyping</code></td><td class="type-cell">boolean</td><td><code>true</code> — печатает, <code>false</code> — перестал</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- ==================== АВТОМАТИЧЕСКИЕ СОБЫТИЯ ==================== -->
+        <h2>🔄 Автоматические события (OnConnected / OnDisconnected)</h2>
+
+        <div class="note">
+            <strong>OnConnectedAsync</strong> — при подключении пользователь добавляется в <code>_onlineUsers</code>,
+            и всем участникам общих чатов отправляется <strong>UserOnlineChanged(userId, true)</strong>.
+        </div>
+        <div class="note">
+            <strong>OnDisconnectedAsync</strong> — при отключении пользователь удаляется из <code>_onlineUsers</code>,
+            и всем участникам общих чатов отправляется <strong>UserOnlineChanged(userId, false)</strong>.
+            Если у пользователя остались другие активные подключения, офлайн не отправляется.
+        </div>
+
+        <footer>
+            <a href="/swagger">REST API (Swagger)</a> ·
+            <a href="/signalr-docs">SignalR Docs</a> ·
+            v1.0
+        </footer>
+    </div>
+</body>
+</html>

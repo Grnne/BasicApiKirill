@@ -159,7 +159,20 @@ public class ChatRepository(IDbConnectionFactory connectionFactory) : IChatRepos
 
                 using var connection = connectionFactory.CreateConnection();
                 var result = await connection.QueryAsync<ChatParticipantDto>(sql, new { chatId });
-        return [.. result];
+                return [.. result];
+    }
+
+    public async Task<List<Guid>> GetAllChatMembersAsync(Guid userId)
+    {
+        const string sql = @"
+            SELECT DISTINCT cm.user_id
+            FROM chat_members cm
+            WHERE cm.chat_id IN (
+                SELECT chat_id FROM chat_members WHERE user_id = @userId
+            ) AND cm.user_id != @userId";
+
+        using var connection = connectionFactory.CreateConnection();
+        return (await connection.QueryAsync<Guid>(sql, new { userId })).AsList();
     }
 
         private const string ChatListBaseSql = @"

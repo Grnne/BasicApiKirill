@@ -1,10 +1,12 @@
 using BasicApi.Features.Chats;
+using BasicApi.Hubs;
 using BasicApi.Middleware.Exceptions;
 using BasicApi.Models.Dto.Chat;
 using BasicApi.Models.Dto.Message;
 using BasicApi.Services;
 using BasicApi.Storage.Interfaces;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Moq;
 
 namespace BasicApi.Tests.Features;
@@ -21,10 +23,15 @@ public class ChatsHandlerCursorTests
         _chatServiceMock = new Mock<IChatService>();
         _chatRepoMock = new Mock<IChatRepository>();
         _msgRepoMock = new Mock<IMessageRepository>();
+        var hubContextMock = new Mock<IHubContext<ChatHub>>();
+        var hubClientsMock = new Mock<IHubClients>();
+        hubContextMock.Setup(c => c.Clients).Returns(hubClientsMock.Object);
+        
         _handler = new ChatsHandler(
             _chatServiceMock.Object,
             _chatRepoMock.Object,
-            _msgRepoMock.Object);
+            _msgRepoMock.Object,
+            hubContextMock.Object);
     }
 
     [Fact]
