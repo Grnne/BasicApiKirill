@@ -18,136 +18,217 @@ public class ChatHub(IChatRepository chatRepository, IMessageRepository messageR
     // на Redis backplane или SignalR Redis Scaleout, т.к. статический словарь не шарится между серверами.
         private static readonly ConcurrentDictionary<Guid, string> _onlineUsers = new();
 
-        public override async Task OnConnectedAsync()
+                public override async Task OnConnectedAsync()
     {
-        var userId = GetUserId();
-        if (userId.HasValue)
+        try
         {
-            _onlineUsers.AddOrUpdate(userId.Value, Context.ConnectionId, (_, _) => Context.ConnectionId);
-            logger.LogInformation("User {UserId} connected. ConnectionId: {ConnectionId}", userId.Value, Context.ConnectionId);
-
-            var allChatMembers = await chatRepository.GetAllChatMembersAsync(userId.Value);
-            foreach (var memberId in allChatMembers)
+            logger.LogInformation("OnConnectedAsync: new connection {ConnectionId}", Context.ConnectionId);
+            var userId = GetUserId();
+            if (userId.HasValue)
             {
-                await Clients.User(memberId.ToString()).SendAsync("UserOnlineChanged", userId.Value, true);
+                _onlineUsers.AddOrUpdate(userId.Value, Context.ConnectionId, (_, _) => Context.ConnectionId);
+                logger.LogInformation("User {UserId} connected. ConnectionId: {ConnectionId}", userId.Value, Context.ConnectionId);
+
+                var allChatMembers = await chatRepository.GetAllChatMembersAsync(userId.Value);
+                foreach (var memberId in allChatMembers)
+                {
+                    await Clients.User(memberId.ToString()).SendAsync("UserOnlineChanged", userId.Value, true);
+                }
+                logger.LogInformation("User {UserId} online status sent to {Count} members", userId.Value, allChatMembers.Count());
             }
+            else
+            {
+                logger.LogWarning("OnConnectedAsync: anonymous connection rejected");
+            }
+            await base.OnConnectedAsync();
         }
-        await base.OnConnectedAsync();
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "OnConnectedAsync failed for connection {ConnectionId}", Context.ConnectionId);
+            throw;
+        }
     }
 
-        public override async Task OnDisconnectedAsync(Exception? exception)
+                public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        var userId = GetUserId();
-        if (userId.HasValue)
+        try
         {
-            logger.LogInformation("User {UserId} disconnected. ConnectionId: {ConnectionId}", userId.Value, Context.ConnectionId);
-            if (_onlineUsers.TryRemove(userId.Value, out var removedId)
-                && removedId == Context.ConnectionId)
+            logger.LogInformation("OnDisconnectedAsync: connection {ConnectionId} exception={Exception}", Context.ConnectionId, exception?.Message);
+            var userId = GetUserId();
+            if (userId.HasValue)
             {
-                if (!_onlineUsers.ContainsKey(userId.Value))
+                logger.LogInformation("User {UserId} disconnected. ConnectionId: {ConnectionId}", userId.Value, Context.ConnectionId);
+                if (_onlineUsers.TryRemove(userId.Value, out var removedId)
+                    && removedId == Context.ConnectionId)
                 {
-                    var allChatMembers = await chatRepository.GetAllChatMembersAsync(userId.Value);
-                    foreach (var memberId in allChatMembers)
+                    if (!_onlineUsers.ContainsKey(userId.Value))
                     {
-                        await Clients.User(memberId.ToString()).SendAsync("UserOnlineChanged", userId.Value, false);
+                        var allChatMembers = await chatRepository.GetAllChatMembersAsync(userId.Value);
+                        foreach (var memberId in allChatMembers)
+                        {
+                            await Clients.User(memberId.ToString()).SendAsync("UserOnlineChanged", userId.Value, false);
+                        }
+                        logger.LogInformation("User {UserId} offline status sent to {Count} members", userId.Value, allChatMembers.Count());
+                    }
+                    else
+                    {
+                        logger.LogInformation("User {UserId} has other active connections, staying online", userId.Value);
                     }
                 }
             }
+            await base.OnDisconnectedAsync(exception);
         }
-        await base.OnDisconnectedAsync(exception);
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "OnDisconnectedAsync failed for connection {ConnectionId}", Context.ConnectionId);
+            throw;
+        }
     }
 
-        // Подписка на группу чата
+                // Подписка на группу чата
     public async Task JoinChat(Guid chatId)
     {
-        var userId = GetUserId();
-        if (!userId.HasValue) return;
-
-        var isMember = await chatRepository.IsMemberAsync(chatId, userId.Value);
-        if (!isMember)
+        logger.LogInformation("JoinChat called with chatId={ChatId}", chatId);
+        try
         {
-            logger.LogWarning("User {UserId} tried to join chat {ChatId} but is not a member", userId.Value, chatId);
-            return;
-        }
+            var userId = GetUserId();
+            if (!userId.HasValue)
+            {
+                logger.LogWarning("JoinChat rejected: no userId in token");
+                return;
+            }
 
-        logger.LogInformation("User {UserId} joined chat {ChatId}", userId.Value, chatId);
-        await Groups.AddToGroupAsync(Context.ConnectionId, chatId.ToString());
+            logger.LogInformation("JoinChat: user {UserId} checking membership for chat {ChatId}", userId.Value, chatId);
+            var isMember = await chatRepository.IsMemberAsync(chatId, userId.Value);
+            if (!isMember)
+            {
+                logger.LogWarning("User {UserId} tried to join chat {ChatId} but is not a member", userId.Value, chatId);
+                return;
+            }
+
+            logger.LogInformation("User {UserId} joined chat {ChatId}", userId.Value, chatId);
+            await Groups.AddToGroupAsync(Context.ConnectionId, chatId.ToString());
+            logger.LogInformation("User {UserId} successfully added to group {ChatId}", userId.Value, chatId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "JoinChat failed for chatId={ChatId}", chatId);
+            throw; // пробрасываем, чтобы клиент получил ошибку
+        }
     }
 
-    // Отписка от группы чата
+        // Отписка от группы чата
     public async Task LeaveChat(Guid chatId)
     {
-        var userId = GetUserId();
-        logger.LogInformation("User {UserId} left chat {ChatId}", userId, chatId);
-        await Groups.RemoveFromGroupAsync(Context.ConnectionId, chatId.ToString());
-    }
-
-    // Отправка сообщения
-    public async Task SendMessage(Guid chatId, string text)
-    {
-        var userId = GetUserId();
-        if (!userId.HasValue) return;
-
-        var isMember = await chatRepository.IsMemberAsync(chatId, userId.Value);
-        if (!isMember) return;
-
-        // Сохраняем сообщение в БД
-        var message = new Message
+        try
         {
-            Id = Guid.NewGuid(),
-            ChatId = chatId,
-            SenderId = userId.Value,
-            Text = text,
-            CreatedAt = DateTime.UtcNow,
-            IsDeleted = false
-        };
-
-        await messageRepository.CreateAsync(message);
-
-        // Получаем имя отправителя
-        var senderName = await chatRepository.GetUserNameAsync(userId.Value);
-
-        // Отправляем сообщение всем в группе чата
-        var messageDto = new MessageDto
+            var userId = GetUserId();
+            logger.LogInformation("User {UserId} left chat {ChatId}", userId, chatId);
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, chatId.ToString());
+        }
+        catch (Exception ex)
         {
-            Id = message.Id,
-            SenderId = message.SenderId,
-            SenderName = senderName,
-            Text = message.Text,
-            CreatedAt = message.CreatedAt,
-            IsRead = false
-        };
-
-                await Clients.Group(chatId.ToString()).SendAsync("MessageCreated", messageDto);
-
-                // Уведомляем всех участников чата об обновлении последнего сообщения в списке чатов
-        logger.LogInformation("Message {MessageId} sent to chat group {ChatId}", message.Id, chatId);
-        // Даже те, кто не открывал чат (не вызывал JoinChat), получат ChatListUpdated
-        var participants = await chatRepository.GetChatParticipantsAsync(chatId);
-        var listUpdateDto = new MessageDto
-        {
-            Id = message.Id,
-            SenderId = message.SenderId,
-            SenderName = senderName,
-            Text = text.Length > 100 ? text[..100] + "…" : text,
-            CreatedAt = message.CreatedAt,
-            IsRead = false
-        };
-
-                foreach (var participant in participants)
-        {
-            if (participant.UserId == userId) continue; // Отправителю не нужно обновлять список
-            await Clients.User(participant.UserId.ToString())
-                .SendAsync("ChatListUpdated", chatId, listUpdateDto);
+            logger.LogError(ex, "LeaveChat failed for chatId={ChatId}", chatId);
+            throw;
         }
     }
-    public async Task Typing(Guid chatId, bool isTyping)
-    {
-        var userId = GetUserId();
-                if (!userId.HasValue) return;
 
-        logger.LogInformation("User {UserId} typing={IsTyping} in chat {ChatId}", userId.Value, isTyping, chatId);
-        await Clients.Group(chatId.ToString()).SendAsync("TypingChanged", chatId, userId.Value, isTyping);
+        // Отправка сообщения
+    public async Task SendMessage(Guid chatId, string text)
+    {
+        try
+        {
+            var userId = GetUserId();
+            if (!userId.HasValue)
+            {
+                logger.LogWarning("SendMessage rejected: no userId in token");
+                return;
+            }
+
+            logger.LogInformation("SendMessage: user {UserId} sending to chat {ChatId}", userId.Value, chatId);
+
+            var isMember = await chatRepository.IsMemberAsync(chatId, userId.Value);
+            if (!isMember)
+            {
+                logger.LogWarning("User {UserId} tried to send message to chat {ChatId} but is not a member", userId.Value, chatId);
+                return;
+            }
+
+            var message = new Message
+            {
+                Id = Guid.NewGuid(),
+                ChatId = chatId,
+                SenderId = userId.Value,
+                Text = text,
+                CreatedAt = DateTime.UtcNow,
+                IsDeleted = false
+            };
+
+            await messageRepository.CreateAsync(message);
+
+            logger.LogInformation("Message {MessageId} saved to DB", message.Id);
+
+            var senderName = await chatRepository.GetUserNameAsync(userId.Value);
+
+            var messageDto = new MessageDto
+            {
+                Id = message.Id,
+                SenderId = message.SenderId,
+                SenderName = senderName,
+                Text = message.Text,
+                CreatedAt = message.CreatedAt,
+                IsRead = false
+            };
+
+            await Clients.Group(chatId.ToString()).SendAsync("MessageCreated", messageDto);
+            logger.LogInformation("Message {MessageId} sent to chat group {ChatId}", message.Id, chatId);
+
+            var participants = await chatRepository.GetChatParticipantsAsync(chatId);
+            var listUpdateDto = new MessageDto
+            {
+                Id = message.Id,
+                SenderId = message.SenderId,
+                SenderName = senderName,
+                Text = text.Length > 100 ? text[..100] + "…" : text,
+                CreatedAt = message.CreatedAt,
+                IsRead = false
+            };
+
+            int notified = 0;
+            foreach (var participant in participants)
+            {
+                if (participant.UserId == userId) continue;
+                await Clients.User(participant.UserId.ToString())
+                    .SendAsync("ChatListUpdated", chatId, listUpdateDto);
+                notified++;
+            }
+            logger.LogInformation("ChatListUpdated sent to {Count} participants of chat {ChatId}", notified, chatId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "SendMessage failed for chatId={ChatId}", chatId);
+            throw;
+        }
+    }
+        public async Task Typing(Guid chatId, bool isTyping)
+    {
+        try
+        {
+            var userId = GetUserId();
+            if (!userId.HasValue)
+            {
+                logger.LogWarning("Typing rejected: no userId in token");
+                return;
+            }
+
+            logger.LogInformation("User {UserId} typing={IsTyping} in chat {ChatId}", userId.Value, isTyping, chatId);
+            await Clients.Group(chatId.ToString()).SendAsync("TypingChanged", chatId, userId.Value, isTyping);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Typing failed for chatId={ChatId}", chatId);
+            throw;
+        }
     }
 
     /// <summary>
