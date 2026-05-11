@@ -2,34 +2,105 @@
 <html>
 <head>
     <title>Chat Test Client</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.7/signalr.min.js"></script>
+    <script src="/signalr.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background: #1a1a2e;
+            color: #e0e0e0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            padding: 24px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h2 { color: #00d4ff; margin-bottom: 20px; font-weight: 300; letter-spacing: 1px; }
+        h3 { color: #a0a0c0; margin-bottom: 8px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .section {
+            background: #16213e;
+            border: 1px solid #0f3460;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        input {
+            background: #0f3460;
+            border: 1px solid #1a4a7a;
+            border-radius: 8px;
+            padding: 10px 14px;
+            color: #e0e0e0;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        input:focus { border-color: #00d4ff; }
+        input::placeholder { color: #5a5a8a; }
+        #token { width: 100%; margin-bottom: 10px; }
+        .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+        #chatId, #message { flex: 1; min-width: 200px; }
+        button {
+            background: #0f3460;
+            color: #e0e0e0;
+            border: 1px solid #1a4a7a;
+            border-radius: 8px;
+            padding: 10px 18px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        button:hover { background: #1a4a7a; border-color: #00d4ff; color: #fff; }
+        #status {
+            color: #ff6b6b;
+            font-size: 13px;
+            margin-left: auto;
+        }
+        #messages {
+            background: #0d1b2a;
+            border: 1px solid #0f3460;
+            border-radius: 8px;
+            height: 300px;
+            overflow-y: auto;
+            padding: 12px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        #messages div {
+            padding: 4px 8px;
+            border-radius: 6px;
+        }
+        #messages div:nth-child(odd) { background: #16213e; }
+        #messages small { color: #5a5a8a; font-size: 11px; }
+    </style>
 </head>
 <body>
-    <h2>Chat Test Client</h2>
+    <h2>💬 Chat Test Client</h2>
 
-    <div>
+    <div class="section">
         <h3>Auth</h3>
-        <input type="text" id="token" placeholder="JWT Token" style="width: 500px" />
-        <button onclick="connect()">Connect</button>
-        <button onclick="disconnect()">Disconnect</button>
-        <span id="status">Disconnected</span>
+        <input type="text" id="token" placeholder="JWT Token" />
+        <div class="row">
+            <button onclick="connect()">Connect</button>
+            <button onclick="disconnect()">Disconnect</button>
+            <span id="status">Disconnected</span>
+        </div>
     </div>
 
-    <div>
+    <div class="section">
         <h3>Chat</h3>
-        <input type="text" id="chatId" placeholder="Chat ID" style="width: 300px" />
-        <button onclick="joinChat()">Join Chat</button>
-        <button onclick="leaveChat()">Leave Chat</button>
+        <div class="row">
+            <input type="text" id="chatId" placeholder="Chat ID" />
+            <button onclick="joinChat()">Join Chat</button>
+            <button onclick="leaveChat()">Leave Chat</button>
+        </div>
+        <div class="row" style="margin-top:10px">
+            <input type="text" id="message" placeholder="Message" />
+            <button onclick="sendMessage()">Send</button>
+        </div>
     </div>
 
-    <div>
-        <input type="text" id="message" placeholder="Message" style="width: 300px" />
-        <button onclick="sendMessage()">Send</button>
-    </div>
-
-    <div>
+    <div class="section">
         <h3>Messages</h3>
-        <div id="messages" style="border:1px solid #ccc; height:300px; overflow:auto; padding:10px"></div>
+        <div id="messages"></div>
     </div>
 
     <script>
@@ -42,8 +113,7 @@
                 return;
             }
 
-            // Определяем базовый URL (для локальной разработки)
-            const baseUrl = window.location.origin; // или https://localhost:5001
+            const baseUrl = window.location.origin;
             const hubUrl = `${baseUrl}/hubs/chat`;
 
             console.log('Connecting to:', hubUrl);
@@ -73,7 +143,7 @@
             connection.start()
                 .then(() => {
                     document.getElementById('status').innerText = 'Connected';
-                    document.getElementById('status').style.color = 'green';
+                    document.getElementById('status').style.color = '#00d4ff';
                     console.log('Connected!');
                 })
                 .catch(err => {
@@ -87,7 +157,7 @@
                 connection.stop();
                 connection = null;
                 document.getElementById('status').innerText = 'Disconnected';
-                document.getElementById('status').style.color = 'red';
+                document.getElementById('status').style.color = '#ff6b6b';
             }
         }
 
