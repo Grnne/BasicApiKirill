@@ -12,13 +12,14 @@ namespace BasicApi.Hubs;
 [Authorize]
 public class ChatHub(IChatRepository chatRepository, IMessageRepository messageRepository, ILogger<ChatHub> logger) : Hub
 {
-    // Хранит userId → connectionId для отслеживания онлайн-статуса.
+    // Хранит userId → набор connectionId для отслеживания онлайн-статуса и диагностики.
+    // Один пользователь может иметь несколько активных соединений (несколько вкладок, устройств).
     // ConcurrentDictionary — thread-safe, поддерживает множественные одновременные подключения.
     // ВАЖНО: При горизонтальном масштабировании (несколько инстансов) необходимо заменить
     // на Redis backplane или SignalR Redis Scaleout, т.к. статический словарь не шарится между серверами.
-        private static readonly ConcurrentDictionary<Guid, string> _onlineUsers = new();
+    private static readonly ConcurrentDictionary<Guid, ConcurrentBag<string>> _onlineUsers = new();
 
-                public override async Task OnConnectedAsync()
+    public override async Task OnConnectedAsync()
     {
         try
         {
@@ -26,15 +27,24 @@ public class ChatHub(IChatRepository chatRepository, IMessageRepository messageR
             var userId = GetUserId();
             if (userId.HasValue)
             {
-                _onlineUsers.AddOrUpdate(userId.Value, Context.ConnectionId, (_, _) => Context.ConnectionId);
-                logger.LogInformation("User {UserId} connected. ConnectionId: {ConnectionId}", userId.Value, Context.ConnectionId);
+                _onlineUsers.AddOrUpdate(
+                    userId.Value,
+                    _ => new ConcurrentBag<string> { Context.ConnectionId },
+                    (_, bag) => { bag.Add(Context.ConnectionId); return bag; });
 
-                var allChatMembers = await chatRepository.GetAllChatMembersAsync(userId.Value);
-                foreach (var memberId in allChatMembers)
+                var connectionCount = _onlineUsers[userId.Value].Count;
+                logger.LogInformation("User {UserId} connected. ConnectionId: {ConnectionId}. Total connections: {Count}",
+                    userId.Value, Context.ConnectionId, connectionCount);
+
+                if (connectionCount == 1)
                 {
-                    await Clients.User(memberId.ToString()).SendAsync("UserOnlineChanged", userId.Value, true);
+                    var allChatMembers = await chatRepository.GetAllChatMembersAsync(userId.Value);
+                    foreach (var memberId in allChatMembers)
+                    {
+                        await Clients.User(memberId.ToString()).SendAsync("UserOnlineChanged", userId.Value, true);
+                    }
+                    logger.LogInformation("User {UserId} online status sent to {Count} members", userId.Value, allChatMembers.Count());
                 }
-                logger.LogInformation("User {UserId} online status sent to {Count} members", userId.Value, allChatMembers.Count());
             }
             else
             {
@@ -49,7 +59,7 @@ public class ChatHub(IChatRepository chatRepository, IMessageRepository messageR
         }
     }
 
-                public override async Task OnDisconnectedAsync(Exception? exception)
+    public override async Task OnDisconnectedAsync(Exception? exception)
     {
         try
         {
@@ -58,11 +68,17 @@ public class ChatHub(IChatRepository chatRepository, IMessageRepository messageR
             if (userId.HasValue)
             {
                 logger.LogInformation("User {UserId} disconnected. ConnectionId: {ConnectionId}", userId.Value, Context.ConnectionId);
-                if (_onlineUsers.TryRemove(userId.Value, out var removedId)
-                    && removedId == Context.ConnectionId)
+
+                if (_onlineUsers.TryGetValue(userId.Value, out var connections))
                 {
-                    if (!_onlineUsers.ContainsKey(userId.Value))
+                    // ConcurrentBag doesn't support removal, so we rebuild
+                    var remaining = new ConcurrentBag<string>(
+                        connections.Where(c => c != Context.ConnectionId));
+
+                    if (remaining.IsEmpty)
                     {
+                        _onlineUsers.TryRemove(userId.Value, out _);
+
                         var allChatMembers = await chatRepository.GetAllChatMembersAsync(userId.Value);
                         foreach (var memberId in allChatMembers)
                         {
@@ -72,7 +88,8 @@ public class ChatHub(IChatRepository chatRepository, IMessageRepository messageR
                     }
                     else
                     {
-                        logger.LogInformation("User {UserId} has other active connections, staying online", userId.Value);
+                        _onlineUsers[userId.Value] = remaining;
+                        logger.LogInformation("User {UserId} has {Count} remaining connections", userId.Value, remaining.Count);
                     }
                 }
             }
@@ -85,7 +102,7 @@ public class ChatHub(IChatRepository chatRepository, IMessageRepository messageR
         }
     }
 
-                // Подписка на группу чата
+    // Подписка на группу чата
     public async Task JoinChat(Guid chatId)
     {
         logger.LogInformation("JoinChat called with chatId={ChatId}", chatId);
@@ -113,11 +130,11 @@ public class ChatHub(IChatRepository chatRepository, IMessageRepository messageR
         catch (Exception ex)
         {
             logger.LogError(ex, "JoinChat failed for chatId={ChatId}", chatId);
-            throw; // пробрасываем, чтобы клиент получил ошибку
+            throw;
         }
     }
 
-        // Отписка от группы чата
+    // Отписка от группы чата
     public async Task LeaveChat(Guid chatId)
     {
         try
@@ -133,7 +150,7 @@ public class ChatHub(IChatRepository chatRepository, IMessageRepository messageR
         }
     }
 
-        // Отправка сообщения
+    // Отправка сообщения
     public async Task SendMessage(Guid chatId, string text)
     {
         try
@@ -210,7 +227,26 @@ public class ChatHub(IChatRepository chatRepository, IMessageRepository messageR
             throw;
         }
     }
-        public async Task Typing(Guid chatId, bool isTyping)
+
+    /// <summary>
+    /// Диагностический метод — возвращает количество активных SignalR-соединений для текущего пользователя.
+    /// </summary>
+    public async Task Ping()
+    {
+        var userId = GetUserId();
+        if (!userId.HasValue) return;
+
+        var connectionCount = 0;
+        if (_onlineUsers.TryGetValue(userId.Value, out var connections))
+        {
+            connectionCount = connections.Count;
+        }
+
+        logger.LogInformation("Ping: user {UserId} has {Count} active connections", userId.Value, connectionCount);
+        await Clients.Caller.SendAsync("Pong", new { ConnectionId = Context.ConnectionId, ConnectionCount = connectionCount });
+    }
+
+    public async Task Typing(Guid chatId, bool isTyping)
     {
         try
         {
@@ -260,5 +296,3 @@ public class ChatHub(IChatRepository chatRepository, IMessageRepository messageR
         return null;
     }
 }
-
-
