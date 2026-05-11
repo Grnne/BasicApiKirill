@@ -10,13 +10,13 @@ using Microsoft.AspNetCore.SignalR;
 namespace BasicApi.Hubs;
 
 [Authorize]
-public class ChatHub(IChatRepository chatRepository, IMessageRepository messageRepository) : Hub
+public class ChatHub(IChatRepository chatRepository, IMessageRepository messageRepository, ILogger<ChatHub> logger) : Hub
 {
     // Хранит userId → connectionId для отслеживания онлайн-статуса.
     // ConcurrentDictionary — thread-safe, поддерживает множественные одновременные подключения.
     // ВАЖНО: При горизонтальном масштабировании (несколько инстансов) необходимо заменить
     // на Redis backplane или SignalR Redis Scaleout, т.к. статический словарь не шарится между серверами.
-    private static readonly ConcurrentDictionary<Guid, string> _onlineUsers = new();
+        private static readonly ConcurrentDictionary<Guid, string> _onlineUsers = new();
 
         public override async Task OnConnectedAsync()
     {
@@ -24,6 +24,7 @@ public class ChatHub(IChatRepository chatRepository, IMessageRepository messageR
         if (userId.HasValue)
         {
             _onlineUsers.AddOrUpdate(userId.Value, Context.ConnectionId, (_, _) => Context.ConnectionId);
+            logger.LogInformation("User {UserId} connected. ConnectionId: {ConnectionId}", userId.Value, Context.ConnectionId);
 
             var allChatMembers = await chatRepository.GetAllChatMembersAsync(userId.Value);
             foreach (var memberId in allChatMembers)
@@ -34,11 +35,12 @@ public class ChatHub(IChatRepository chatRepository, IMessageRepository messageR
         await base.OnConnectedAsync();
     }
 
-    public override async Task OnDisconnectedAsync(Exception? exception)
+        public override async Task OnDisconnectedAsync(Exception? exception)
     {
         var userId = GetUserId();
         if (userId.HasValue)
         {
+            logger.LogInformation("User {UserId} disconnected. ConnectionId: {ConnectionId}", userId.Value, Context.ConnectionId);
             if (_onlineUsers.TryRemove(userId.Value, out var removedId)
                 && removedId == Context.ConnectionId)
             {
@@ -55,21 +57,28 @@ public class ChatHub(IChatRepository chatRepository, IMessageRepository messageR
         await base.OnDisconnectedAsync(exception);
     }
 
-    // Подписка на группу чата
+        // Подписка на группу чата
     public async Task JoinChat(Guid chatId)
     {
         var userId = GetUserId();
         if (!userId.HasValue) return;
 
         var isMember = await chatRepository.IsMemberAsync(chatId, userId.Value);
-        if (!isMember) return;
+        if (!isMember)
+        {
+            logger.LogWarning("User {UserId} tried to join chat {ChatId} but is not a member", userId.Value, chatId);
+            return;
+        }
 
+        logger.LogInformation("User {UserId} joined chat {ChatId}", userId.Value, chatId);
         await Groups.AddToGroupAsync(Context.ConnectionId, chatId.ToString());
     }
 
     // Отписка от группы чата
     public async Task LeaveChat(Guid chatId)
     {
+        var userId = GetUserId();
+        logger.LogInformation("User {UserId} left chat {ChatId}", userId, chatId);
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, chatId.ToString());
     }
 
@@ -109,9 +118,10 @@ public class ChatHub(IChatRepository chatRepository, IMessageRepository messageR
             IsRead = false
         };
 
-        await Clients.Group(chatId.ToString()).SendAsync("MessageCreated", messageDto);
+                await Clients.Group(chatId.ToString()).SendAsync("MessageCreated", messageDto);
 
                 // Уведомляем всех участников чата об обновлении последнего сообщения в списке чатов
+        logger.LogInformation("Message {MessageId} sent to chat group {ChatId}", message.Id, chatId);
         // Даже те, кто не открывал чат (не вызывал JoinChat), получат ChatListUpdated
         var participants = await chatRepository.GetChatParticipantsAsync(chatId);
         var listUpdateDto = new MessageDto
@@ -124,20 +134,19 @@ public class ChatHub(IChatRepository chatRepository, IMessageRepository messageR
             IsRead = false
         };
 
-        foreach (var participant in participants)
+                foreach (var participant in participants)
         {
             if (participant.UserId == userId) continue; // Отправителю не нужно обновлять список
             await Clients.User(participant.UserId.ToString())
                 .SendAsync("ChatListUpdated", chatId, listUpdateDto);
         }
     }
-
-    // Статус печатания
     public async Task Typing(Guid chatId, bool isTyping)
     {
         var userId = GetUserId();
-        if (!userId.HasValue) return;
+                if (!userId.HasValue) return;
 
+        logger.LogInformation("User {UserId} typing={IsTyping} in chat {ChatId}", userId.Value, isTyping, chatId);
         await Clients.Group(chatId.ToString()).SendAsync("TypingChanged", chatId, userId.Value, isTyping);
     }
 
