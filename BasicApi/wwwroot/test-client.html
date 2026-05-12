@@ -8,7 +8,7 @@
         body {
             background: #000000;
             color: #22cc22;
-            font-family: 'Courier New', 'Consolas', 'Monaco', monospace;
+            font-family: 'Segoe UI', 'Arial', 'Helvetica', sans-serif;
             padding: 24px;
             max-width: 900px;
             margin: 0 auto;
@@ -43,7 +43,7 @@
             padding: 10px 14px;
             color: #22cc22;
             font-size: 14px;
-            font-family: 'Courier New', 'Consolas', monospace;
+            font-family: 'Segoe UI', 'Arial', 'Helvetica', sans-serif;
             outline: none;
         }
         input:focus { border-color: #22cc22; }
@@ -57,7 +57,7 @@
             border: 1px solid #113311;
             padding: 10px 18px;
             font-size: 13px;
-            font-family: 'Courier New', 'Consolas', monospace;
+            font-family: 'Segoe UI', 'Arial', 'Helvetica', sans-serif;
             cursor: pointer;
             transition: all 0.15s;
             white-space: nowrap;
@@ -69,7 +69,7 @@
             color: #882222;
             font-size: 13px;
             margin-left: auto;
-            font-family: 'Courier New', monospace;
+            font-family: 'Segoe UI', 'Arial', 'Helvetica', sans-serif;
         }
         #status.connected { color: #22cc22; }
         #messages {
@@ -80,13 +80,13 @@
             padding: 12px;
             font-size: 14px;
             line-height: 1.6;
-            font-family: 'Courier New', 'Consolas', monospace;
+            font-family: 'Segoe UI', 'Arial', 'Helvetica', sans-serif;
         }
         #messages div {
             padding: 4px 8px;
             border-bottom: 1px solid #060606;
         }
-        #messages div:nth-child(odd) { background: #123112; }
+        #messages div:nth-child(odd) { background: #071a07; }
         #messages small { color: #0a330a; font-size: 11px; }
         #events {
             background: #020202;
@@ -96,11 +96,10 @@
             padding: 12px;
             font-size: 12px;
             line-height: 1.5;
-            font-family: 'Courier New', 'Consolas', monospace;
+            font-family: 'Segoe UI', 'Arial', 'Helvetica', sans-serif;
         }
         .ev-timestamp { color: #0a330a; }
         #events .ev-row { color: #cccc33; }
-        #events .ev-row-message { color: #22cc22; }
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-track { background: #000000; }
         ::-webkit-scrollbar-thumb { background: #113311; }
@@ -151,10 +150,20 @@
             eventCount++;
             const div = document.getElementById('events');
             const time = new Date().toLocaleTimeString();
-            const text = args.map(a => JSON.stringify(a, null, 1)).join(', ').replace(/\n/g, ' ');
+            const text = args.map(a => {
+                if (typeof a === 'object' && a !== null) {
+                    try {
+                        return JSON.stringify(a, null, 1).replace(/\n/g, ' ');
+                    } catch {
+                        return String(a);
+                    }
+                }
+                return String(a);
+            }).join(', ');
             const row = document.createElement('div');
             row.className = className || 'ev-row';
-            row.innerHTML = `<span class="ev-timestamp">[${time}]</span> ${type}: ${text}`;
+            row.textContent = `[${time}] ${type}: ${text}`;
+            row.style.color = className === 'message-created' ? '#22cc22' : '#cccc33';
             div.appendChild(row);
             div.scrollTop = div.scrollHeight;
         }
