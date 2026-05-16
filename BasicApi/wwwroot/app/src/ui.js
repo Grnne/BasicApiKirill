@@ -139,49 +139,70 @@ function renderLeftPanel() {
 function createAuthForm() {
     let isRegisterMode = false;
 
-    const usernameInput = el('input', { id: 'auth-username', placeholder: 'Username / Email', className: 'grow' });
+    const heading = el('h3', { id: 'auth-heading' }, 'Login');
+    const usernameInput = el('input', { id: 'auth-username', placeholder: 'Username', className: 'grow' });
     const passwordInput = el('input', { id: 'auth-password', type: 'password', placeholder: 'Password', className: 'grow', onkeydown: (e) => { if (e.key === 'Enter') submit(); } });
-    const emailInput = el('input', { id: 'auth-email', type: 'email', placeholder: 'Email (for register)', className: 'grow', style: { display: 'none' } });
-    const displayNameInput = el('input', { id: 'auth-displayname', placeholder: 'Display Name (for register)', className: 'grow', style: { display: 'none' } });
+    const emailInput = el('input', { id: 'auth-email', type: 'email', placeholder: 'Email (e.g. user@mail.com)', className: 'grow', style: { display: 'none' } });
+    const displayNameInput = el('input', { id: 'auth-displayname', placeholder: 'Display Name (optional)', className: 'grow', style: { display: 'none' } });
     const submitBtn = el('button', { id: 'auth-submit' }, 'Login');
     const toggleBtn = el('button', { id: 'auth-toggle', onclick: toggleMode }, 'Switch to Register');
+    submitBtn.addEventListener('click', () => submit());
 
     function toggleMode() {
         isRegisterMode = !isRegisterMode;
-        const showReg = isRegisterMode ? '' : 'none';
+        const showReg = isRegisterMode ? 'block' : 'none';
         emailInput.style.display = showReg;
         displayNameInput.style.display = showReg;
+        heading.textContent = isRegisterMode ? 'Register' : 'Login';
         submitBtn.textContent = isRegisterMode ? 'Register' : 'Login';
-        toggleBtn.textContent = isRegisterMode ? 'Switch to Login' : 'Switch to Register';
+        toggleBtn.textContent = isRegisterMode ? 'Back to Login' : 'Switch to Register';
+        if (isRegisterMode) usernameInput.placeholder = 'Username (min 3 chars)';
+        else usernameInput.placeholder = 'Username';
     }
 
     async function submit() {
-        const usernameOrEmail = usernameInput.value.trim();
+        const username = usernameInput.value.trim();
         const password = passwordInput.value;
-        if (!usernameOrEmail || !password) return;
+        if (!username || !password) return;
+
+        if (isRegisterMode) {
+            const email = emailInput.value.trim();
+            if (!email) return;
+
+            const displayName = displayNameInput.value.trim() || null;
+            try {
+                const res = await api.register(username, email, password, displayName);
+                afterAuth(res);
+            } catch (err) {
+                addEventLog('ERROR', `Register failed: ${err.message}`);
+            }
+            return;
+        }
 
         try {
-            const res = isRegisterMode
-                ? await api.register(usernameOrEmail, emailInput.value.trim(), password, displayNameInput.value.trim() || null)
-                : await api.login(usernameOrEmail, password);
-
-            store.set('token', res.token);
-            store.set('userId', res.userId);
-            store.set('username', res.username);
-            store.set('displayName', res.displayName);
-
-            await signalr.connect();
-            const chats = await api.getChats(res.token);
-            store.set('chats', chats);
-            renderLeftPanel();
-            updateStatusBar();
+            const res = await api.login(username, password);
+            afterAuth(res);
         } catch (err) {
-            addEventLog('ERROR', `${isRegisterMode ? 'Register' : 'Login'} failed: ${err.message}`);
+            addEventLog('ERROR', `Login failed: ${err.message}`);
         }
     }
 
+    async function afterAuth(res) {
+        store.set('token', res.token);
+        store.set('userId', res.userId);
+        store.set('username', res.username);
+        store.set('displayName', res.displayName);
+
+        await signalr.connect();
+        const chats = await api.getChats(res.token);
+        store.set('chats', chats);
+        renderLeftPanel();
+        renderChatListItems();
+        updateStatusBar();
+    }
+
     return el('div', { className: 'section' }, [
-        el('h3', {}, 'Login / Register'),
+        heading,
         el('div', { className: 'col' }, [
             usernameInput,
             passwordInput,
