@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat App</title>
+    <link rel="stylesheet" href="/app/styles/main.css">
+</head>
+<body>
+    <div id="app">
+        <div id="status-bar">
+            <span id="status-indicator"></span>
+            <span id="status-text">Disconnected</span>
+            <span id="user-display">Not logged in</span>
+        </div>
+        <div id="main">
+            <div id="left-panel"></div>
+            <div id="center-panel">
+                <div id="chat-header"></div>
+                <div id="message-list">
+                    <div id="empty-state" style="padding: 24px; text-align: center; color: var(--text-dim);">Select a chat</div>
+                </div>
+                <div id="message-input-area"></div>
+            </div>
+        </div>
+    </div>
+    <script src="/signalr.min.js"></script>
+    <script type="module" src="/app/src/main.js"></script>
+</body>
+</html>

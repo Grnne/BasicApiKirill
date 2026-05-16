@@ -49,9 +49,9 @@ public class Program
             await context.Response.WriteAsync(html);
         });
 
-        app.MapGet("/", context =>
+                app.MapGet("/", context =>
         {
-            context.Response.Redirect("/swagger");
+            context.Response.Redirect("/app/index.html");
             return Task.CompletedTask;
         });
 

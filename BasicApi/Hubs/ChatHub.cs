@@ -216,10 +216,9 @@ public class ChatHub(IChatRepository chatRepository, IMessageRepository messageR
                 IsRead = false
             };
 
-            int notified = 0;
+                        int notified = 0;
             foreach (var participant in participants)
             {
-                if (participant.UserId == userId) continue;
                 await Clients.User(participant.UserId.ToString())
                     .SendAsync("ChatListUpdated", chatId, listUpdateDto);
                 notified++;
