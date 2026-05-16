@@ -140,6 +140,11 @@ public class ChatHub(IChatRepository chatRepository, IMessageRepository messageR
         try
         {
             var userId = GetUserId();
+            if (!userId.HasValue) return;
+
+            var isMember = await chatRepository.IsMemberAsync(chatId, userId.Value);
+            if (!isMember) return;
+
             logger.LogInformation("User {UserId} left chat {ChatId}", userId, chatId);
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, chatId.ToString());
         }
@@ -257,8 +262,14 @@ public class ChatHub(IChatRepository chatRepository, IMessageRepository messageR
                 return;
             }
 
-            logger.LogInformation("User {UserId} typing={IsTyping} in chat {ChatId}", userId.Value, isTyping, chatId);
-            await Clients.Group(chatId.ToString()).SendAsync("TypingChanged", chatId, userId.Value, isTyping);
+            var participants = await chatRepository.GetChatParticipantsAsync(chatId);
+            foreach (var participant in participants)
+            {
+                if (participant.UserId == userId) continue;
+
+                await Clients.User(participant.UserId.ToString())
+                    .SendAsync("TypingChanged", chatId, userId.Value, isTyping);
+            }
         }
         catch (Exception ex)
         {
