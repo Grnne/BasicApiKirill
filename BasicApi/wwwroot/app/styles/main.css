@@ -174,9 +174,10 @@ button:disabled {
    LAYOUT — two columns
    ═══════════════════════════════════════════ */
 
-/* Левая панель: фикс 20%, вся скроллится сама */
+/* Левая панель: 20%, но минимум 200px, вся скроллится сама */
 #left-panel {
     width: 20%;
+    min-width: 200px;
     flex-shrink: 0;
     overflow-y: auto;
     border-right: 1px solid var(--border);
