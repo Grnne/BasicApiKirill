@@ -24,12 +24,25 @@ public class ChatHub(IChatRepository chatRepository, IMessageRepository messageR
             var userId = GetUserId();
             if (userId.HasValue)
             {
+                var httpCtx = Context.GetHttpContext();
+                var userAgent = httpCtx?.Request.Headers.UserAgent.FirstOrDefault() ?? "unknown";
+                var remoteIp = httpCtx?.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+                logger.LogInformation(
+                    "OnConnectedAsync: userId={UserId}, connectionId={ConnectionId}, ip={RemoteIp}, userAgent={UserAgent}",
+                    userId.Value, Context.ConnectionId, remoteIp, userAgent);
+
                 _onlineUsers.AddOrUpdate(
                     userId.Value,
                     _ => new ConcurrentBag<string> { Context.ConnectionId },
                     (_, bag) => { bag.Add(Context.ConnectionId); return bag; });
 
-                if (_onlineUsers[userId.Value].Count == 1)
+                var totalConnections = _onlineUsers[userId.Value].Count;
+                logger.LogInformation(
+                    "User {UserId} now has {Count} active connections (just added {ConnectionId})",
+                    userId.Value, totalConnections, Context.ConnectionId);
+
+                if (totalConnections == 1)
                 {
                     var members = await chatRepository.GetAllChatMembersAsync(userId.Value);
                     foreach (var memberId in members)
@@ -50,9 +63,20 @@ public class ChatHub(IChatRepository chatRepository, IMessageRepository messageR
         try
         {
             var userId = GetUserId();
+
+            if (exception != null)
+                logger.LogWarning(exception, "OnDisconnectedAsync with exception for userId={UserId}, connectionId={ConnectionId}",
+                    userId, Context.ConnectionId);
+
             if (userId.HasValue && _onlineUsers.TryGetValue(userId.Value, out var connections))
             {
+                var beforeCount = connections.Count;
                 var remaining = new ConcurrentBag<string>(connections.Where(c => c != Context.ConnectionId));
+
+                logger.LogInformation(
+                    "OnDisconnectedAsync: userId={UserId}, connectionId={ConnectionId}, beforeCount={BeforeCount}, remainingCount={RemainingCount}",
+                    userId.Value, Context.ConnectionId, beforeCount, remaining.Count);
+
                 if (remaining.IsEmpty)
                 {
                     _onlineUsers.TryRemove(userId.Value, out _);
@@ -170,13 +194,22 @@ public class ChatHub(IChatRepository chatRepository, IMessageRepository messageR
         }
     }
 
-    public async Task Ping()
+        public async Task Ping()
     {
         var userId = GetUserId();
         if (!userId.HasValue) return;
 
-        var connectionCount = _onlineUsers.TryGetValue(userId.Value, out var connections) ? connections.Count : 0;
-        await Clients.Caller.SendAsync("Pong", new { ConnectionId = Context.ConnectionId, ConnectionCount = connectionCount });
+        var isRegistered = _onlineUsers.TryGetValue(userId.Value, out var connections);
+        var connectionCount = isRegistered ? connections.Count : 0;
+        var isCurrentActive = isRegistered && connections.Contains(Context.ConnectionId);
+
+        await Clients.Caller.SendAsync("Pong", new
+        {
+            ConnectionId = Context.ConnectionId,
+            ConnectionCount = connectionCount,
+            IsCurrentActive = isCurrentActive,
+            UserId = userId.Value
+        });
     }
 
     public async Task Typing(Guid chatId, bool isTyping)

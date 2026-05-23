@@ -58,9 +58,20 @@ public static class ServiceExtensions
                 };
             };
         });
-        services.AddSwaggerWithDocs(configuration);
-        services.AddJwtAuth(configuration);
-        services.AddSignalR();
+                services.AddSwaggerWithDocs(configuration);
+                services.AddJwtAuth(configuration);
+                services.AddSignalR(options =>
+                {
+                    // Разрешаем параллельную обработку вызовов
+                    options.MaximumParallelInvocationsPerClient = 2;
+                    // EnableDetailedErrors — помогает понять что падает при разработке
+                    options.EnableDetailedErrors = true;
+                    // Максимальный размер входящего сообщения (128KB для поддержки base64 изображений)
+                    options.MaximumReceiveMessageSize = 128 * 1024;
+                    // Ограничиваем буфер для команд, чтобы избежать накопления зависших вызовов
+                    options.StreamBufferCapacity = 10;
+                });
+
 
         var connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("DefaultConnection is not configured");
