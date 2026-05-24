@@ -1,5 +1,6 @@
 using BasicApi.Features.Users;
 using BasicApi.Middleware.Exceptions;
+using BasicApi.Services;
 using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
 using Microsoft.AspNetCore.Mvc;
@@ -10,12 +11,16 @@ namespace BasicApi.Tests.Features;
 public class UsersHandlerTests
 {
     private readonly Mock<IUserRepository> _userRepoMock;
+    private readonly Mock<IChatRepository> _chatRepoMock;
+    private readonly Mock<IUserStatusService> _statusServiceMock;
     private readonly UsersHandler _handler;
 
     public UsersHandlerTests()
     {
         _userRepoMock = new Mock<IUserRepository>();
-        _handler = new UsersHandler(_userRepoMock.Object);
+        _chatRepoMock = new Mock<IChatRepository>();
+        _statusServiceMock = new Mock<IUserStatusService>();
+        _handler = new UsersHandler(_userRepoMock.Object, _chatRepoMock.Object, _statusServiceMock.Object);
     }
 
     [Fact]

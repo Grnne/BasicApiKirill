@@ -58,6 +58,39 @@ public class JwtServiceTests
     }
 
     [Fact]
+    public void TryValidateToken_ValidToken_ReturnsTrueWithUserIdAndUsername()
+    {
+        // Arrange
+        var jwt = CreateJwtService();
+        var expectedUserId = Guid.NewGuid();
+        const string expectedUsername = "testuser";
+        var token = jwt.GenerateToken(expectedUserId, expectedUsername, "test@example.com");
+
+        // Act
+        var result = jwt.TryValidateToken(token, out var actualUserId, out var actualUsername);
+
+        // Assert
+        Assert.True(result);
+        Assert.Equal(expectedUserId, actualUserId);
+        Assert.Equal(expectedUsername, actualUsername);
+    }
+
+    [Fact]
+    public void TryValidateToken_InvalidToken_ReturnsFalseWithEmptyOutValues()
+    {
+        // Arrange
+        var jwt = CreateJwtService();
+
+        // Act
+        var result = jwt.TryValidateToken("invalid-token-that-is-definitely-not-valid", out var userId, out var username);
+
+        // Assert
+        Assert.False(result);
+        Assert.Equal(Guid.Empty, userId);
+        Assert.Equal(string.Empty, username);
+    }
+
+    [Fact]
     public void GetExpiryDate_ReturnsFutureDate()
     {
         // Arrange

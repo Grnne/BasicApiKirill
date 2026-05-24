@@ -74,5 +74,25 @@ public class JwtService : IJwtService
         }
     }
 
+    public bool TryValidateToken(string token, out Guid userId, out string username)
+    {
+        userId = Guid.Empty;
+        username = string.Empty;
+
+        var principal = ValidateToken(token);
+        if (principal is null)
+            return false;
+
+        var userIdClaim = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                          ?? principal.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+        if (userIdClaim is null || !Guid.TryParse(userIdClaim, out userId))
+            return false;
+
+        username = principal.FindFirst(ClaimTypes.Name)?.Value
+                   ?? principal.FindFirst(JwtRegisteredClaimNames.UniqueName)?.Value
+                   ?? string.Empty;
+        return true;
+    }
+
     public DateTime GetExpiryDate() => DateTime.UtcNow.AddMinutes(_expiryMinutes);
 }

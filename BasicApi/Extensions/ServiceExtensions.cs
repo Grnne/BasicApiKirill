@@ -82,6 +82,7 @@ public static class ServiceExtensions
         services.AddScoped<IMessageRepository, MessageRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IChatService, ChatService>();
+        services.AddSingleton<IUserStatusService, UserStatusService>();
         services.AddScoped<AuthHandler>();
         services.AddScoped<ChatsHandler>();
         services.AddScoped<UsersHandler>();

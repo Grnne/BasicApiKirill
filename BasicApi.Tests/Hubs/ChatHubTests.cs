@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using BasicApi.Hubs;
+using BasicApi.Services;
 using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
 using Microsoft.AspNetCore.Http;
@@ -18,30 +19,76 @@ namespace BasicApi.Tests.Hubs;
 /// </summary>
 public class ChatHubTests
 {
-        private readonly Mock<IChatRepository> _chatRepoMock;
-        private readonly Mock<IMessageRepository> _messageRepoMock;
-        private readonly Mock<ILogger<ChatHub>> _loggerMock;
-        private readonly Mock<HubCallerContext> _contextMock;
-        private readonly Mock<IHubCallerClients> _clientsMock;
-        private readonly Mock<IGroupManager> _groupsMock;
-        private readonly TestClientProxy _clientProxy;
-        private readonly ChatHub _hub;
-        private readonly Guid _userId;
-        private readonly string _connectionId;
+    private readonly Mock<IChatRepository> _chatRepoMock;
+    private readonly Mock<IMessageRepository> _messageRepoMock;
+    private readonly Mock<ILogger<ChatHub>> _loggerMock;
+    private readonly Mock<IUserStatusService> _statusMock;
+    private readonly Mock<HubCallerContext> _contextMock;
+    private readonly Mock<IHubCallerClients> _clientsMock;
+    private readonly Mock<IGroupManager> _groupsMock;
+    private readonly TestClientProxy _clientProxy;
+    private readonly ChatHub _hub;
+    private readonly Guid _userId;
+    private readonly string _connectionId;
 
     private static int _connectionCounter;
 
-        public ChatHubTests()
+    public ChatHubTests()
     {
         _connectionId = $"test-connection-id-{Interlocked.Increment(ref _connectionCounter)}";
         _userId = Guid.NewGuid();
         _chatRepoMock = new Mock<IChatRepository>();
         _messageRepoMock = new Mock<IMessageRepository>();
         _loggerMock = new Mock<ILogger<ChatHub>>();
+        _statusMock = new Mock<IUserStatusService>();
         _contextMock = new Mock<HubCallerContext>();
         _clientsMock = new Mock<IHubCallerClients>();
         _groupsMock = new Mock<IGroupManager>();
         _clientProxy = new TestClientProxy();
+
+        // In-memory tracking for the IUserStatusService mock (mirrors UserStatusService behavior)
+        var onlineState = new Dictionary<Guid, HashSet<string>>();
+
+        _statusMock
+            .Setup(s => s.SetUserOnlineStatusAsync(It.IsAny<Guid>(), It.IsAny<string>(), true))
+            .Returns((Guid userId, string connId, bool _) =>
+            {
+                if (!onlineState.ContainsKey(userId))
+                    onlineState[userId] = new HashSet<string>();
+                var isNew = onlineState[userId].Count == 0;
+                onlineState[userId].Add(connId);
+                return Task.FromResult(isNew);
+            });
+
+        _statusMock
+            .Setup(s => s.SetUserOnlineStatusAsync(It.IsAny<Guid>(), It.IsAny<string>(), false))
+            .Returns((Guid userId, string connId, bool _) =>
+            {
+                if (onlineState.TryGetValue(userId, out var conns))
+                {
+                    conns.Remove(connId);
+                    if (conns.Count == 0)
+                    {
+                        onlineState.Remove(userId);
+                        return Task.FromResult(true);
+                    }
+                }
+                return Task.FromResult(false);
+            });
+
+        _statusMock
+            .Setup(s => s.GetConnectionCountAsync(It.IsAny<Guid>()))
+            .Returns((Guid userId) =>
+                Task.FromResult(onlineState.TryGetValue(userId, out var conns) ? conns.Count : 0));
+
+        _statusMock
+            .Setup(s => s.IsConnectionActiveAsync(It.IsAny<Guid>(), It.IsAny<string>()))
+            .Returns((Guid userId, string connId) =>
+                Task.FromResult(onlineState.TryGetValue(userId, out var conns) && conns.Contains(connId)));
+
+        _statusMock
+            .Setup(s => s.SetTypingAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<bool>()))
+            .Returns(Task.CompletedTask);
 
         // Настраиваем контекст с authenticated user
         var claimsPrincipal = new ClaimsPrincipal(new ClaimsIdentity([
@@ -53,7 +100,7 @@ public class ChatHubTests
         // Подкладываем пустой FeatureCollection, чтобы GetHttpContext() не упал NRE
         _contextMock.Setup(c => c.Features).Returns(new FeatureCollection());
 
-        // По умолчанию User() и Group() возвращают наш TestClientProxy
+        // По умолчанию User(), Group() и Caller возвращают наш TestClientProxy
         _clientsMock
             .Setup(c => c.User(It.IsAny<string>()))
             .Returns(_clientProxy);
@@ -62,7 +109,11 @@ public class ChatHubTests
             .Setup(c => c.Group(It.IsAny<string>()))
             .Returns(_clientProxy);
 
-        _hub = new ChatHub(_chatRepoMock.Object, _messageRepoMock.Object, _loggerMock.Object)
+        _clientsMock
+            .Setup(c => c.Caller)
+            .Returns(_clientProxy);
+
+        _hub = new ChatHub(_chatRepoMock.Object, _messageRepoMock.Object, _statusMock.Object, _loggerMock.Object)
         {
             Context = _contextMock.Object,
             Clients = _clientsMock.Object,
@@ -116,14 +167,14 @@ public class ChatHubTests
     }
 
     [Fact]
-        public async Task OnConnectedAsync_WhenUnauthenticated_DoesNotSendOnline()
+    public async Task OnConnectedAsync_WhenUnauthenticated_DoesNotSendOnline()
     {
         // Arrange
         var unauthenticatedContext = new Mock<HubCallerContext>();
         unauthenticatedContext.Setup(c => c.User).Returns(new ClaimsPrincipal());
         unauthenticatedContext.Setup(c => c.Features).Returns(new FeatureCollection());
 
-        var hub = new ChatHub(_chatRepoMock.Object, _messageRepoMock.Object, _loggerMock.Object)
+        var hub = new ChatHub(_chatRepoMock.Object, _messageRepoMock.Object, _statusMock.Object, _loggerMock.Object)
         {
             Context = unauthenticatedContext.Object,
             Clients = _clientsMock.Object,
@@ -146,7 +197,7 @@ public class ChatHubTests
     public async Task OnDisconnectedAsync_WhenNoOtherConnection_SendsOfflineToAllChatMembers()
     {
         // Arrange
-        // Сначала "подключаемся", чтобы появилась запись в _onlineUsers
+        // Сначала "подключаемся", чтобы появилась запись в onlineState
         _chatRepoMock
             .Setup(r => r.GetAllChatMembersAsync(_userId))
             .ReturnsAsync(new List<Guid>());
@@ -178,14 +229,14 @@ public class ChatHubTests
     }
 
     [Fact]
-        public async Task OnDisconnectedAsync_WhenUnauthenticated_DoesNotSendOffline()
+    public async Task OnDisconnectedAsync_WhenUnauthenticated_DoesNotSendOffline()
     {
         // Arrange
         var unauthenticatedContext = new Mock<HubCallerContext>();
         unauthenticatedContext.Setup(c => c.User).Returns(new ClaimsPrincipal());
         unauthenticatedContext.Setup(c => c.Features).Returns(new FeatureCollection());
 
-        var hub = new ChatHub(_chatRepoMock.Object, _messageRepoMock.Object, _loggerMock.Object)
+        var hub = new ChatHub(_chatRepoMock.Object, _messageRepoMock.Object, _statusMock.Object, _loggerMock.Object)
         {
             Context = unauthenticatedContext.Object,
             Clients = _clientsMock.Object,
@@ -240,13 +291,13 @@ public class ChatHubTests
             Times.Never);
     }
 
-        private static Mock<HubCallerContext> CreateUnauthenticatedContext()
-        {
-            var ctx = new Mock<HubCallerContext>();
-            ctx.Setup(c => c.User).Returns(new ClaimsPrincipal());
-            ctx.Setup(c => c.Features).Returns(new FeatureCollection());
-            return ctx;
-        }
+    private static Mock<HubCallerContext> CreateUnauthenticatedContext()
+    {
+        var ctx = new Mock<HubCallerContext>();
+        ctx.Setup(c => c.User).Returns(new ClaimsPrincipal());
+        ctx.Setup(c => c.Features).Returns(new FeatureCollection());
+        return ctx;
+    }
 
     [Fact]
     public async Task JoinChat_WhenUnauthenticated_DoesNotAddToGroup()
@@ -254,7 +305,7 @@ public class ChatHubTests
         // Arrange
         var unauthenticatedContext = CreateUnauthenticatedContext();
 
-        var hub = new ChatHub(_chatRepoMock.Object, _messageRepoMock.Object, _loggerMock.Object)
+        var hub = new ChatHub(_chatRepoMock.Object, _messageRepoMock.Object, _statusMock.Object, _loggerMock.Object)
         {
             Context = unauthenticatedContext.Object,
             Clients = _clientsMock.Object,
@@ -276,7 +327,7 @@ public class ChatHubTests
     #region LeaveChat
 
     [Fact]
-        public async Task LeaveChat_RemovesFromGroup()
+    public async Task LeaveChat_RemovesFromGroup()
     {
         // Arrange
         var chatId = Guid.NewGuid();
@@ -337,27 +388,27 @@ public class ChatHubTests
                 !m.IsDeleted)),
             Times.Once);
 
-                // Должно быть 3 ивента: MessageCreated в группу + ChatListUpdated себе + ChatListUpdated другому
-                Assert.Equal(3, _clientProxy.Invocations.Count);
+        // Должно быть 3 ивента: MessageCreated в группу + ChatListUpdated себе + ChatListUpdated другому
+        Assert.Equal(3, _clientProxy.Invocations.Count);
 
-                // Первый — MessageCreated в группу
-                Assert.Equal("MessageCreated", _clientProxy.Invocations[0].Method);
-                var dto = Assert.IsType<BasicApi.Models.Dto.Message.MessageDto>(_clientProxy.Invocations[0].Args[0]);
-                Assert.Equal(text, dto.Text);
-                Assert.Equal(senderName, dto.SenderName);
-                Assert.Equal(_userId, dto.SenderId);
+        // Первый — MessageCreated в группу
+        Assert.Equal("MessageCreated", _clientProxy.Invocations[0].Method);
+        var dto = Assert.IsType<BasicApi.Models.Dto.Message.MessageDto>(_clientProxy.Invocations[0].Args[0]);
+        Assert.Equal(text, dto.Text);
+        Assert.Equal(senderName, dto.SenderName);
+        Assert.Equal(_userId, dto.SenderId);
 
-                // Второй — ChatListUpdated себе
-                Assert.Equal("ChatListUpdated", _clientProxy.Invocations[1].Method);
-                Assert.Equal(chatId, _clientProxy.Invocations[1].Args[0]);
-                var selfUpdate = Assert.IsType<BasicApi.Models.Dto.Message.MessageDto>(_clientProxy.Invocations[1].Args[1]);
-                Assert.Equal(text, selfUpdate.Text);
+        // Второй — ChatListUpdated себе
+        Assert.Equal("ChatListUpdated", _clientProxy.Invocations[1].Method);
+        Assert.Equal(chatId, _clientProxy.Invocations[1].Args[0]);
+        var selfUpdate = Assert.IsType<BasicApi.Models.Dto.Message.MessageDto>(_clientProxy.Invocations[1].Args[1]);
+        Assert.Equal(text, selfUpdate.Text);
 
-                // Третий — ChatListUpdated другому участнику
-                Assert.Equal("ChatListUpdated", _clientProxy.Invocations[2].Method);
-                Assert.Equal(chatId, _clientProxy.Invocations[2].Args[0]);
-                var otherUpdate = Assert.IsType<BasicApi.Models.Dto.Message.MessageDto>(_clientProxy.Invocations[2].Args[1]);
-                Assert.Equal(text, otherUpdate.Text);
+        // Третий — ChatListUpdated другому участнику
+        Assert.Equal("ChatListUpdated", _clientProxy.Invocations[2].Method);
+        Assert.Equal(chatId, _clientProxy.Invocations[2].Args[0]);
+        var otherUpdate = Assert.IsType<BasicApi.Models.Dto.Message.MessageDto>(_clientProxy.Invocations[2].Args[1]);
+        Assert.Equal(text, otherUpdate.Text);
     }
 
     [Fact]
@@ -377,12 +428,12 @@ public class ChatHubTests
     }
 
     [Fact]
-        public async Task SendMessage_WhenUnauthenticated_DoesNotCreateOrSend()
+    public async Task SendMessage_WhenUnauthenticated_DoesNotCreateOrSend()
     {
         // Arrange
         var unauthenticatedContext = CreateUnauthenticatedContext();
 
-        var hub = new ChatHub(_chatRepoMock.Object, _messageRepoMock.Object, _loggerMock.Object)
+        var hub = new ChatHub(_chatRepoMock.Object, _messageRepoMock.Object, _statusMock.Object, _loggerMock.Object)
         {
             Context = unauthenticatedContext.Object,
             Clients = _clientsMock.Object,
@@ -400,10 +451,54 @@ public class ChatHubTests
 
     #endregion
 
+    #region Ping
+
+    [Fact]
+    public async Task Ping_ReturnsPongWithConnectionInfo()
+    {
+        // Arrange — first connect so the user has an active connection
+        _chatRepoMock
+            .Setup(r => r.GetAllChatMembersAsync(_userId))
+            .ReturnsAsync(new List<Guid>());
+        await _hub.OnConnectedAsync();
+        _clientProxy.Invocations.Clear();
+
+        // Act
+        await _hub.Ping();
+
+        // Assert — verify the service was queried correctly
+        Assert.Single(_clientProxy.Invocations);
+        Assert.Equal("Pong", _clientProxy.Invocations[0].Method);
+        _statusMock.Verify(s => s.GetConnectionCountAsync(_userId), Times.Exactly(2)); // once in OnConnectedAsync log, once in Ping
+        _statusMock.Verify(s => s.IsConnectionActiveAsync(_userId, _connectionId), Times.Once);
+    }
+
+    [Fact]
+    public async Task Ping_WhenUnauthenticated_DoesNotSend()
+    {
+        // Arrange
+        var unauthenticatedContext = CreateUnauthenticatedContext();
+
+        var hub = new ChatHub(_chatRepoMock.Object, _messageRepoMock.Object, _statusMock.Object, _loggerMock.Object)
+        {
+            Context = unauthenticatedContext.Object,
+            Clients = _clientsMock.Object,
+            Groups = _groupsMock.Object
+        };
+
+        // Act
+        await hub.Ping();
+
+        // Assert
+        Assert.Empty(_clientProxy.Invocations);
+    }
+
+    #endregion
+
     #region Typing
 
     [Fact]
-        public async Task Typing_SendsTypingChangedToGroup()
+    public async Task Typing_SendsTypingChangedToGroup()
     {
         // Arrange
         var chatId = Guid.NewGuid();
@@ -419,6 +514,8 @@ public class ChatHubTests
         await _hub.Typing(chatId, true);
 
         // Assert
+        _statusMock.Verify(s => s.SetTypingAsync(chatId, _userId, true), Times.Once);
+
         var inv = Assert.Single(_clientProxy.Invocations);
         Assert.Equal("TypingChanged", inv.Method);
         Assert.Equal(3, inv.Args.Length);
@@ -428,12 +525,12 @@ public class ChatHubTests
     }
 
     [Fact]
-        public async Task Typing_WhenUnauthenticated_DoesNotSend()
+    public async Task Typing_WhenUnauthenticated_DoesNotSend()
     {
         // Arrange
         var unauthenticatedContext = CreateUnauthenticatedContext();
 
-        var hub = new ChatHub(_chatRepoMock.Object, _messageRepoMock.Object, _loggerMock.Object)
+        var hub = new ChatHub(_chatRepoMock.Object, _messageRepoMock.Object, _statusMock.Object, _loggerMock.Object)
         {
             Context = unauthenticatedContext.Object,
             Clients = _clientsMock.Object,
@@ -524,11 +621,11 @@ public class ChatHubTests
 }
 
 /// <summary>
-/// A test implementation of IClientProxy that records all SendAsync calls.
+/// A test implementation of IClientProxy and ISingleClientProxy that records all SendAsync calls.
 /// SignalR's SendCoreAsync on IClientProxy is a real interface method,
 /// not an extension method, so we can implement the interface directly and track invocations.
 /// </summary>
-public class TestClientProxy : IClientProxy
+public class TestClientProxy : IClientProxy, ISingleClientProxy
 {
     public List<(string Method, object?[] Args)> Invocations { get; } = new();
 
@@ -536,5 +633,11 @@ public class TestClientProxy : IClientProxy
     {
         Invocations.Add((method, args));
         return Task.CompletedTask;
+    }
+
+    public Task<T> InvokeCoreAsync<T>(string method, object?[] args, CancellationToken cancellationToken = default)
+    {
+        Invocations.Add((method, args));
+        return Task.FromResult<T>(default!);
     }
 }

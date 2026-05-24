@@ -1,0 +1,23 @@
+{
+    // Профиль терминала cmd.exe с UTF-8 кодировкой
+    "terminal.integrated.defaultProfile.windows": "Command Prompt (UTF-8)",
+    "terminal.integrated.profiles.windows": {
+        "Command Prompt (UTF-8)": {
+            "path": "${env:windir}\\System32\\cmd.exe",
+            "args": [
+                "/k",
+                "chcp 65001 > nul"
+            ],
+            "overrideName": true
+        },
+        "PowerShell (UTF-8)": {
+            "path": "powershell.exe",
+            "args": [
+                "-NoExit",
+                "-Command",
+                "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()"
+            ],
+            "overrideName": true
+        }
+    }
+}

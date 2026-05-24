@@ -16,7 +16,7 @@ public class AuthHandler(
     {
         var user = await userRepository.GetByUsernameOrEmailAsync(request.UsernameOrEmail);
 
-                if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+        if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
             throw new UnauthorizedException("Invalid username/email or password", "INVALID_CREDENTIALS");
 
         var token = jwtService.GenerateToken(user.Id, user.Username, user.Email);
@@ -37,13 +37,13 @@ public class AuthHandler(
     {
         var existingUser = await userRepository.GetByUsernameOrEmailAsync(request.Username);
 
-                if (existingUser != null)
+        if (existingUser != null)
             throw new ConflictException("Username already exists", "USERNAME_TAKEN");
 
         // Проверка уникальности email
         existingUser = await userRepository.GetByUsernameOrEmailAsync(request.Email);
 
-                if (existingUser != null)
+        if (existingUser != null)
             throw new ConflictException("Email already exists", "EMAIL_TAKEN");
 
         var user = new User
@@ -69,5 +69,32 @@ public class AuthHandler(
             Token = token,
             ExpiresAt = jwtService.GetExpiryDate()
         });
+    }
+
+    /// <summary>
+    /// Logs out the user. Currently a no-op (stateless JWT).
+    /// Future: add token blacklist, invalidate refresh tokens, notify SignalR.
+    /// </summary>
+    public Task<IActionResult> LogoutAsync(Guid userId)
+    {
+        // Stateless JWT — nothing to invalidate server-side.
+        // Client should discard the token.
+        return Task.FromResult<IActionResult>(new OkResult());
+    }
+
+    /// <summary>
+    /// Validates whether the given JWT token is still valid.
+    /// Returns userId, username and isValid flag.
+    /// </summary>
+    public Task<IActionResult> ValidateTokenAsync(string token)
+    {
+        var isValid = jwtService.TryValidateToken(token, out var userId, out var username);
+
+        return Task.FromResult<IActionResult>(new OkObjectResult(new ValidateTokenResponseDto
+        {
+            UserId = userId,
+            Username = username,
+            IsValid = isValid
+        }));
     }
 }

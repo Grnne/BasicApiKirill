@@ -16,3 +16,4 @@ public class SearchChatsResponseDto
     /// <summary>Total number of matching chats.</summary>
     public int TotalCount { get; set; }
 }
+
