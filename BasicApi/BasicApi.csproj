@@ -9,7 +9,7 @@
 		<UserSecretsId>d03abbdf-f3c3-4051-8973-bb81a26670e1</UserSecretsId>
 		<DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
 		<DockerComposeProjectPath>..\docker-compose.dcproj</DockerComposeProjectPath>
-		<PlatformTarget>x64</PlatformTarget>
+		<!-- AnyCPU (default) allows native execution on both x64 and ARM64 Linux -->
 	</PropertyGroup>
 
 	<ItemGroup>

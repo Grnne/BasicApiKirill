@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
-	<PlatformTarget>x64</PlatformTarget>
+	<!-- AnyCPU (default) allows native execution on both x64 and ARM64 Linux -->
   </PropertyGroup>
 
   <ItemGroup>
