@@ -51,6 +51,26 @@ public class UserRepository(IDbConnectionFactory connectionFactory) : IUserRepos
         return await connection.QueryFirstOrDefaultAsync<Guid>(sql, new { Value = usernameOrEmail });
     }
 
+    public async Task<User?> GetByIdAsync(Guid id, CancellationToken ct = default)
+    {
+        const string sql = @"
+            SELECT
+                id as Id,
+                username as Username,
+                email as Email,
+                password_hash as PasswordHash,
+                display_name as DisplayName,
+                created_at as CreatedAt,
+                last_login_at as LastLoginAt,
+                is_active as IsActive
+            FROM users
+            WHERE id = @Id
+            LIMIT 1";
+
+        using var connection = connectionFactory.CreateConnection();
+        return await connection.QueryFirstOrDefaultAsync<User>(sql, new { Id = id });
+    }
+
     public async Task<IEnumerable<User>> SearchByDisplayNameOrUsernameAsync(
         string query, Guid excludeUserId, int limit, CancellationToken ct = default)
     {

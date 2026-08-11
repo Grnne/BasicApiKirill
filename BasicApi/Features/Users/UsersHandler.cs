@@ -22,6 +22,49 @@ public class UsersHandler(
     }
 
     /// <summary>
+    /// Returns the caller's own profile, including the email.
+    /// Lets a client that restored a session from a stored token recover the same
+    /// user data that login/register would have returned.
+    /// </summary>
+    public async Task<IActionResult> GetOwnProfileAsync(Guid userId)
+    {
+        var user = await userRepository.GetByIdAsync(userId);
+
+        // Token is valid but the account is gone — the client should drop the token and re-login
+        if (user is null)
+            throw new NotFoundException("User not found", "USER_NOT_FOUND");
+
+        return new OkObjectResult(new OwnProfileResponseDto
+        {
+            UserId = user.Id,
+            Username = user.Username,
+            Email = user.Email,
+            DisplayName = user.DisplayName
+        });
+    }
+
+    /// <summary>
+    /// Returns the public profile of a user by id.
+    /// Email is intentionally not exposed — it is private to the account owner.
+    /// Online status is not exposed either; use /api/users/status, which is
+    /// restricted to members of the caller's chats.
+    /// </summary>
+    public async Task<IActionResult> GetUserProfileAsync(Guid userId)
+    {
+        var user = await userRepository.GetByIdAsync(userId);
+
+        if (user is null)
+            throw new NotFoundException("User not found", "USER_NOT_FOUND");
+
+        return new OkObjectResult(new UserProfileResponseDto
+        {
+            UserId = user.Id,
+            Username = user.Username,
+            DisplayName = user.DisplayName
+        });
+    }
+
+    /// <summary>
     /// Searches users by display name or username (Telegram-style ILIKE search).
     /// Excludes the current user from results.
     /// </summary>

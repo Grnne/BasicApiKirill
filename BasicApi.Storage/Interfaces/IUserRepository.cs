@@ -10,6 +10,11 @@ public interface IUserRepository
     Task<Guid?> GetIdByUsernameOrEmailAsync(string usernameOrEmail, CancellationToken ct = default);
 
     /// <summary>
+    /// Returns a user by id, or null if no such user exists.
+    /// </summary>
+    Task<User?> GetByIdAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>
     /// Searches users by display name or username using ILIKE (case-insensitive).
     /// Excludes the current user from results.
     /// Returns users ordered by display_name then username.
