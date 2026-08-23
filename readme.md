@@ -52,3 +52,16 @@ wss://host/hubs/chat?access_token={jwt}
 - `ChatCreated` — новый чат (когда вас добавили)
 - `UserOnlineChanged` — онлайн/офлайн статус
 - `TypingChanged` — статус печатания собеседника
+
+## TODO / возможные оптимизации
+
+- **System.Text.Json Source Generators** вместо рефлексии для сериализации DTO.
+  Сейчас `AddControllers()` ([ServiceExtensions.cs](BasicApi/Extensions/ServiceExtensions.cs))
+  и ручная сериализация в [ExceptionHandlingMiddleware.cs](BasicApi/Middleware/ExceptionHandlingMiddleware.cs)
+  используют дефолтный reflection-based `System.Text.Json`. Нужно завести
+  partial `JsonSerializerContext` с `[JsonSerializable(typeof(...))]` под DTO
+  из `Models/Dto/**`, подключить его как `TypeInfoResolver`, и переиспользовать
+  один `JsonSerializerOptions` в 429-обработчике rate limiter'а (сейчас там
+  создаётся новый на каждый reject). Небольшой, но бесплатный выигрыш по CPU
+  на каждый запрос — не приоритет, пока не станет узким местом (см. обсуждение
+  про то, что текущие боттлнеки — Postgres round-trip и BCrypt, а не GC).
