@@ -1,4 +1,6 @@
-﻿using System.Security.Claims;
+﻿using System.Collections.Concurrent;
+using System.Security.Claims;
+using System.Threading.RateLimiting;
 using BasicApi.Models.Dto.Chat;
 using BasicApi.Models.Dto.Message;
 using BasicApi.Services;
@@ -16,6 +18,26 @@ public class ChatHub(
     IUserStatusService userStatusService,
     ILogger<ChatHub> logger) : Hub
 {
+    // Троттлинг вызовов на соединение — защита от спама SendMessage/Typing,
+    // которые дороже обычного REST-запроса (пишут в БД и рассылают всем участникам чата).
+    private static readonly ConcurrentDictionary<string, RateLimiter> ConnectionLimiters = new();
+
+    private bool TryAcquireCallSlot()
+    {
+        var connectionId = Context.ConnectionId ?? string.Empty;
+        var limiter = ConnectionLimiters.GetOrAdd(connectionId, _ => new FixedWindowRateLimiter(
+            new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 20,
+                Window = TimeSpan.FromSeconds(10),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+
+        using var lease = limiter.AttemptAcquire();
+        return lease.IsAcquired;
+    }
+
     public override async Task OnConnectedAsync()
     {
         try
@@ -88,6 +110,11 @@ public class ChatHub(
             logger.LogError(ex, "OnDisconnectedAsync failed for connection {ConnectionId}", Context.ConnectionId);
             throw;
         }
+        finally
+        {
+            if (Context.ConnectionId is not null && ConnectionLimiters.TryRemove(Context.ConnectionId, out var limiter))
+                limiter.Dispose();
+        }
     }
 
     public async Task JoinChat(Guid chatId)
@@ -132,6 +159,9 @@ public class ChatHub(
     {
         try
         {
+            if (!TryAcquireCallSlot())
+                throw new HubException("Rate limit exceeded. Slow down.");
+
             var userId = GetUserId();
             if (!userId.HasValue) return;
 
@@ -207,6 +237,9 @@ public class ChatHub(
     {
         try
         {
+            if (!TryAcquireCallSlot())
+                return; // Typing — не критично, просто тихо игнорируем лишние вызовы.
+
             var userId = GetUserId();
             if (!userId.HasValue) return;
 

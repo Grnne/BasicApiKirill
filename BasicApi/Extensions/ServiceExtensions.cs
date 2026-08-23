@@ -63,7 +63,7 @@ public static class ServiceExtensions
         });
                 services.AddSwaggerWithDocs(configuration);
                 services.AddJwtAuth(configuration);
-                services.AddAuthRateLimiting();
+                services.AddApiRateLimiting();
                 services.AddSignalR(options =>
                 {
                     // Разрешаем параллельную обработку вызовов
@@ -179,13 +179,26 @@ public static class ServiceExtensions
         return services;
     }
 
-    public static IServiceCollection AddAuthRateLimiting(this IServiceCollection services)
+    public static IServiceCollection AddApiRateLimiting(this IServiceCollection services)
     {
         services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
-            // Брутфорс-защита: 5 попыток логина/регистрации в минуту с одного IP.
+            // Защита от перегрузки: базовый лимит на весь REST API с одного IP,
+            // чтобы никто не мог заDDoS'ить сервер потоком обычных запросов.
+            options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 60,
+                        Window = TimeSpan.FromMinutes(1),
+                        QueueLimit = 0
+                    }));
+
+            // Брутфорс-защита: 5 попыток логина/регистрации в минуту с одного IP
+            // (действует ДОПОЛНИТЕЛЬНО к глобальному лимиту, оба должны пройти).
             options.AddPolicy("auth", context =>
                 RateLimitPartition.GetFixedWindowLimiter(
                     partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
