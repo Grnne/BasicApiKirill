@@ -21,6 +21,8 @@
 		<!-- Existing packages -->
 		<PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.22.1" />
 		<PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.7" />
+		<!-- Pinned above Swashbuckle's transitive pull: CVE-2026-49451 (stack overflow via circular $ref), fixed in 2.7.5+ -->
+		<PackageReference Include="Microsoft.OpenApi" Version="2.7.6" />
 
 		<PackageReference Include="FluentMigrator" Version="8.0.1" />
 		<PackageReference Include="FluentMigrator.Runner" Version="8.0.1" />

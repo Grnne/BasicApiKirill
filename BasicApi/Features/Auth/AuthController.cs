@@ -3,6 +3,7 @@ using BasicApi.Models.Dto.Auth;
 using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace BasicApi.Features.Auth;
 
@@ -16,10 +17,12 @@ public class AuthController(AuthHandler handler) : ControllerBase
     /// Authenticate a user
     /// </summary>
     [AllowAnonymous]
+    [EnableRateLimiting("auth")]
     [HttpPost("login")]
     [ProducesResponseType(typeof(AuthResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> Login([FromBody] LoginRequestDto request)
         => await handler.LoginAsync(request);
 
@@ -27,10 +30,12 @@ public class AuthController(AuthHandler handler) : ControllerBase
     /// Register a new user
     /// </summary>
     [AllowAnonymous]
+    [EnableRateLimiting("auth")]
     [HttpPost("register")]
     [ProducesResponseType(typeof(AuthResponseDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> Register([FromBody] RegisterRequestDto request)
         => await handler.RegisterAsync(request);
 

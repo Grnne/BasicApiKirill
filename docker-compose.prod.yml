@@ -1,0 +1,159 @@
+# ═══════════════════════════════════════════════════════════════════════
+#  Production docker-compose for BasicChatApi (Ubuntu / cloud server)
+#  ⚠ НЕ использовать для локальной разработки — для этого есть docker-compose.yml
+#
+#  Запуск:
+#    1) cp .env.prod.example .env.prod          # заполнить сильные секреты
+#    2) docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+#
+#  Остановка:
+#    docker compose --env-file .env.prod -f docker-compose.prod.yml down
+#
+#  Логи:
+#    docker compose -f docker-compose.prod.yml logs -f basicapi
+# ═══════════════════════════════════════════════════════════════════════
+
+name: basicchat
+
+services:
+  postgres:
+    # ✅ ВСЕГДА пиннутая версия, а не :latest — иначе «внезапное» обновление
+    #    может уронить БД или сломать совместимость.
+    image: postgres:17-alpine
+    container_name: basicchat_postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+
+    # 🚨 НЕ публикуем Postgres наружу. БД доступна ТОЛЬКО внутри docker-сети.
+    #    Сканеры в интернете стучатся по 5432 — не даём им ни единого шанса.
+    #    Если нужен доступ с хоста (бэкапы, psql) — разкомментируй и забиндь
+    #    на loopback:  ports: ["127.0.0.1:5432:5432"]
+
+    volumes:
+      # ✅ Правильный путь данных (не /var/lib/postgresql!) — иначе в новых
+      #    образах данные не инициализируются или ломаются при обновлении.
+      - postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 10s
+
+    shm_size: "256mb"
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - NET_RAW
+      - NET_ADMIN
+      - SYS_PTRACE
+      - SYS_ADMIN
+      - SYS_MODULE
+      - SYS_CHROOT
+      - SYS_RAWIO
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"     # 🛡 не даём логам забить диск
+        max-file: "3"
+
+    deploy:
+      resources:
+        limits:             # 🛡 защита от перегруза сервера
+          cpus: "1.0"
+          memory: 768M
+          pids: 100
+        reservations:
+          memory: 256M
+
+    networks:
+      - chat_network
+
+  basicapi:
+    build:
+      context: .
+      dockerfile: BasicApi/Dockerfile
+    image: basicapi:latest
+    container_name: basicchat_api
+    restart: unless-stopped
+
+    # 🛡 reaps zombies + non-root user (1654 = 'app' в .NET-образе)
+    init: true
+    user: "1654:1654"
+
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production     # ✅ НЕ Development!
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${DB_NAME};Username=${DB_USER};Password=${DB_PASSWORD};Timeout=15;Command Timeout=30;Pooling=true"
+      Jwt__Key: ${JWT_KEY}                   # 🛡 сильный секрет, не дефолтный
+      Jwt__Issuer: ${JWT_ISSUER:-ChatApi}
+      Jwt__Audience: ${JWT_AUDIENCE:-ChatClient}
+      Jwt__ExpiryMinutes: ${JWT_EXPIRY_MINUTES:-60}
+      AllowedHosts: ${ALLOWED_HOSTS:-*}
+      # Фронтенд отдаётся тем же API (wwwroot/app), поэтому по умолчанию
+      # cross-origin доступ с credentials не нужен. Заполняй, только если
+      # ходишь на API с отдельного домена/порта.
+      Cors__AllowedOrigins: ${ALLOWED_ORIGINS:-}
+
+    ports:
+      # Если публичный доступ не нужен (доступ только через AmneziaVPN /
+      # reverse proxy) — замени на "127.0.0.1:8080:8080"
+      - "${HOST_PORT:-8080}:8080"
+
+    # 🛡 read-only rootfs + tmpfs для временных файлов
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+      - /home/app/.aspnet/DataProtection-Keys
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    healthcheck:
+      # TCP-проверка на порт Kestrel (curl/wget в .NET-образе нет)
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+          pids: 200
+        reservations:
+          memory: 128M
+
+    networks:
+      - chat_network
+
+volumes:
+  postgres_data:
+    name: basicchat_postgres_data
+  # Data Protection keys живут в tmpfs — при рестарте пересоздаются.
+  # Для JWT-авторизации это безопасно (токены самодостаточные).
+
+networks:
+  chat_network:
+    driver: bridge

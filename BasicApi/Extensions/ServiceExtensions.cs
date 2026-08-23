@@ -1,4 +1,6 @@
 using System.Text;
+using System.Text.Json;
+using System.Threading.RateLimiting;
 using BasicApi.Features.Auth;
 using BasicApi.Features.Chats;
 using BasicApi.Features.Users;
@@ -12,6 +14,7 @@ using FluentMigrator.Runner;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 
 namespace BasicApi.Extensions;
@@ -60,6 +63,7 @@ public static class ServiceExtensions
         });
                 services.AddSwaggerWithDocs(configuration);
                 services.AddJwtAuth(configuration);
+                services.AddAuthRateLimiting();
                 services.AddSignalR(options =>
                 {
                     // Разрешаем параллельную обработку вызовов
@@ -98,15 +102,20 @@ public static class ServiceExtensions
                 .ScanIn(typeof(InitialCreate).Assembly).For.Migrations())
             .AddLogging(lb => lb.AddConsole());
 
-        //�������
+        // CORS — только явно разрешённые origin'ы (wildcard + AllowCredentials
+        // означал бы, что любой сайт может делать запросы от имени пользователя).
+        var allowedOrigins = (configuration["Cors:AllowedOrigins"] ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
         services.AddCors(options =>
         {
-            options.AddPolicy("AllowAll", policy =>
+            options.AddPolicy("Default", policy =>
             {
                 policy.AllowAnyHeader()
-                      .AllowAnyMethod()
-                      .AllowCredentials()
-                      .SetIsOriginAllowed(_ => true);
+                      .AllowAnyMethod();
+
+                if (allowedOrigins.Length > 0)
+                    policy.WithOrigins(allowedOrigins).AllowCredentials();
             });
         });
 
@@ -167,6 +176,58 @@ public static class ServiceExtensions
             });
 
         services.AddAuthorization();
+        return services;
+    }
+
+    public static IServiceCollection AddAuthRateLimiting(this IServiceCollection services)
+    {
+        services.AddRateLimiter(options =>
+        {
+            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+            // Брутфорс-защита: 5 попыток логина/регистрации в минуту с одного IP.
+            options.AddPolicy("auth", context =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 5,
+                        Window = TimeSpan.FromMinutes(1),
+                        QueueLimit = 0
+                    }));
+
+            options.OnRejected = async (context, cancellationToken) =>
+            {
+                context.HttpContext.Response.ContentType = "application/problem+json";
+
+                var retryAfter = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var ra)
+                    ? (int)ra.TotalSeconds
+                    : 60;
+                context.HttpContext.Response.Headers.RetryAfter = retryAfter.ToString();
+
+                var problemDetails = new ProblemDetails
+                {
+                    Type = "about:blank",
+                    Title = "Too Many Requests",
+                    Status = StatusCodes.Status429TooManyRequests,
+                    Detail = "Too many attempts. Please try again later.",
+                    Instance = context.HttpContext.Request.Path,
+                    Extensions =
+                    {
+                        ["traceId"] = context.HttpContext.TraceIdentifier,
+                        ["errorCode"] = "RATE_LIMITED"
+                    }
+                };
+
+                await context.HttpContext.Response.WriteAsync(
+                    JsonSerializer.Serialize(problemDetails, new JsonSerializerOptions
+                    {
+                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                    }),
+                    cancellationToken);
+            };
+        });
+
         return services;
     }
 

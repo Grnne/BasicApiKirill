@@ -29,14 +29,16 @@ public class Program
         app.UseStaticFiles();
 
         // CORS
-        app.UseCors("AllowAll");
+        app.UseCors("Default");
 
-        app.UseSwaggerWithUI();
+        if (app.Environment.IsDevelopment())
+            app.UseSwaggerWithUI();
 
         // Order: HTTPS → Auth → Authorization → endpoints
         app.UseHttpsRedirection();
         app.UseAuthentication();
         app.UseAuthorization();
+        app.UseRateLimiter();
 
                 app.MapHub<ChatHub>("/hubs/chat");
         app.MapControllers();
