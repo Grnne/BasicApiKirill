@@ -185,6 +185,7 @@ public class ChatHub(
             var messageDto = new MessageDto
             {
                 Id = message.Id,
+                ChatId = chatId,
                 SenderId = message.SenderId,
                 SenderName = senderName,
                 Text = message.Text,
@@ -198,6 +199,7 @@ public class ChatHub(
             var listUpdateDto = new MessageDto
             {
                 Id = message.Id,
+                ChatId = chatId,
                 SenderId = message.SenderId,
                 SenderName = senderName,
                 Text = text.Length > 100 ? text[..100] + "…" : text,

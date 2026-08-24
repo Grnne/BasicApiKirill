@@ -22,6 +22,7 @@ public class ChatService(IChatRepository chatRepository, IMessageRepository mess
             LastMessage = r.LastMessageId is not null ? new MessageDto
             {
                 Id = r.LastMessageId!.Value,
+                ChatId = r.ChatId,
                 SenderId = r.LastMessageSenderId!.Value,
                 SenderName = r.LastMessageSenderName ?? "Unknown",
                 Text = r.LastMessageText ?? string.Empty,
@@ -72,6 +73,7 @@ public class ChatService(IChatRepository chatRepository, IMessageRepository mess
         var messages = result.Items.Select(m => new MessageDto
         {
             Id = m.Id,
+            ChatId = chatId,
             SenderId = m.SenderId,
             SenderName = m.SenderName,
             Text = m.Text,
@@ -113,6 +115,7 @@ public class ChatService(IChatRepository chatRepository, IMessageRepository mess
         var messages = result.Items.Select(m => new MessageDto
         {
             Id = m.Id,
+            ChatId = chatId,
             SenderId = m.SenderId,
             SenderName = m.SenderName,
             Text = m.Text,
@@ -156,6 +159,7 @@ public class ChatService(IChatRepository chatRepository, IMessageRepository mess
                 LastMessage = r.LastMessageId is not null ? new MessageDto
                 {
                     Id = r.LastMessageId!.Value,
+                    ChatId = r.ChatId,
                     SenderId = r.LastMessageSenderId!.Value,
                     SenderName = r.LastMessageSenderName ?? "Unknown",
                     Text = r.LastMessageText ?? string.Empty,

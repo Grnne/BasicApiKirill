@@ -31,8 +31,7 @@ public class Program
         // CORS
         app.UseCors("Default");
 
-        if (app.Environment.IsDevelopment())
-            app.UseSwaggerWithUI();
+        app.UseSwaggerWithUI();
 
         // Order: HTTPS → Auth → Authorization → endpoints
         app.UseHttpsRedirection();
