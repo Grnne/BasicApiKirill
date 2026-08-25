@@ -182,6 +182,7 @@ public class ChatRepository(IDbConnectionFactory connectionFactory) : IChatRepos
             c.title AS Title,
             c.created_at AS CreatedAt,
 
+            comp.id AS CompanionId,
             comp.display_name AS CompanionName,
             comp.username AS CompanionUsername,
 
@@ -209,7 +210,7 @@ public class ChatRepository(IDbConnectionFactory connectionFactory) : IChatRepos
             ON cm_last.chat_id = c.id AND cm_last.user_id = @userId
 
         LEFT JOIN LATERAL (
-            SELECT u.display_name, u.username
+            SELECT u.id, u.display_name, u.username
             FROM chat_members cm2
             INNER JOIN users u ON u.id = cm2.user_id
             WHERE cm2.chat_id = c.id AND cm2.user_id != @userId

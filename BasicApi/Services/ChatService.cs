@@ -16,6 +16,7 @@ public class ChatService(IChatRepository chatRepository, IMessageRepository mess
             ChatId = r.ChatId,
             Type = r.Type,
             Title = r.Title,
+            CompanionId = r.CompanionId,
             CompanionName = r.CompanionName,
             UnreadCount = r.UnreadCount,
             LastActivityAt = r.LastMessageCreatedAt ?? r.CreatedAt,
