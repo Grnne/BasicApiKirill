@@ -263,18 +263,16 @@ public class ChatHub(
     }
 
     /// <summary>
-    /// Уведомляет указанных пользователей о новом чате через SignalR.
+    /// Уведомляет пользователя о новом чате через SignalR.
     /// Вызывается из REST-хендлеров после создания чата.
+    /// Payload — готовый элемент списка чатов, собранный ДЛЯ ЭТОГО получателя:
+    /// собеседник в нём — второй участник, а не сам получатель.
     /// </summary>
-    public static async Task NotifyChatCreatedAsync(
+    public static Task NotifyChatCreatedAsync(
         IHubContext<ChatHub> hubContext,
-        Guid chatId,
-        ChatCreatedEventDto dto,
-        Guid[] recipientIds)
-    {
-        foreach (var userId in recipientIds)
-            await hubContext.Clients.User(userId.ToString()).SendAsync("ChatCreated", chatId, dto);
-    }
+        Guid recipientId,
+        ChatListItemDto item)
+        => hubContext.Clients.User(recipientId.ToString()).SendAsync("ChatCreated", item);
 
     private Guid? GetUserId()
     {

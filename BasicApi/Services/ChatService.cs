@@ -11,26 +11,24 @@ public class ChatService(IChatRepository chatRepository, IMessageRepository mess
         // Single batched query replaces the previous N+1 pattern
         var rows = await chatRepository.GetUserChatsBatchedAsync(userId);
 
-        return [.. rows.Select(r => new ChatListItemDto
-        {
-            ChatId = r.ChatId,
-            Type = r.Type,
-            Title = r.Title,
-            CompanionId = r.CompanionId,
-            CompanionName = r.CompanionName,
-            UnreadCount = r.UnreadCount,
-            LastActivityAt = r.LastMessageCreatedAt ?? r.CreatedAt,
-            LastMessage = r.LastMessageId is not null ? new MessageDto
-            {
-                Id = r.LastMessageId!.Value,
-                ChatId = r.ChatId,
-                SenderId = r.LastMessageSenderId!.Value,
-                SenderName = r.LastMessageSenderName ?? "Unknown",
-                Text = r.LastMessageText ?? string.Empty,
-                CreatedAt = r.LastMessageCreatedAt!.Value,
-                IsRead = false
-            } : null
-        })];
+        return [.. rows.Select(ChatListItemMapper.Map)];
+    }
+
+    public async Task<ChatListItemDto> GetChatListItemAsync(Guid chatId, Guid userId)
+    {
+        // Same 404/403 semantics as GetChatDetailsAsync — the projection query
+        // itself cannot tell "chat missing" from "not a member".
+        _ = await chatRepository.GetByIdAsync(chatId)
+            ?? throw new NotFoundException("Chat not found", "CHAT_NOT_FOUND");
+
+        var isMember = await chatRepository.IsMemberAsync(chatId, userId);
+        if (!isMember)
+            throw new ForbiddenException("User is not a member of this chat", "NOT_A_MEMBER");
+
+        var row = await chatRepository.GetChatListItemAsync(chatId, userId)
+            ?? throw new NotFoundException("Chat not found", "CHAT_NOT_FOUND");
+
+        return ChatListItemMapper.Map(row);
     }
 
         public async Task<ChatDetailDto> GetChatDetailsAsync(Guid chatId, Guid userId)
@@ -147,29 +145,7 @@ public class ChatService(IChatRepository chatRepository, IMessageRepository mess
         if (string.IsNullOrWhiteSpace(query))
             throw new BadRequestException("Query cannot be empty", "INVALID_QUERY");
 
-        // Helper to map ChatListResult rows to ChatListItemDto
-        List<ChatListItemDto> MapRows(List<Storage.Dto.ChatListResult> rows) =>
-            [.. rows.Select(r => new ChatListItemDto
-            {
-                ChatId = r.ChatId,
-                Type = r.Type,
-                Title = r.Title,
-                CompanionName = r.CompanionName,
-                UnreadCount = r.UnreadCount,
-                LastActivityAt = r.LastMessageCreatedAt ?? r.CreatedAt,
-                LastMessage = r.LastMessageId is not null ? new MessageDto
-                {
-                    Id = r.LastMessageId!.Value,
-                    ChatId = r.ChatId,
-                    SenderId = r.LastMessageSenderId!.Value,
-                    SenderName = r.LastMessageSenderName ?? "Unknown",
-                    Text = r.LastMessageText ?? string.Empty,
-                    CreatedAt = r.LastMessageCreatedAt!.Value,
-                    IsRead = false
-                } : null
-            })];
-
-                var typeFilter = type?.ToLowerInvariant();
+        var typeFilter = type?.ToLowerInvariant();
 
         // Single unified query — branching by type is now inside the repository
         var rowsTask = chatRepository.SearchChatsBatchedAsync(userId, query, typeFilter, limit);
@@ -179,7 +155,7 @@ public class ChatService(IChatRepository chatRepository, IMessageRepository mess
 
         return new SearchChatsResponseDto
         {
-            Items = MapRows(rowsTask.Result),
+            Items = [.. rowsTask.Result.Select(ChatListItemMapper.Map)],
             Query = query,
             TotalCount = countTask.Result
         };

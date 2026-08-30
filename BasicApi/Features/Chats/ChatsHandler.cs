@@ -31,7 +31,7 @@ public class ChatsHandler(
         var existingChat = await chatRepository.GetPrivateChatAsync(currentUserId, otherUserId);
 
                 if (existingChat != null)
-            return new OkObjectResult(new CreateChatResponseDto { ChatId = existingChat.Id });
+            return new OkObjectResult(await BuildChatListItemAsync(existingChat.Id, currentUserId));
 
         var chat = new Chat
         {
@@ -44,24 +44,41 @@ public class ChatsHandler(
         var memberIds = new[] { currentUserId, otherUserId };
         var chatId = await chatRepository.CreateAsync(chat, memberIds);
 
-                // Уведомляем других участников о новом чате через SignalR
-        var otherUserName = await chatRepository.GetUserNameAsync(otherUserId);
-        await ChatHub.NotifyChatCreatedAsync(hubContext, chatId,
-            new ChatCreatedEventDto
-            {
-                Type = chat.Type,
-                Title = chat.Title,
-                CompanionName = otherUserName
-            },
-            [otherUserId]);
+                // Уведомляем второго участника о новом чате через SignalR.
+        // Payload собирается ОТДЕЛЬНО для него: собеседник в его карточке — создатель чата.
+        var recipientRow = await chatRepository.GetChatListItemAsync(chatId, otherUserId);
+        if (recipientRow is not null)
+            await ChatHub.NotifyChatCreatedAsync(hubContext, otherUserId, ChatListItemMapper.Map(recipientRow));
 
-        return new CreatedResult(string.Empty, new CreateChatResponseDto { ChatId = chatId });
+        return new CreatedResult(string.Empty, await BuildChatListItemAsync(chatId, currentUserId));
+    }
+
+    /// <summary>
+    /// Собирает элемент списка чатов для конкретного зрителя.
+    /// Проверка членства здесь не нужна: вызывается только для чатов,
+    /// участником которых пользователь заведомо является.
+    /// </summary>
+    private async Task<ChatListItemDto> BuildChatListItemAsync(Guid chatId, Guid userId)
+    {
+        var row = await chatRepository.GetChatListItemAsync(chatId, userId)
+            ?? throw new NotFoundException("Chat not found", "CHAT_NOT_FOUND");
+
+        return ChatListItemMapper.Map(row);
     }
 
     public async Task<IActionResult> GetChatAsync(Guid chatId, Guid userId)
     {
         var chat = await chatService.GetChatDetailsAsync(chatId, userId);
         return new OkObjectResult(chat);
+    }
+
+    /// <summary>
+    /// Returns one chat in list-item shape (same DTO as GET /api/chats).
+    /// </summary>
+    public async Task<IActionResult> GetChatListItemAsync(Guid chatId, Guid userId)
+    {
+        var item = await chatService.GetChatListItemAsync(chatId, userId);
+        return new OkObjectResult(item);
     }
 
     /// <summary>

@@ -32,6 +32,7 @@ docker-compose down
 | REST API (Swagger) | `/swagger` | REST эндпоинты (чаты, сообщения, пользователи, аутентификация) |
 | SignalR Hub | `/signalr-docs` | Документация по SignalR хабу (методы и события) |
 | SignalR endpoint | `/hubs/chat` | WebSocket endpoint для подключения к чату |
+| Изменения контрактов | [docs/api-contract-changes.md](docs/api-contract-changes.md) | Что поменялось для клиентов (breaking changes) |
 
 ## SignalR Hub (`/hubs/chat`)
 
@@ -49,7 +50,7 @@ wss://host/hubs/chat?access_token={jwt}
 ### Server → Client (события)
 - `MessageCreated` — новое сообщение (получают подписчики чата)
 - `ChatListUpdated` — превью сообщения для списка чатов (все участники)
-- `ChatCreated` — новый чат (когда вас добавили)
+- `ChatCreated` — новый чат (когда вас добавили); payload — готовый `ChatListItemDto`
 - `UserOnlineChanged` — онлайн/офлайн статус
 - `TypingChanged` — статус печатания собеседника
 

@@ -8,6 +8,15 @@ public interface IChatService
     Task<List<ChatListItemDto>> GetUserChatsAsync(Guid userId);
     Task<ChatDetailDto> GetChatDetailsAsync(Guid chatId, Guid userId);
 
+    /// <summary>
+    /// Returns one chat in the same shape as an entry of <see cref="GetUserChatsAsync"/>,
+    /// resolved for the given viewer. Lets a client that only knows a chatId
+    /// (e.g. after a push or a reconnect) render the chat without refetching the whole list.
+    /// Throws NotFoundException when the chat does not exist and
+    /// ForbiddenException when the caller is not a member.
+    /// </summary>
+    Task<ChatListItemDto> GetChatListItemAsync(Guid chatId, Guid userId);
+
         /// <summary>
     /// Returns messages with cursor-based pagination.
     /// </summary>

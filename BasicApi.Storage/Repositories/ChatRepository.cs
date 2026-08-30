@@ -227,12 +227,15 @@ public class ChatRepository(IDbConnectionFactory connectionFactory) : IChatRepos
 
         LEFT JOIN users sender_u ON sender_u.id = lm.sender_id";
 
-    private static string BuildSearchWhereClause(string? query, string? typeFilter)
+    private static string BuildSearchWhereClause(string? query, string? typeFilter, bool byChatId = false)
     {
-        if (string.IsNullOrEmpty(typeFilter) && string.IsNullOrEmpty(query))
+        if (!byChatId && string.IsNullOrEmpty(typeFilter) && string.IsNullOrEmpty(query))
             return ""; // No filter — all chats
 
         var conditions = new List<string>();
+
+        if (byChatId)
+            conditions.Add("c.id = @chatId");
 
         if (typeFilter == "group")
         {
@@ -266,6 +269,17 @@ public class ChatRepository(IDbConnectionFactory connectionFactory) : IChatRepos
 
         using var connection = connectionFactory.CreateConnection();
         return (await connection.QueryAsync<ChatListResult>(sql, new { userId, query })).AsList();
+    }
+
+    public async Task<ChatListResult?> GetChatListItemAsync(Guid chatId, Guid userId)
+    {
+        // Same projection as the chat list — the INNER JOIN on chat_members
+        // already scopes the row to the viewer, so a non-member gets null.
+        var sql = $"{ChatListBaseSql}\n{BuildSearchWhereClause(null, null, byChatId: true)}\nLIMIT 1";
+
+        using var connection = connectionFactory.CreateConnection();
+        return await connection.QueryFirstOrDefaultAsync<ChatListResult>(
+            sql, new { userId, chatId, query = (string?)null });
     }
 
     public async Task<int> CountChatsByQueryAsync(Guid userId, string? query, string? typeFilter)

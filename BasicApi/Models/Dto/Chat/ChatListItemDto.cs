@@ -1,4 +1,4 @@
-﻿using BasicApi.Models.Dto.Message;
+using BasicApi.Models.Dto.Message;
 
 namespace BasicApi.Models.Dto.Chat;
 
@@ -10,6 +10,10 @@ public class ChatListItemDto
     public string? Title { get; set; }
     public Guid? CompanionId { get; set; }
     public string? CompanionName { get; set; }
+
+    /// <summary>Companion username (private chats only, null for groups).</summary>
+    public string? CompanionUsername { get; set; }
+
     public MessageDto? LastMessage { get; set; }
     public int UnreadCount { get; set; }
     public DateTime LastActivityAt { get; set; }

@@ -104,6 +104,54 @@ public class UsersController(UsersHandler handlers) : ControllerBase
         => await handlers.GetOnlineStatusAsync(User.GetUserId());
 
     /// <summary>
+    /// Get the online status of a single user.
+    /// </summary>
+    /// <remarks>
+    /// Unlike `GET /api/users/status`, this always answers about the user you asked for:
+    /// `isOnline: false` is returned explicitly when they are offline.
+    ///
+    /// Purpose: opening a chat screen. The client knows the companion's id and needs
+    /// their current presence right away, without waiting for a `UserOnlineChanged` event
+    /// that may have fired while the app was closed.
+    ///
+    /// Visible only for users you share a chat with (and for yourself); anything else
+    /// returns 404, so the endpoint cannot be used to probe whether an account exists.
+    ///
+    /// Sample request:
+    ///   GET /api/users/3fa85f64-5717-4562-b3fc-2c963f66afa6/status
+    /// </remarks>
+    /// <param name="userId">User ID.</param>
+    [Authorize]
+    [HttpGet("{userId:guid}/status")]
+    [ProducesResponseType(typeof(UserStatusDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetUserStatus(Guid userId)
+        => await handlers.GetUserStatusAsync(User.GetUserId(), userId);
+
+    /// <summary>
+    /// Get the online status of an explicit set of users.
+    /// </summary>
+    /// <remarks>
+    /// Returns one entry per requested user, including offline ones (`isOnline: false`).
+    /// IDs you share no chat with are silently omitted from the response.
+    /// At most 200 IDs per request; duplicates are collapsed.
+    ///
+    /// Purpose: entering the chat list screen. Send the `companionId`s of the private
+    /// chats currently on screen and get their presence in one round-trip, instead of
+    /// relying on `UserOnlineChanged` events that fired while the app was closed.
+    ///
+    /// Sample request:
+    ///   POST /api/users/status
+    ///   { "userIds": ["3fa85f64-5717-4562-b3fc-2c963f66afa6"] }
+    /// </remarks>
+    [Authorize]
+    [HttpPost("status")]
+    [ProducesResponseType(typeof(UserStatusResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetUsersStatus([FromBody] UserStatusBatchRequestDto dto)
+        => await handlers.GetUsersStatusAsync(User.GetUserId(), dto.UserIds);
+
+    /// <summary>
     /// Get typing status across all user's chats.
     /// </summary>
     /// <remarks>

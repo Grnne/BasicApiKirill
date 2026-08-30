@@ -26,9 +26,18 @@ public class ChatsController(ChatsHandler handlers) : ControllerBase
     /// Create a private chat with another user.
     /// Returns 200 if chat already exists, 201 if a new chat was created.
     /// </summary>
+    /// <remarks>
+    /// The body is a full <c>ChatListItemDto</c> — the same shape as an entry of
+    /// <c>GET /api/chats</c> — so the client can insert the chat into its list
+    /// without a follow-up request. The companion fields describe the *other*
+    /// participant as seen by the caller.
+    ///
+    /// The other participant receives the same chat over SignalR as a
+    /// <c>ChatCreated</c> event, built from their own point of view.
+    /// </remarks>
     [HttpPost("private/{userId}")]
-        [ProducesResponseType(typeof(CreateChatResponseDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(CreateChatResponseDto), StatusCodes.Status201Created)]
+        [ProducesResponseType(typeof(ChatListItemDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ChatListItemDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CreatePrivateChat(Guid userId)
@@ -44,6 +53,29 @@ public class ChatsController(ChatsHandler handlers) : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetChat(Guid chatId)
         => await handlers.GetChatAsync(chatId, User.GetUserId());
+
+    /// <summary>
+    /// Get a single chat in chat-list shape.
+    /// </summary>
+    /// <remarks>
+    /// Returns the same <c>ChatListItemDto</c> as one entry of <c>GET /api/chats</c>,
+    /// resolved for the caller: companion id/name/username for private chats,
+    /// unread count and last message preview.
+    ///
+    /// Purpose: the client knows only a <c>chatId</c> (after a push, a deep link,
+    /// or a <c>ChatListUpdated</c> event) and needs to render or refresh exactly
+    /// one row without refetching the whole list.
+    ///
+    /// Use <c>GET /api/chats/{chatId}</c> instead when you need the participant list.
+    /// </remarks>
+    /// <param name="chatId">Chat ID</param>
+    [HttpGet("{chatId}/item")]
+    [ProducesResponseType(typeof(ChatListItemDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetChatItem(Guid chatId)
+        => await handlers.GetChatListItemAsync(chatId, User.GetUserId());
 
     /// <summary>
     /// Get messages with cursor-based pagination.

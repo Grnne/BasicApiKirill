@@ -7,6 +7,13 @@ public interface IChatRepository
 {
     Task<IEnumerable<Chat>> GetUserChatsAsync(Guid userId);
     Task<List<ChatListResult>> GetUserChatsBatchedAsync(Guid userId);
+
+    /// <summary>
+    /// Returns a single chat-list row for one chat, as seen by the given user
+    /// (companion, unread count and last message are resolved for that viewer).
+    /// Returns null when the chat does not exist or the user is not a member.
+    /// </summary>
+    Task<ChatListResult?> GetChatListItemAsync(Guid chatId, Guid userId);
     Task<Chat?> GetByIdAsync(Guid chatId);
     Task<Chat?> GetPrivateChatAsync(Guid userId1, Guid userId2);
     Task<Guid> CreateAsync(Chat chat, Guid[] memberIds);

@@ -321,24 +321,33 @@
             <table>
                 <thead><tr><th>Аргумент</th><th>Тип</th><th>Описание</th></tr></thead>
                 <tbody>
-                    <tr><td><code>chatId</code></td><td class="type-cell">Guid</td><td>ID нового чата</td></tr>
-                    <tr><td><code>dto</code></td><td class="type-cell"><code>ChatCreatedEventDto</code></td><td>Информация о чате</td></tr>
+                    <tr><td><code>item</code></td><td class="type-cell"><code>ChatListItemDto</code></td><td>Готовый элемент списка чатов</td></tr>
                 </tbody>
             </table>
             <div style="margin-top: 0.5rem;">
-                <strong>ChatCreatedEventDto:</strong>
+                <strong>ChatListItemDto</strong> — тот же тип, что в <code>GET /api/chats</code>:
             </div>
             <table>
                 <thead><tr><th>Поле</th><th>Тип</th><th>Описание</th></tr></thead>
                 <tbody>
+                    <tr><td><code>chatId</code></td><td class="type-cell">Guid</td><td>ID нового чата</td></tr>
                     <tr><td><code>type</code></td><td class="type-cell">string</td><td><code>"private"</code> или <code>"group"</code></td></tr>
                     <tr><td><code>title</code></td><td class="type-cell">string?</td><td>Название группы (<code>null</code> для приватных)</td></tr>
+                    <tr><td><code>companionId</code></td><td class="type-cell">Guid?</td><td>ID собеседника (для приватных)</td></tr>
                     <tr><td><code>companionName</code></td><td class="type-cell">string?</td><td>Имя собеседника (для приватных)</td></tr>
                     <tr><td><code>companionUsername</code></td><td class="type-cell">string?</td><td>Username собеседника (для приватных)</td></tr>
+                    <tr><td><code>lastMessage</code></td><td class="type-cell">MessageDto?</td><td><code>null</code> у только что созданного чата</td></tr>
+                    <tr><td><code>unreadCount</code></td><td class="type-cell">int</td><td>Непрочитанные</td></tr>
+                    <tr><td><code>lastActivityAt</code></td><td class="type-cell">DateTime</td><td>Время последней активности</td></tr>
                 </tbody>
             </table>
             <div class="note">
-                <strong>Клиент:</strong> добавить чат в список чатов + вызвать <code>JoinChat(chatId)</code> для подписки на сообщения.
+                <strong>Клиент:</strong> вставить <code>item</code> в список чатов как есть + вызвать
+                <code>JoinChat(item.chatId)</code> для подписки на сообщения. Дополнительный запрос не нужен.
+            </div>
+            <div class="note">
+                <strong>Важно:</strong> companion-поля собраны с точки зрения <em>получателя</em> события —
+                в них создатель чата, а не сам получатель.
             </div>
         </div>
 
@@ -357,6 +366,18 @@
                     <tr><td><code>isOnline</code></td><td class="type-cell">boolean</td><td><code>true</code> — онлайн, <code>false</code> — офлайн</td></tr>
                 </tbody>
             </table>
+            <div class="note">
+                <strong>Событие описывает только СМЕНУ статуса.</strong> Пока клиент не подключён к хабу,
+                он этих событий не получает — и после старта приложения или реконнекта не знает,
+                кто уже онлайн. Текущее состояние нужно запросить самому по REST:
+                <ul>
+                    <li><code>GET /api/users/{userId}/status</code> — один пользователь (вход на экран чата)</li>
+                    <li><code>POST /api/users/status</code> с <code>{ "userIds": [...] }</code> — пачкой
+                        (вход на экран списка чатов, отправить <code>companionId</code> видимых приватных чатов)</li>
+                </ul>
+                Обе ручки отдают оффлайн явным <code>isOnline: false</code>. Сервер снапшот онлайна
+                при подключении к хабу не пушит.
+            </div>
         </div>
 
         <div class="event-card">
@@ -388,6 +409,13 @@
             <strong>OnDisconnectedAsync</strong> — при отключении пользователь удаляется из <code>_onlineUsers</code>,
             и всем участникам общих чатов отправляется <strong>UserOnlineChanged(userId, false)</strong>.
             Если у пользователя остались другие активные подключения, офлайн не отправляется.
+        </div>
+        <div class="note">
+            <strong>Снапшот при подключении не отправляется.</strong> <code>OnConnectedAsync</code> рассылает
+            статус подключившегося другим, но самому подключившемуся список текущих онлайн-пользователей
+            не приходит. После каждого подключения/реконнекта клиент обязан сам дёрнуть
+            <code>POST /api/users/status</code>, иначе собеседники будут показаны офлайн
+            до первого <strong>UserOnlineChanged</strong>.
         </div>
 
         <footer>

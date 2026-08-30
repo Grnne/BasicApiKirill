@@ -549,7 +549,7 @@ public class ChatHubTests
     #region NotifyChatCreatedAsync (static)
 
     [Fact]
-    public async Task NotifyChatCreatedAsync_SendsChatCreatedToAllRecipients()
+    public async Task NotifyChatCreatedAsync_SendsChatCreatedToRecipient()
     {
         // Arrange
         var hubContextMock = new Mock<IHubContext<ChatHub>>();
@@ -565,56 +565,26 @@ public class ChatHubTests
             .Returns(hubClientsMock.Object);
 
         var chatId = Guid.NewGuid();
-        var recipientIds = new[] { Guid.NewGuid(), Guid.NewGuid() };
-        var dto = new BasicApi.Models.Dto.Chat.ChatCreatedEventDto
+        var recipientId = Guid.NewGuid();
+        var item = new BasicApi.Models.Dto.Chat.ChatListItemDto
         {
+            ChatId = chatId,
             Type = "private",
             Title = null,
-            CompanionName = "Alice"
+            CompanionId = Guid.NewGuid(),
+            CompanionName = "Alice",
+            CompanionUsername = "alice"
         };
 
         // Act
-        await ChatHub.NotifyChatCreatedAsync(hubContextMock.Object, chatId, dto, recipientIds);
+        await ChatHub.NotifyChatCreatedAsync(hubContextMock.Object, recipientId, item);
 
-        // Assert
-        Assert.Equal(2, clientProxy.Invocations.Count);
-        Assert.All(clientProxy.Invocations, inv =>
-        {
-            Assert.Equal("ChatCreated", inv.Method);
-            Assert.Equal(2, inv.Args.Length);
-            Assert.Equal(chatId, inv.Args[0]);
-            Assert.Same(dto, inv.Args[1]);
-        });
+        // Assert — событие несёт один аргумент: готовый элемент списка чатов
+        var inv = Assert.Single(clientProxy.Invocations);
+        Assert.Equal("ChatCreated", inv.Method);
+        Assert.Same(item, Assert.Single(inv.Args));
 
-        foreach (var id in recipientIds)
-        {
-            hubClientsMock.Verify(c => c.User(id.ToString()), Times.Once);
-        }
-    }
-
-    [Fact]
-    public async Task NotifyChatCreatedAsync_EmptyRecipients_SendsNothing()
-    {
-        // Arrange
-        var hubContextMock = new Mock<IHubContext<ChatHub>>();
-        var hubClientsMock = new Mock<IHubClients>();
-        var clientProxy = new TestClientProxy();
-
-        hubClientsMock
-            .Setup(c => c.User(It.IsAny<string>()))
-            .Returns(clientProxy);
-
-        hubContextMock
-            .Setup(c => c.Clients)
-            .Returns(hubClientsMock.Object);
-
-        var dto = new BasicApi.Models.Dto.Chat.ChatCreatedEventDto { Type = "private" };
-
-        // Act
-        await ChatHub.NotifyChatCreatedAsync(hubContextMock.Object, Guid.NewGuid(), dto, []);
-
-        // Assert
-        Assert.Empty(clientProxy.Invocations);
+        hubClientsMock.Verify(c => c.User(recipientId.ToString()), Times.Once);
     }
 
     #endregion

@@ -4,6 +4,7 @@ using BasicApi.Middleware.Exceptions;
 using BasicApi.Models.Dto.Chat;
 using BasicApi.Models.Dto.Message;
 using BasicApi.Services;
+using BasicApi.Storage.Dto;
 using BasicApi.Storage.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
@@ -45,8 +46,24 @@ public class ChatsHandlerTests
             _hubContextMock.Object);
     }
 
+    /// <summary>
+    /// Строка list-item'а приватного чата так, как её вернул бы репозиторий
+    /// для конкретного зрителя (companion — всегда «тот, другой» участник).
+    /// </summary>
+    private static ChatListResult PrivateRow(Guid chatId, Guid companionId, string companionName, string companionUsername) => new()
+    {
+        ChatId = chatId,
+        Type = "private",
+        Title = null,
+        CompanionId = companionId,
+        CompanionName = companionName,
+        CompanionUsername = companionUsername,
+        UnreadCount = 0,
+        CreatedAt = DateTime.UtcNow
+    };
+
     [Fact]
-    public async Task CreatePrivateChatAsync_ExistingChat_ReturnsOk()
+    public async Task CreatePrivateChatAsync_ExistingChat_ReturnsOkWithChatListItem()
     {
         // Arrange
         var userId = Guid.NewGuid();
@@ -57,13 +74,20 @@ public class ChatsHandlerTests
             .Setup(r => r.GetPrivateChatAsync(userId, otherUserId))
             .ReturnsAsync(new BasicApi.Storage.Entities.Chat { Id = existingChatId });
 
+        _chatRepoMock
+            .Setup(r => r.GetChatListItemAsync(existingChatId, userId))
+            .ReturnsAsync(PrivateRow(existingChatId, otherUserId, "Alice", "alice"));
+
         // Act
         var result = await _handler.CreatePrivateChatAsync(userId, otherUserId);
 
-        // Assert
+        // Assert — отдаём полноценный элемент списка, а не голый chatId
         var okResult = Assert.IsType<OkObjectResult>(result);
-        var response = Assert.IsType<CreateChatResponseDto>(okResult.Value);
+        var response = Assert.IsType<ChatListItemDto>(okResult.Value);
         Assert.Equal(existingChatId, response.ChatId);
+        Assert.Equal(otherUserId, response.CompanionId);
+        Assert.Equal("Alice", response.CompanionName);
+        Assert.Equal("alice", response.CompanionUsername);
 
         _chatRepoMock.Verify(r => r.CreateAsync(It.IsAny<BasicApi.Storage.Entities.Chat>(), It.IsAny<Guid[]>()), Times.Never);
     }
@@ -169,27 +193,65 @@ public class ChatsHandlerTests
 
     // ========== Chat Created Event Tests ==========
 
+    /// <summary>
+    /// Настраивает создание нового приватного чата: репозиторий отдаёт разные
+    /// list-item'ы создателю и получателю (у каждого свой companion).
+    /// </summary>
+    private Guid ArrangeNewPrivateChat(Guid creatorId, Guid recipientId)
+    {
+        var chatId = Guid.NewGuid();
+
+        _chatRepoMock
+            .Setup(r => r.GetPrivateChatAsync(creatorId, recipientId))
+            .ReturnsAsync((BasicApi.Storage.Entities.Chat?)null);
+
+        _chatRepoMock
+            .Setup(r => r.CreateAsync(It.IsAny<BasicApi.Storage.Entities.Chat>(), It.IsAny<Guid[]>()))
+            .ReturnsAsync(chatId);
+
+        // Для создателя companion — получатель
+        _chatRepoMock
+            .Setup(r => r.GetChatListItemAsync(chatId, creatorId))
+            .ReturnsAsync(PrivateRow(chatId, recipientId, "Alice", "alice"));
+
+        // Для получателя companion — создатель
+        _chatRepoMock
+            .Setup(r => r.GetChatListItemAsync(chatId, recipientId))
+            .ReturnsAsync(PrivateRow(chatId, creatorId, "Bob", "bob"));
+
+        return chatId;
+    }
+
+    [Fact]
+    public async Task CreatePrivateChatAsync_NewChat_ReturnsCreatedWithChatListItem()
+    {
+        // Arrange
+        var userId = Guid.NewGuid();
+        var otherUserId = Guid.NewGuid();
+        var chatId = ArrangeNewPrivateChat(userId, otherUserId);
+
+        // Act
+        var result = await _handler.CreatePrivateChatAsync(userId, otherUserId);
+
+        // Assert — создатель сразу получает готовую карточку чата
+        var created = Assert.IsType<CreatedResult>(result);
+        var item = Assert.IsType<ChatListItemDto>(created.Value);
+        Assert.Equal(chatId, item.ChatId);
+        Assert.Equal("private", item.Type);
+        Assert.Equal(otherUserId, item.CompanionId);
+        Assert.Equal("Alice", item.CompanionName);
+        Assert.Equal("alice", item.CompanionUsername);
+        Assert.Null(item.LastMessage);
+        Assert.Equal(0, item.UnreadCount);
+    }
+
     [Fact]
     public async Task CreatePrivateChatAsync_NewChat_SendsChatCreatedToOtherUser()
     {
         // Arrange
         var userId = Guid.NewGuid();
         var otherUserId = Guid.NewGuid();
-        var otherUserName = "Alice";
-
-        _chatRepoMock
-            .Setup(r => r.GetPrivateChatAsync(userId, otherUserId))
-            .ReturnsAsync((BasicApi.Storage.Entities.Chat?)null);
-
-        BasicApi.Storage.Entities.Chat? capturedChat = null;
-        _chatRepoMock
-            .Setup(r => r.CreateAsync(It.IsAny<BasicApi.Storage.Entities.Chat>(), It.IsAny<Guid[]>()))
-            .Callback<BasicApi.Storage.Entities.Chat, Guid[]>((chat, _) => capturedChat = chat)
-            .ReturnsAsync(() => capturedChat!.Id);
-
-        _chatRepoMock
-            .Setup(r => r.GetUserNameAsync(otherUserId))
-            .ReturnsAsync(otherUserName);
+        var chatId = ArrangeNewPrivateChat(userId, otherUserId);
 
         // Act
         var result = await _handler.CreatePrivateChatAsync(userId, otherUserId);
@@ -197,20 +259,33 @@ public class ChatsHandlerTests
         // Assert
         Assert.IsType<CreatedResult>(result);
 
-        // Hub: ChatCreated отправлен другому участнику
+        // Hub: ChatCreated отправлен другому участнику одним аргументом — ChatListItemDto
         _hubClientsMock.Verify(c => c.User(otherUserId.ToString()), Times.Once);
         var inv = Assert.Single(_clientProxy.Invocations);
         Assert.Equal("ChatCreated", inv.Method);
-        Assert.Equal(2, inv.Args.Length);
-
-        // Первый аргумент — chatId
-        Assert.Equal(capturedChat!.Id, inv.Args[0]);
-
-        // Второй аргумент — ChatCreatedEventDto с информацией о чате
-        var payload = Assert.IsType<ChatCreatedEventDto>(inv.Args[1]);
+        var payload = Assert.IsType<ChatListItemDto>(Assert.Single(inv.Args));
+        Assert.Equal(chatId, payload.ChatId);
         Assert.Equal("private", payload.Type);
         Assert.Null(payload.Title);
-        Assert.Equal(otherUserName, payload.CompanionName);
+    }
+
+    [Fact]
+    public async Task CreatePrivateChatAsync_NewChat_EventCompanionIsCreatorNotRecipient()
+    {
+        // Arrange
+        var userId = Guid.NewGuid();
+        var otherUserId = Guid.NewGuid();
+        ArrangeNewPrivateChat(userId, otherUserId);
+
+        // Act
+        await _handler.CreatePrivateChatAsync(userId, otherUserId);
+
+        // Assert — регрессия: получателю нельзя слать его самого в качестве собеседника
+        var payload = Assert.IsType<ChatListItemDto>(Assert.Single(Assert.Single(_clientProxy.Invocations).Args));
+        Assert.Equal(userId, payload.CompanionId);
+        Assert.NotEqual(otherUserId, payload.CompanionId);
+        Assert.Equal("Bob", payload.CompanionName);
+        Assert.Equal("bob", payload.CompanionUsername);
     }
 
     [Fact]
@@ -224,6 +299,10 @@ public class ChatsHandlerTests
         _chatRepoMock
             .Setup(r => r.GetPrivateChatAsync(userId, otherUserId))
             .ReturnsAsync(new BasicApi.Storage.Entities.Chat { Id = existingChatId });
+
+        _chatRepoMock
+            .Setup(r => r.GetChatListItemAsync(existingChatId, userId))
+            .ReturnsAsync(PrivateRow(existingChatId, otherUserId, "Alice", "alice"));
 
         // Act
         var result = await _handler.CreatePrivateChatAsync(userId, otherUserId);
@@ -239,21 +318,7 @@ public class ChatsHandlerTests
         // Arrange
         var userId = Guid.NewGuid();
         var otherUserId = Guid.NewGuid();
-        var otherUserName = "Bob";
-
-        _chatRepoMock
-            .Setup(r => r.GetPrivateChatAsync(userId, otherUserId))
-            .ReturnsAsync((BasicApi.Storage.Entities.Chat?)null);
-
-        BasicApi.Storage.Entities.Chat? capturedChat = null;
-        _chatRepoMock
-            .Setup(r => r.CreateAsync(It.IsAny<BasicApi.Storage.Entities.Chat>(), It.IsAny<Guid[]>()))
-            .Callback<BasicApi.Storage.Entities.Chat, Guid[]>((chat, _) => capturedChat = chat)
-            .ReturnsAsync(() => capturedChat!.Id);
-
-        _chatRepoMock
-            .Setup(r => r.GetUserNameAsync(otherUserId))
-            .ReturnsAsync(otherUserName);
+        ArrangeNewPrivateChat(userId, otherUserId);
 
         // Act
         await _handler.CreatePrivateChatAsync(userId, otherUserId);
@@ -261,6 +326,55 @@ public class ChatsHandlerTests
         // Assert — событие уходит ТОЛЬКО другому пользователю, НЕ создателю
         _hubClientsMock.Verify(c => c.User(userId.ToString()), Times.Never);
         _hubClientsMock.Verify(c => c.User(otherUserId.ToString()), Times.Once);
+    }
+
+    // ========== GET /api/chats/{chatId}/item ==========
+
+    [Fact]
+    public async Task GetChatListItemAsync_WhenMember_ReturnsOkWithItem()
+    {
+        // Arrange
+        var userId = Guid.NewGuid();
+        var chatId = Guid.NewGuid();
+        var companionId = Guid.NewGuid();
+
+        _chatServiceMock
+            .Setup(s => s.GetChatListItemAsync(chatId, userId))
+            .ReturnsAsync(new ChatListItemDto
+            {
+                ChatId = chatId,
+                Type = "private",
+                CompanionId = companionId,
+                CompanionName = "Alice",
+                CompanionUsername = "alice"
+            });
+
+        // Act
+        var result = await _handler.GetChatListItemAsync(chatId, userId);
+
+        // Assert
+        var okResult = Assert.IsType<OkObjectResult>(result);
+        var item = Assert.IsType<ChatListItemDto>(okResult.Value);
+        Assert.Equal(chatId, item.ChatId);
+        Assert.Equal(companionId, item.CompanionId);
+    }
+
+    [Fact]
+    public async Task GetChatListItemAsync_WhenNotMember_ThrowsForbidden()
+    {
+        // Arrange
+        var userId = Guid.NewGuid();
+        var chatId = Guid.NewGuid();
+
+        _chatServiceMock
+            .Setup(s => s.GetChatListItemAsync(chatId, userId))
+            .ThrowsAsync(new ForbiddenException("User is not a member of this chat", "NOT_A_MEMBER"));
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<ForbiddenException>(() =>
+            _handler.GetChatListItemAsync(chatId, userId));
+
+        Assert.Equal("NOT_A_MEMBER", ex.ErrorCode);
     }
 
     // ========== Search Chats ==========
