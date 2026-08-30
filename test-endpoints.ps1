@@ -16,7 +16,8 @@ function Test-Endpoint {
         [string]$Body = $null,
         [string]$Token = $null,
         [int]$ExpectedStatus = 200,
-        [scriptblock]$Validate = $null
+        [scriptblock]$Validate = $null,
+        [int]$RetriesLeft = 3
     )
 
     Write-Host "`n=== $Method $Url ===" -ForegroundColor Cyan
@@ -68,6 +69,16 @@ function Test-Endpoint {
         }
     } catch {
         $statusCode = $_.Exception.Response.StatusCode.value__
+
+        # The API rate-limits per IP (60 req/min, 5/min on auth). Hitting it while
+        # running suites back to back is the limiter working, not a broken endpoint.
+        if ($statusCode -eq 429 -and $ExpectedStatus -ne 429 -and $RetriesLeft -gt 0) {
+            Write-Host "  [rate-limited] waiting 61s" -ForegroundColor DarkYellow
+            Start-Sleep -Seconds 61
+            return Test-Endpoint -Name $Name -Method $Method -Url $Url -Body $Body -Token $Token `
+                -ExpectedStatus $ExpectedStatus -Validate $Validate -RetriesLeft ($RetriesLeft - 1)
+        }
+
         if ($statusCode -eq $ExpectedStatus) {
             Write-Host "  [PASS] HTTP $statusCode (expected error)" -ForegroundColor Green
             $script:Passed++

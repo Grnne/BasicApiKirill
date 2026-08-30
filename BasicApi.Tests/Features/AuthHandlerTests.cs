@@ -13,13 +13,33 @@ public class AuthHandlerTests
 {
     private readonly Mock<IUserRepository> _userRepoMock;
     private readonly Mock<IJwtService> _jwtServiceMock;
+    private readonly Mock<ISessionService> _sessionServiceMock;
     private readonly AuthHandler _handler;
 
     public AuthHandlerTests()
     {
         _userRepoMock = new Mock<IUserRepository>();
         _jwtServiceMock = new Mock<IJwtService>();
-        _handler = new AuthHandler(_userRepoMock.Object, _jwtServiceMock.Object);
+        _sessionServiceMock = new Mock<ISessionService>();
+
+        // Сессии проверяются отдельно в SessionServiceTests; здесь достаточно,
+        // чтобы выдача пары повторяла данные пользователя и токены из IJwtService.
+        _sessionServiceMock
+            .Setup(s => s.IssueForUserAsync(
+                It.IsAny<User>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((User u, string? _, string? __, CancellationToken ___) => new AuthResponseDto
+            {
+                UserId = u.Id,
+                Username = u.Username,
+                Email = u.Email,
+                DisplayName = u.DisplayName,
+                Token = _jwtServiceMock.Object.GenerateToken(u.Id, u.Username, u.Email),
+                ExpiresAt = _jwtServiceMock.Object.GetExpiryDate(),
+                RefreshToken = "refresh-token",
+                RefreshTokenExpiresAt = DateTime.UtcNow.AddDays(30)
+            });
+
+        _handler = new AuthHandler(_userRepoMock.Object, _jwtServiceMock.Object, _sessionServiceMock.Object);
     }
 
     [Fact]
@@ -222,5 +242,121 @@ public class AuthHandlerTests
         var createdResult = Assert.IsType<CreatedResult>(result);
         var response = Assert.IsType<AuthResponseDto>(createdResult.Value);
         Assert.Equal("user_no_display", response.DisplayName);
+    }
+
+    // ========== Sessions / refresh tokens ==========
+
+    [Fact]
+    public async Task LoginAsync_ValidCredentials_ReturnsRefreshTokenToo()
+    {
+        // Arrange
+        var password = "correct-password";
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            Username = "testuser",
+            Email = "test@example.com",
+            DisplayName = "Test User",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
+            IsActive = true
+        };
+
+        _userRepoMock
+            .Setup(r => r.GetByUsernameOrEmailAsync("testuser", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(user);
+
+        // Act
+        var result = await _handler.LoginAsync(new LoginRequestDto
+        {
+            UsernameOrEmail = "testuser",
+            Password = password
+        }, "android", "1.2.3.4");
+
+        // Assert
+        var okResult = Assert.IsType<OkObjectResult>(result);
+        var response = Assert.IsType<AuthResponseDto>(okResult.Value);
+        Assert.Equal("refresh-token", response.RefreshToken);
+        Assert.True(response.RefreshTokenExpiresAt > DateTime.UtcNow);
+
+        _sessionServiceMock.Verify(
+            s => s.IssueForUserAsync(user, "android", "1.2.3.4", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task LoginAsync_InactiveUser_ThrowsUnauthorized()
+    {
+        // Arrange — правильный пароль не должен пускать заблокированный аккаунт
+        var password = "correct-password";
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            Username = "banned",
+            Email = "banned@example.com",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
+            IsActive = false
+        };
+
+        _userRepoMock
+            .Setup(r => r.GetByUsernameOrEmailAsync("banned", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(user);
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<UnauthorizedException>(() =>
+            _handler.LoginAsync(new LoginRequestDto { UsernameOrEmail = "banned", Password = password }));
+
+        Assert.Equal("USER_INACTIVE", ex.ErrorCode);
+        _sessionServiceMock.Verify(
+            s => s.IssueForUserAsync(It.IsAny<User>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task LoginAsync_ValidCredentials_RecordsLastLogin()
+    {
+        // Arrange
+        var password = "correct-password";
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            Username = "testuser",
+            Email = "test@example.com",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
+            IsActive = true
+        };
+
+        _userRepoMock
+            .Setup(r => r.GetByUsernameOrEmailAsync("testuser", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(user);
+
+        // Act
+        await _handler.LoginAsync(new LoginRequestDto { UsernameOrEmail = "testuser", Password = password });
+
+        // Assert
+        _userRepoMock.Verify(
+            r => r.UpdateLastLoginAsync(user.Id, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RegisterAsync_DuplicateKeyFromDatabase_ThrowsConflictNotServerError()
+    {
+        // Arrange — гонка двух регистраций: проверки прошли, уникальный индекс поймал
+        _userRepoMock
+            .Setup(r => r.GetByUsernameOrEmailAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((User?)null);
+
+        _userRepoMock
+            .Setup(r => r.CreateAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new BasicApi.Storage.Exceptions.DuplicateKeyException("duplicate"));
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<ConflictException>(() =>
+            _handler.RegisterAsync(new RegisterRequestDto
+            {
+                Username = "racer",
+                Email = "racer@example.com",
+                Password = "secret123"
+            }));
+
+        Assert.Equal("USER_ALREADY_EXISTS", ex.ErrorCode);
     }
 }

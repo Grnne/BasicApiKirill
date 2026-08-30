@@ -1,11 +1,19 @@
-﻿using BasicApi.Storage.Entities;
+using BasicApi.Storage.Entities;
 
 namespace BasicApi.Storage.Interfaces;
 
 public interface IUserRepository
 {
     Task<User?> GetByUsernameOrEmailAsync(string usernameOrEmail, CancellationToken ct = default);
+    /// <summary>
+    /// Inserts a user. Throws <see cref="Exceptions.DuplicateKeyException"/> when the
+    /// username or email is already taken (unique constraint), so a registration race
+    /// surfaces as 409 rather than 500.
+    /// </summary>
     Task<Guid> CreateAsync(User user, CancellationToken ct = default);
+
+    /// <summary>Records a successful sign-in.</summary>
+    Task UpdateLastLoginAsync(Guid userId, DateTime lastLoginAt, CancellationToken ct = default);
 
     Task<Guid?> GetIdByUsernameOrEmailAsync(string usernameOrEmail, CancellationToken ct = default);
 

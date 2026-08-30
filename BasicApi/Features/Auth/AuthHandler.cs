@@ -1,7 +1,8 @@
-﻿using BasicApi.Middleware.Exceptions;
+using BasicApi.Middleware.Exceptions;
 using BasicApi.Models.Dto.Auth;
 using BasicApi.Services;
 using BasicApi.Storage.Entities;
+using BasicApi.Storage.Exceptions;
 using BasicApi.Storage.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 
@@ -9,39 +10,37 @@ namespace BasicApi.Features.Auth;
 
 public class AuthHandler(
     IUserRepository userRepository,
-    IJwtService jwtService)
+    IJwtService jwtService,
+    ISessionService sessionService)
 {
     public async Task<IActionResult> LoginAsync(
-    LoginRequestDto request)
+        LoginRequestDto request, string? userAgent = null, string? ip = null, CancellationToken ct = default)
     {
-        var user = await userRepository.GetByUsernameOrEmailAsync(request.UsernameOrEmail);
+        var user = await userRepository.GetByUsernameOrEmailAsync(request.UsernameOrEmail, ct);
 
         if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
             throw new UnauthorizedException("Invalid username/email or password", "INVALID_CREDENTIALS");
 
-        var token = jwtService.GenerateToken(user.Id, user.Username, user.Email);
+        // Деактивированный аккаунт не должен входить, даже зная правильный пароль.
+        if (!user.IsActive)
+            throw new UnauthorizedException("Account is deactivated", "USER_INACTIVE");
 
-        return new OkObjectResult(new AuthResponseDto
-        {
-            UserId = user.Id,
-            Username = user.Username,
-            Email = user.Email,
-            DisplayName = user.DisplayName,
-            Token = token,
-            ExpiresAt = jwtService.GetExpiryDate()
-        });
+        await userRepository.UpdateLastLoginAsync(user.Id, DateTime.UtcNow, ct);
+
+        var response = await sessionService.IssueForUserAsync(user, userAgent, ip, ct);
+        return new OkObjectResult(response);
     }
 
     public async Task<IActionResult> RegisterAsync(
-        RegisterRequestDto request)
+        RegisterRequestDto request, string? userAgent = null, string? ip = null, CancellationToken ct = default)
     {
-        var existingUser = await userRepository.GetByUsernameOrEmailAsync(request.Username);
+        var existingUser = await userRepository.GetByUsernameOrEmailAsync(request.Username, ct);
 
         if (existingUser != null)
             throw new ConflictException("Username already exists", "USERNAME_TAKEN");
 
         // Проверка уникальности email
-        existingUser = await userRepository.GetByUsernameOrEmailAsync(request.Email);
+        existingUser = await userRepository.GetByUsernameOrEmailAsync(request.Email, ct);
 
         if (existingUser != null)
             throw new ConflictException("Email already exists", "EMAIL_TAKEN");
@@ -57,33 +56,55 @@ public class AuthHandler(
             CreatedAt = DateTime.UtcNow
         };
 
-        var userId = await userRepository.CreateAsync(user);
-        var token = jwtService.GenerateToken(userId, user.Username, user.Email);
-
-        return new CreatedResult(string.Empty, new AuthResponseDto
+        try
         {
-            UserId = userId,
-            Username = user.Username,
-            Email = user.Email,
-            DisplayName = user.DisplayName,
-            Token = token,
-            ExpiresAt = jwtService.GetExpiryDate()
-        });
+            user.Id = await userRepository.CreateAsync(user, ct);
+        }
+        catch (DuplicateKeyException)
+        {
+            // Проверки выше не атомарны — параллельная регистрация могла успеть
+            // раньше. Уникальный индекс поймал, отвечаем 409, а не 500.
+            throw new ConflictException("Username or email already exists", "USER_ALREADY_EXISTS");
+        }
+
+        var response = await sessionService.IssueForUserAsync(user, userAgent, ip, ct);
+        return new CreatedResult(string.Empty, response);
     }
 
     /// <summary>
-    /// Logs out the user. Currently a no-op (stateless JWT).
-    /// Future: add token blacklist, invalidate refresh tokens, notify SignalR.
+    /// Exchanges a refresh token for a fresh access/refresh pair.
     /// </summary>
-    public Task<IActionResult> LogoutAsync(Guid userId)
+    public async Task<IActionResult> RefreshAsync(
+        string refreshToken, string? userAgent = null, string? ip = null, CancellationToken ct = default)
     {
-        // Stateless JWT — nothing to invalidate server-side.
-        // Client should discard the token.
-        return Task.FromResult<IActionResult>(new OkResult());
+        var response = await sessionService.RefreshAsync(refreshToken, userAgent, ip, ct);
+        return new OkObjectResult(response);
     }
 
     /// <summary>
-    /// Validates whether the given JWT token is still valid.
+    /// Ends the session behind the supplied refresh token.
+    /// Idempotent: an unknown or already-revoked token still returns 200, so the
+    /// endpoint cannot be used to probe which tokens exist.
+    /// </summary>
+    public async Task<IActionResult> LogoutAsync(string? refreshToken, CancellationToken ct = default)
+    {
+        await sessionService.RevokeAsync(refreshToken, ct);
+        return new OkResult();
+    }
+
+    /// <summary>
+    /// Ends every session of the current user — "log out on all devices".
+    /// The current access token keeps working until it expires (minutes), but no
+    /// new one can be obtained.
+    /// </summary>
+    public async Task<IActionResult> LogoutAllAsync(Guid userId, CancellationToken ct = default)
+    {
+        await sessionService.RevokeAllForUserAsync(userId, ct);
+        return new OkResult();
+    }
+
+    /// <summary>
+    /// Validates whether the given JWT access token is still valid.
     /// Returns userId, username and isValid flag.
     /// </summary>
     public Task<IActionResult> ValidateTokenAsync(string token)

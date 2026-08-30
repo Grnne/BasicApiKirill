@@ -1,7 +1,9 @@
-﻿using System.Data;
+using System.Data;
 using BasicApi.Storage.Entities;
+using BasicApi.Storage.Exceptions;
 using BasicApi.Storage.Interfaces;
 using Dapper;
+using Npgsql;
 
 namespace BasicApi.Storage.Repositories;
 
@@ -35,7 +37,27 @@ public class UserRepository(IDbConnectionFactory connectionFactory) : IUserRepos
             RETURNING id";
 
         using var connection = connectionFactory.CreateConnection();
-        return await connection.ExecuteScalarAsync<Guid>(sql, user);
+        try
+        {
+            return await connection.ExecuteScalarAsync<Guid>(
+                new CommandDefinition(sql, user, cancellationToken: ct));
+        }
+        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation)
+        {
+            // Две параллельные регистрации на один username/email: проверки в хендлере
+            // не атомарны, ловит уникальный индекс. Переводим в доменную ошибку,
+            // чтобы клиент получил 409, а не 500.
+            throw new DuplicateKeyException("User with this username or email already exists", ex);
+        }
+    }
+
+    public async Task UpdateLastLoginAsync(Guid userId, DateTime lastLoginAt, CancellationToken ct = default)
+    {
+        const string sql = "UPDATE users SET last_login_at = @lastLoginAt WHERE id = @userId";
+
+        using var connection = connectionFactory.CreateConnection();
+        await connection.ExecuteAsync(new CommandDefinition(
+            sql, new { userId, lastLoginAt }, cancellationToken: ct));
     }
 
     public async Task<Guid?> GetIdByUsernameOrEmailAsync(string usernameOrEmail, CancellationToken ct = default)
