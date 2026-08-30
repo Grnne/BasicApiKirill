@@ -11,7 +11,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 	ProjectSection(SolutionItems) = preProject
 		.env = .env
 		readme.md = readme.md
-		test-client.html = test-client.html
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BasicApi.Storage", "BasicApi.Storage\BasicApi.Storage.csproj", "{2E9AC838-5CF3-4B9C-BF8A-0BB9FB45CE85}"

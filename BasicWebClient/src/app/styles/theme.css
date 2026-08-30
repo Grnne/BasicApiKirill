@@ -1,0 +1,89 @@
+/* ═══════════════════════════════════════════════════════════
+   Тема: чёрный + зелёный. Все цвета живут здесь, в переменных.
+   В компонентах — только var(--...), чтобы палитра менялась в одном месте.
+   ═══════════════════════════════════════════════════════════ */
+
+:root {
+  /* Поверхности: от самой тёмной к самой светлой */
+  --bg: #0a0c0a;
+  --surface: #11141180;
+  --surface-solid: #121512;
+  --surface-hover: #1a1e1a;
+  --border: #23291f;
+
+  /* Акцент */
+  --accent: #00e676;
+  --accent-dim: #00b25c;
+  --accent-soft: #00e6761f;
+
+  /* Текст */
+  --text: #dfe7df;
+  --text-dim: #8a978a;
+  --text-faint: #5a655a;
+
+  /* Состояния */
+  --danger: #ff5252;
+  --warning: #ffb300;
+
+  --radius: 8px;
+  --radius-sm: 5px;
+
+  --font: ui-sans-serif, system-ui, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', Consolas, monospace;
+
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Видимый фокус — не убираем outline, а делаем его в цвет темы:
+   без него с клавиатуры пользоваться приложением невозможно. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* Скроллбары в тон теме (Chrome/Edge). */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-dim);
+}

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      Ограничиваем, откуда странице можно грузить код и куда ходить.
+      Даже если XSS случится, скрипт не сможет отправить токен на чужой домен.
+      'unsafe-inline' для стилей нужен потому, что Vue вставляет стили тегом
+      <style>; для скриптов такого послабления нет — это главное здесь.
+      ws:/wss: — соединение с хабом и HMR-канал Vite при разработке.
+      frame-ancestors здесь нет намеренно: в <meta> он игнорируется,
+      от вставки в чужой iframe защищает заголовок X-Frame-Options с сервера.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:; base-uri 'none'; object-src 'none'"
+    />
+    <title>Basic Chat</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/app/main.ts"></script>
+  </body>
+</html>

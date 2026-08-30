@@ -1,0 +1,27 @@
+{
+  // Один конфиг на весь проект — так проще: нет ссылок между
+  // под-проектами и не надо гадать, какой файл каким правилом накрыт.
+  "extends": "@vue/tsconfig/tsconfig.dom.json",
+  "include": ["src/**/*.ts", "src/**/*.vue", "vite.config.ts"],
+  "compilerOptions": {
+    "types": ["node", "vite/client"],
+
+    // Ничего не компилируем этим конфигом: сборку делает Vite,
+    // а tsc/vue-tsc работают только как проверка типов.
+    "noEmit": true,
+
+    // @/... вместо ../../../shared/api — путь от src/.
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    },
+
+    // ── Строгость ──
+    // strict уже включён в @vue/tsconfig. Добавляем то, что реально ловит баги:
+    "noUncheckedIndexedAccess": true,   // arr[0] имеет тип T | undefined
+    "exactOptionalPropertyTypes": true, // { a?: string } нельзя присвоить undefined явно
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  }
+}

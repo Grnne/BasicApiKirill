@@ -369,3 +369,6 @@ FodyWeavers.xsd
 .env.*
 !.env.prod.example
 !.env.example
+
+# Собранный фронтенд (Vite -> BasicApi/wwwroot/client)
+BasicApi/wwwroot/client/
