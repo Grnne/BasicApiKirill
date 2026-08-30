@@ -33,6 +33,7 @@ docker-compose down
 | SignalR Hub | `/signalr-docs` | Документация по SignalR хабу (методы и события) |
 | SignalR endpoint | `/hubs/chat` | WebSocket endpoint для подключения к чату |
 | Изменения контрактов | [docs/api-contract-changes.md](docs/api-contract-changes.md) | Что поменялось для клиентов (breaking changes) |
+| Пропускная способность | [docs/capacity-and-limits.md](docs/capacity-and-limits.md) | Сколько выдержит сервер, что упрётся первым |
 
 ## SignalR Hub (`/hubs/chat`)
 
