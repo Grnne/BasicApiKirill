@@ -66,4 +66,17 @@ public class MigrationTests(PostgresFixture db)
 
         Assert.True(exists, $"{table}.{index} is missing");
     }
+
+    [Fact]
+    public async Task Schema_HasNoTimestampsWithoutTimeZone()
+    {
+        // timestamp без зоны зависит от часового пояса сессии базы (см. миграцию 8).
+        await using var connection = new NpgsqlConnection(db.ConnectionString);
+        var columns = await connection.QueryAsync<string>(@"
+            SELECT table_name || '.' || column_name FROM information_schema.columns
+            WHERE table_schema = 'public' AND data_type = 'timestamp without time zone'
+              AND table_name <> 'VersionInfo'");
+
+        Assert.Empty(columns);
+    }
 }

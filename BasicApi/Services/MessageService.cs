@@ -131,9 +131,6 @@ public sealed class MessageService(
         }, ct);
 
         var message = Map(created);
-        // Колонка пока timestamp без зоны: время из базы приходит без признака UTC,
-        // а клиент в событии всегда получал его с "Z". Уйдёт вместе с переходом на timestamptz.
-        message.CreatedAt = DateTime.SpecifyKind(message.CreatedAt, DateTimeKind.Utc);
 
         // Сообщение уже сохранено — событие отправляем, даже если клиент ушёл.
         await events.MessageCreatedAsync(message, memberIds, CancellationToken.None);
