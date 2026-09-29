@@ -43,23 +43,41 @@ public class ChatRepository(IDbConnectionFactory connectionFactory) : IChatRepos
         return await connection.QueryFirstOrDefaultAsync<Chat>(sql, new { chatId });
     }
 
-    public async Task<Chat?> GetPrivateChatAsync(Guid userId1, Guid userId2)
-    {
-        const string sql = @"
-            SELECT 
-                c.id AS Id, 
-                c.title AS Title, 
-                c.type AS Type, 
-                c.created_at AS CreatedAt
-            FROM chats c
-            INNER JOIN chat_members cm1 ON c.id = cm1.chat_id
-            INNER JOIN chat_members cm2 ON c.id = cm2.chat_id
-            WHERE c.type = 'private' 
-                AND cm1.user_id = @userId1 
-                AND cm2.user_id = @userId2";
+    /// <summary>Ключ пары для личного чата; порядок участников не важен.</summary>
+    private const string PrivateKeySql =
+        "LEAST(@userId, @otherUserId)::text || ':' || GREATEST(@userId, @otherUserId)::text";
 
+    public async Task<(Guid ChatId, bool Created)> GetOrCreatePrivateChatAsync(Guid userId, Guid otherUserId)
+    {
         using var connection = connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<Chat>(sql, new { userId1, userId2 });
+        connection.Open();
+        using var transaction = connection.BeginTransaction();
+
+        // Уникальный индекс по private_key решает гонку: параллельная вставка той же
+        // пары ждёт коммита первой и получает DO NOTHING, а не второй чат.
+        var chatId = Guid.NewGuid();
+        var inserted = await connection.QueryFirstOrDefaultAsync<Guid?>($@"
+            INSERT INTO chats (id, title, type, created_at, private_key)
+            VALUES (@chatId, NULL, 'private', @now, {PrivateKeySql})
+            ON CONFLICT (private_key) DO NOTHING
+            RETURNING id",
+            new { chatId, userId, otherUserId, now = DateTime.UtcNow }, transaction);
+
+        if (inserted is not null)
+        {
+            await connection.ExecuteAsync(@"
+                INSERT INTO chat_members (chat_id, user_id, joined_at)
+                VALUES (@chatId, @userId, @now), (@chatId, @otherUserId, @now)",
+                new { chatId, userId, otherUserId, now = DateTime.UtcNow }, transaction);
+            transaction.Commit();
+            return (chatId, true);
+        }
+
+        var existing = await connection.ExecuteScalarAsync<Guid>(
+            $"SELECT id FROM chats WHERE private_key = {PrivateKeySql}",
+            new { userId, otherUserId }, transaction);
+        transaction.Commit();
+        return (existing, false);
     }
 
     public async Task<Guid> CreateAsync(Chat chat, Guid[] memberIds)

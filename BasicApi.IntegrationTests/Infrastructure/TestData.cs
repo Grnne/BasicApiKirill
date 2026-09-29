@@ -31,8 +31,15 @@ public sealed class TestData(IDbConnectionFactory connectionFactory)
         return id;
     }
 
-    public Task<Guid> PrivateChatAsync(Guid a, Guid b, DateTime? createdAt = null) =>
-        ChatAsync("private", null, [a, b], createdAt);
+    public async Task<Guid> PrivateChatAsync(Guid a, Guid b, DateTime? createdAt = null)
+    {
+        var id = await ChatAsync("private", null, [a, b], createdAt);
+        using var connection = connectionFactory.CreateConnection();
+        await connection.ExecuteAsync(
+            "UPDATE chats SET private_key = LEAST(@a, @b)::text || ':' || GREATEST(@a, @b)::text WHERE id = @id",
+            new { id, a, b });
+        return id;
+    }
 
     public Task<Guid> GroupChatAsync(string title, Guid[] members, DateTime? createdAt = null) =>
         ChatAsync("group", title, members, createdAt);

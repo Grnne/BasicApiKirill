@@ -30,6 +30,7 @@ public class ChatsHandlerCursorTests
         _handler = new ChatsHandler(
             _chatServiceMock.Object,
             _chatRepoMock.Object,
+            Mock.Of<IUserRepository>(),
             _msgRepoMock.Object,
             hubContextMock.Object);
     }

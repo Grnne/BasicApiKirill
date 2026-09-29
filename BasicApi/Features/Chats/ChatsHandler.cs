@@ -14,6 +14,7 @@ namespace BasicApi.Features.Chats;
 public class ChatsHandler(
     IChatService chatService,
     IChatRepository chatRepository,
+    IUserRepository userRepository,
     IMessageRepository messageRepository,
     IHubContext<ChatHub> hubContext)
 {
@@ -25,26 +26,21 @@ public class ChatsHandler(
 
     public async Task<IActionResult> CreatePrivateChatAsync(Guid currentUserId, Guid otherUserId)
     {
-                if (currentUserId == otherUserId)
+        if (currentUserId == otherUserId)
             throw new BadRequestException("Cannot create chat with yourself", "SELF_CHAT");
 
-        var existingChat = await chatRepository.GetPrivateChatAsync(currentUserId, otherUserId);
+        // Без этой проверки несуществующий собеседник ронял вставку на внешнем ключе (500).
+        // Деактивированный — тоже 404: писать ему некому.
+        var other = await userRepository.GetByIdAsync(otherUserId);
+        if (other is null || !other.IsActive)
+            throw new NotFoundException("User not found", "USER_NOT_FOUND");
 
-                if (existingChat != null)
-            return new OkObjectResult(await BuildChatListItemAsync(existingChat.Id, currentUserId));
+        var (chatId, created) = await chatRepository.GetOrCreatePrivateChatAsync(currentUserId, otherUserId);
 
-        var chat = new Chat
-        {
-            Id = Guid.NewGuid(),
-            Type = "private",
-            Title = null,
-            CreatedAt = DateTime.UtcNow
-        };
+        if (!created)
+            return new OkObjectResult(await BuildChatListItemAsync(chatId, currentUserId));
 
-        var memberIds = new[] { currentUserId, otherUserId };
-        var chatId = await chatRepository.CreateAsync(chat, memberIds);
-
-                // Уведомляем второго участника о новом чате через SignalR.
+        // Уведомляем второго участника о новом чате через SignalR.
         // Payload собирается ОТДЕЛЬНО для него: собеседник в его карточке — создатель чата.
         var recipientRow = await chatRepository.GetChatListItemAsync(chatId, otherUserId);
         if (recipientRow is not null)

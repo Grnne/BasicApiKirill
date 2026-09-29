@@ -15,7 +15,17 @@ public interface IChatRepository
     /// </summary>
     Task<ChatListResult?> GetChatListItemAsync(Guid chatId, Guid userId);
     Task<Chat?> GetByIdAsync(Guid chatId);
-    Task<Chat?> GetPrivateChatAsync(Guid userId1, Guid userId2);
+    /// <summary>
+    /// Returns the private chat of two users, creating it if there is none.
+    /// Atomic: concurrent calls for the same pair (in any order) end up with one chat,
+    /// and exactly one of them reports <c>Created = true</c>.
+    /// </summary>
+    Task<(Guid ChatId, bool Created)> GetOrCreatePrivateChatAsync(Guid userId, Guid otherUserId);
+
+    /// <summary>
+    /// Inserts a chat with its members. For group chats — private chats go through
+    /// <see cref="GetOrCreatePrivateChatAsync"/>, which guarantees one chat per pair.
+    /// </summary>
     Task<Guid> CreateAsync(Chat chat, Guid[] memberIds);
     Task<bool> IsMemberAsync(Guid chatId, Guid userId);
     Task<int> GetUnreadCountAsync(Guid chatId, Guid userId);

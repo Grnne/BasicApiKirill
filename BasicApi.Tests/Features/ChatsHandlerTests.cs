@@ -16,6 +16,7 @@ public class ChatsHandlerTests
 {
     private readonly Mock<IChatService> _chatServiceMock;
     private readonly Mock<IChatRepository> _chatRepoMock;
+    private readonly Mock<IUserRepository> _userRepoMock = new();
     private readonly Mock<IMessageRepository> _msgRepoMock;
     private readonly Mock<IHubContext<ChatHub>> _hubContextMock;
     private readonly Mock<IHubClients> _hubClientsMock;
@@ -39,9 +40,15 @@ public class ChatsHandlerTests
             .Setup(c => c.Clients)
             .Returns(_hubClientsMock.Object);
 
+        // По умолчанию любой собеседник существует и активен
+        _userRepoMock
+            .Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid id, CancellationToken _) => new BasicApi.Storage.Entities.User { Id = id, IsActive = true });
+
         _handler = new ChatsHandler(
             _chatServiceMock.Object,
             _chatRepoMock.Object,
+            _userRepoMock.Object,
             _msgRepoMock.Object,
             _hubContextMock.Object);
     }
@@ -71,8 +78,8 @@ public class ChatsHandlerTests
         var existingChatId = Guid.NewGuid();
 
         _chatRepoMock
-            .Setup(r => r.GetPrivateChatAsync(userId, otherUserId))
-            .ReturnsAsync(new BasicApi.Storage.Entities.Chat { Id = existingChatId });
+            .Setup(r => r.GetOrCreatePrivateChatAsync(userId, otherUserId))
+            .ReturnsAsync((existingChatId, false));
 
         _chatRepoMock
             .Setup(r => r.GetChatListItemAsync(existingChatId, userId))
@@ -88,8 +95,36 @@ public class ChatsHandlerTests
         Assert.Equal(otherUserId, response.CompanionId);
         Assert.Equal("Alice", response.CompanionName);
         Assert.Equal("alice", response.CompanionUsername);
+    }
 
-        _chatRepoMock.Verify(r => r.CreateAsync(It.IsAny<BasicApi.Storage.Entities.Chat>(), It.IsAny<Guid[]>()), Times.Never);
+    [Fact]
+    public async Task CreatePrivateChatAsync_UnknownCompanion_Returns404_InsteadOf500()
+    {
+        // Раньше вставка падала на внешнем ключе и клиент получал 500.
+        var otherUserId = Guid.NewGuid();
+        _userRepoMock
+            .Setup(r => r.GetByIdAsync(otherUserId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((BasicApi.Storage.Entities.User?)null);
+
+        var ex = await Assert.ThrowsAsync<NotFoundException>(() =>
+            _handler.CreatePrivateChatAsync(Guid.NewGuid(), otherUserId));
+
+        Assert.Equal("USER_NOT_FOUND", ex.ErrorCode);
+        _chatRepoMock.Verify(r => r.GetOrCreatePrivateChatAsync(It.IsAny<Guid>(), It.IsAny<Guid>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CreatePrivateChatAsync_DeactivatedCompanion_Returns404()
+    {
+        var otherUserId = Guid.NewGuid();
+        _userRepoMock
+            .Setup(r => r.GetByIdAsync(otherUserId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new BasicApi.Storage.Entities.User { Id = otherUserId, IsActive = false });
+
+        var ex = await Assert.ThrowsAsync<NotFoundException>(() =>
+            _handler.CreatePrivateChatAsync(Guid.NewGuid(), otherUserId));
+
+        Assert.Equal("USER_NOT_FOUND", ex.ErrorCode);
     }
 
     [Fact]
@@ -202,12 +237,8 @@ public class ChatsHandlerTests
         var chatId = Guid.NewGuid();
 
         _chatRepoMock
-            .Setup(r => r.GetPrivateChatAsync(creatorId, recipientId))
-            .ReturnsAsync((BasicApi.Storage.Entities.Chat?)null);
-
-        _chatRepoMock
-            .Setup(r => r.CreateAsync(It.IsAny<BasicApi.Storage.Entities.Chat>(), It.IsAny<Guid[]>()))
-            .ReturnsAsync(chatId);
+            .Setup(r => r.GetOrCreatePrivateChatAsync(creatorId, recipientId))
+            .ReturnsAsync((chatId, true));
 
         // Для создателя companion — получатель
         _chatRepoMock
@@ -297,8 +328,8 @@ public class ChatsHandlerTests
         var existingChatId = Guid.NewGuid();
 
         _chatRepoMock
-            .Setup(r => r.GetPrivateChatAsync(userId, otherUserId))
-            .ReturnsAsync(new BasicApi.Storage.Entities.Chat { Id = existingChatId });
+            .Setup(r => r.GetOrCreatePrivateChatAsync(userId, otherUserId))
+            .ReturnsAsync((existingChatId, false));
 
         _chatRepoMock
             .Setup(r => r.GetChatListItemAsync(existingChatId, userId))
