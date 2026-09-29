@@ -302,7 +302,8 @@
         <h2>📥 Server → Client (подписка на события)</h2>
 
         <div class="note">
-            <strong>Доставка — «хотя бы один раз».</strong> <code>MessageCreated</code>, <code>ChatListUpdated</code>
+            <strong>Доставка — «хотя бы один раз».</strong> <code>MessageCreated</code>, <code>ChatListUpdated</code>,
+            <code>MessageUpdated</code>, <code>MessageDeleted</code>, <code>ReactionsChanged</code>
             и <code>ChatCreated</code> сохраняются в той же транзакции, что и само изменение, и рассылаются
             из очереди: сбой сервера не теряет событие, но изредка оно может прийти дважды — сообщения
             различаются по <code>id</code> (или <code>chatId</code> + <code>seq</code>). Пропущенное, пока
@@ -340,6 +341,13 @@
                     <tr><td><code>isRead</code></td><td class="type-cell">boolean</td><td>Прочитано ли текущим пользователем</td></tr>
                     <tr><td><code>seq</code></td><td class="type-cell">long</td><td>Номер сообщения в чате: 1, 2, 3, … — сообщения упорядочены по нему</td></tr>
                     <tr><td><code>clientMessageId</code></td><td class="type-cell">Guid?</td><td>ID, который отправитель передал при REST-отправке; иначе <code>null</code></td></tr>
+                    <tr><td><code>type</code></td><td class="type-cell">string</td><td>Вид сообщения; пока всегда <code>"text"</code>. Незнакомый тип — показать заглушкой</td></tr>
+                    <tr><td><code>editedAt</code></td><td class="type-cell">DateTime?</td><td>Когда текст правили; <code>null</code> — не правили</td></tr>
+                    <tr><td><code>entities</code></td><td class="type-cell">MessageEntity[]</td><td>Разметка и упоминания поверх <code>text</code>, смещения в UTF-16; пусто — обычный текст</td></tr>
+                    <tr><td><code>reactions</code></td><td class="type-cell">{ emoji, count }[]</td><td>Реакции, самые популярные первыми</td></tr>
+                    <tr><td><code>myReaction</code></td><td class="type-cell">string?</td><td>Своя реакция — только в истории и поиске; в событиях <code>null</code></td></tr>
+                    <tr><td><code>replyTo</code></td><td class="type-cell">object?</td><td>Ответ на: <code>messageId</code>, <code>senderId</code>, <code>senderName</code>, <code>text</code> (≤ 100 символов), <code>deleted</code></td></tr>
+                    <tr><td><code>forwardFrom</code></td><td class="type-cell">object?</td><td>Переслано от: <code>senderId</code>, <code>senderName</code> — автор оригинала</td></tr>
                 </tbody>
             </table>
             <div class="note">
@@ -373,6 +381,70 @@
         <div class="event-card">
             <div class="event-header">
                 <span class="direction-badge server-client">Server → Client</span>
+                <span class="event-name">MessageUpdated</span>
+            </div>
+            <div class="method-description" style="margin-top: 0.5rem;">
+                Сообщение отредактировано (<code>PATCH /api/chats/{chatId}/messages/{messageId}</code>).
+                Получают <strong>все участники на все соединения</strong>, не только открывшие чат.
+            </div>
+            <table>
+                <thead><tr><th>Аргумент</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                    <tr><td><code>message</code></td><td class="type-cell">MessageDto</td><td>Сообщение целиком, с новым <code>text</code>, <code>entities</code> и <code>editedAt</code></td></tr>
+                </tbody>
+            </table>
+            <div class="note">
+                <strong>Клиент:</strong> заменить сообщение по <code>id</code>; если это последнее сообщение
+                чата — обновить превью в списке. <code>ChatListUpdated</code> на правку не приходит.
+            </div>
+        </div>
+
+        <div class="event-card">
+            <div class="event-header">
+                <span class="direction-badge server-client">Server → Client</span>
+                <span class="event-name">MessageDeleted</span>
+            </div>
+            <div class="method-description" style="margin-top: 0.5rem;">
+                Сообщение удалено (<code>DELETE /api/chats/{chatId}/messages/{messageId}</code>). Удалено у
+                всех — получают все участники; удалено «у себя» — только устройства удалившего.
+            </div>
+            <table>
+                <thead><tr><th>Аргумент</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                    <tr><td><code>deleted</code></td><td class="type-cell">object</td><td><code>chatId</code>, <code>messageId</code>, <code>seq</code>, <code>forEveryone</code></td></tr>
+                </tbody>
+            </table>
+            <div class="note">
+                <strong>Клиент:</strong> убрать сообщение из ленты. Было последним в чате — перезапросить строку
+                списка: <code>GET /api/chats/{chatId}/item</code> (там же пересчитанные непрочитанные).
+            </div>
+        </div>
+
+        <div class="event-card">
+            <div class="event-header">
+                <span class="direction-badge server-client">Server → Client</span>
+                <span class="event-name">ReactionsChanged</span>
+            </div>
+            <div class="method-description" style="margin-top: 0.5rem;">
+                Кто-то поставил, сменил или убрал реакцию
+                (<code>PUT</code>/<code>DELETE /api/chats/{chatId}/messages/{messageId}/reactions</code>).
+                Получают все участники на все соединения.
+            </div>
+            <table>
+                <thead><tr><th>Аргумент</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                    <tr><td><code>reactions</code></td><td class="type-cell">object</td><td><code>chatId</code>, <code>messageId</code>, <code>reactions</code> — сводка после изменения, <code>userId</code> — кто изменил, <code>emoji</code> — его реакция теперь (<code>null</code> — убрал)</td></tr>
+                </tbody>
+            </table>
+            <div class="note">
+                <strong>Клиент:</strong> заменить <code>reactions</code> сообщения; если <code>userId</code> свой —
+                запомнить <code>emoji</code> как <code>myReaction</code>.
+            </div>
+        </div>
+
+        <div class="event-card">
+            <div class="event-header">
+                <span class="direction-badge server-client">Server → Client</span>
                 <span class="event-name">ChatCreated</span>
             </div>
             <div class="method-description" style="margin-top: 0.5rem;">
@@ -393,13 +465,14 @@
                 <thead><tr><th>Поле</th><th>Тип</th><th>Описание</th></tr></thead>
                 <tbody>
                     <tr><td><code>chatId</code></td><td class="type-cell">Guid</td><td>ID чата</td></tr>
-                    <tr><td><code>type</code></td><td class="type-cell">string</td><td><code>"private"</code> или <code>"group"</code></td></tr>
+                    <tr><td><code>type</code></td><td class="type-cell">string</td><td><code>"private"</code>, <code>"group"</code> или <code>"saved"</code> («Избранное», без названия и собеседника)</td></tr>
                     <tr><td><code>title</code></td><td class="type-cell">string?</td><td>Название группы (<code>null</code> для личных)</td></tr>
                     <tr><td><code>companionId</code></td><td class="type-cell">Guid?</td><td>ID собеседника (для личных)</td></tr>
                     <tr><td><code>companionName</code></td><td class="type-cell">string?</td><td>Имя собеседника (для личных)</td></tr>
                     <tr><td><code>companionUsername</code></td><td class="type-cell">string?</td><td>Логин собеседника (для личных)</td></tr>
                     <tr><td><code>lastMessage</code></td><td class="type-cell">MessageDto?</td><td><code>null</code> у только что созданного чата</td></tr>
                     <tr><td><code>unreadCount</code></td><td class="type-cell">int</td><td>Непрочитанные (свои сообщения не считаются)</td></tr>
+                    <tr><td><code>unreadMentionCount</code></td><td class="type-cell">int</td><td>Непрочитанные сообщения, где упомянут пользователь</td></tr>
                     <tr><td><code>lastActivityAt</code></td><td class="type-cell">DateTime</td><td>Время последней активности, UTC с <code>Z</code></td></tr>
                 </tbody>
             </table>
@@ -488,7 +561,7 @@
         <footer>
             <a href="/swagger">REST API (Swagger)</a> ·
             <a href="/signalr-docs">SignalR Docs</a> ·
-            v1.1
+            v1.2
         </footer>
     </div>
 </body>
