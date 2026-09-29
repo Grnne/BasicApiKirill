@@ -2,5 +2,6 @@
 
 public class SendMessageDto
 {
-    public string Text { get; set; } = string.Empty;
+    /// <summary>Текст; пробелы по краям обрезаются, после этого — от 1 до 4096 символов.</summary>
+    public string? Text { get; set; }
 }

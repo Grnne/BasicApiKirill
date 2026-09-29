@@ -27,6 +27,9 @@ public static class ServiceExtensions
 {
     public const string ReadyTag = "ready";
 
+    /// <summary>Лимит на команды (отправка, «печатает») — как у хаба на соединение, но на пользователя.</summary>
+    public const string CommandsRateLimitPolicy = "commands";
+
     public static IServiceCollection AddApiServices(
         this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
     {
@@ -80,7 +83,9 @@ public static class ServiceExtensions
                     // Текст исключений клиенту — только при разработке: в проде он
                     // раскрывает внутренности (SQL, пути, имена классов).
                     options.EnableDetailedErrors = environment.IsDevelopment();
-                    // Максимальный размер входящего сообщения (128KB для поддержки base64 изображений)
+                    // Максимальный размер входящего сообщения. Команды переезжают в REST
+                    // (POST /api/chats/{id}/messages, /typing); когда фронт переедет, хабу
+                    // хватит нескольких КБ — тогда снизить.
                     options.MaximumReceiveMessageSize = 128 * 1024;
                     // Ограничиваем буфер для команд, чтобы избежать накопления зависших вызовов
                     options.StreamBufferCapacity = 10;
@@ -225,6 +230,7 @@ public static class ServiceExtensions
         // офисным NAT делила бы один бюджет.
         var perUser = configuration.GetValue("RateLimiting:PerUserPerMinute", 300);
         var perIp = configuration.GetValue("RateLimiting:PerIpPerMinute", 100);
+        var commandsPer10Seconds = configuration.GetValue("RateLimiting:CommandsPer10Seconds", 20);
 
         services.AddRateLimiter(options =>
         {
@@ -232,10 +238,7 @@ public static class ServiceExtensions
 
             options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
             {
-                var userId = context.User.Identity?.IsAuthenticated == true
-                    ? context.User.FindFirstValue(ClaimTypes.NameIdentifier)
-                      ?? context.User.FindFirstValue(JwtRegisteredClaimNames.Sub)
-                    : null;
+                var userId = RateLimitUserId(context);
 
                 return userId is not null
                     ? RateLimitPartition.GetSlidingWindowLimiter("user:" + userId, _ => PerMinute(perUser))
@@ -253,6 +256,20 @@ public static class ServiceExtensions
                     {
                         PermitLimit = 5,
                         Window = TimeSpan.FromMinutes(1),
+                        QueueLimit = 0
+                    }));
+
+            // Отправка и «печатает» пишут в базу и рассылают всем участникам — отдельный
+            // лимит на пользователя (дополнительно к общему), как у хаба на соединение.
+            options.AddPolicy(CommandsRateLimitPolicy, context =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: RateLimitUserId(context) is { } userId
+                        ? "user:" + userId
+                        : "ip:" + (context.Connection.RemoteIpAddress?.ToString() ?? "unknown"),
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = commandsPer10Seconds,
+                        Window = TimeSpan.FromSeconds(10),
                         QueueLimit = 0
                     }));
 
@@ -290,6 +307,12 @@ public static class ServiceExtensions
 
         return services;
     }
+
+    private static string? RateLimitUserId(HttpContext context) =>
+        context.User.Identity?.IsAuthenticated == true
+            ? context.User.FindFirstValue(ClaimTypes.NameIdentifier)
+              ?? context.User.FindFirstValue(JwtRegisteredClaimNames.Sub)
+            : null;
 
     /// <summary>Скользящее окно в минуту из 6 сегментов: без двойного всплеска на стыке окон.</summary>
     private static SlidingWindowRateLimiterOptions PerMinute(int permits) => new()

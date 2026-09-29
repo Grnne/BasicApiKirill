@@ -126,7 +126,10 @@ public class StackE2ETests(E2EUsers users)
         var delivered = (JsonElement)(await bobEvents.WaitAsync("MessageCreated"))[0]!;
         Assert.Equal("hello from alice", delivered.GetProperty("text").GetString());
         await bobEvents.WaitAsync("ChatListUpdated", a => (Guid)a[0]! == chatId);
-        await bobHub.InvokeAsync("SendMessage", chatId, "hello back");
+
+        // Та же отправка командой REST — событие приходит так же
+        var sent = await bobApi.PostAsJsonAsync($"api/chats/{chatId}/messages", new { text = "hello back" });
+        Assert.Equal(HttpStatusCode.Created, sent.StatusCode);
         await aliceEvents.WaitAsync("MessageCreated", a => ((JsonElement)a[0]!).GetProperty("text").GetString() == "hello back");
 
         // Непрочитанные: свои не считаются

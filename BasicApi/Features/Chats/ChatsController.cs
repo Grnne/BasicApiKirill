@@ -4,6 +4,7 @@ using BasicApi.Models.Dto.Message;
 using BasicApi.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace BasicApi.Features.Chats;
 
@@ -12,7 +13,7 @@ namespace BasicApi.Features.Chats;
 [Route("api/chats")]
 [Produces("application/json")]
 [Tags("Chats")]
-public class ChatsController(IChatService chats, IMessageService messages) : ControllerBase
+public class ChatsController(IChatService chats, IMessageService messages, IPresenceService presence) : ControllerBase
 {
     /// <summary>
     /// Get all chats for the current user
@@ -136,6 +137,55 @@ public class ChatsController(IChatService chats, IMessageService messages) : Con
         => Ok(await messages.GetPageAtAsync(chatId, User.GetUserId(), date, Math.Clamp(limit, 1, 100), ct));
 
         /// <summary>
+    /// Send a message.
+    /// </summary>
+    /// <remarks>
+    /// Same rules and events as the hub method <c>SendMessage</c>: the text is trimmed
+    /// and must be 1–4096 characters; chat members receive <c>MessageCreated</c> and
+    /// <c>ChatListUpdated</c> over SignalR, the sender included — other devices of the
+    /// sender learn about the message the same way.
+    ///
+    /// Errors: <c>400 MESSAGE_EMPTY</c>, <c>400 MESSAGE_TOO_LONG</c>,
+    /// <c>403 NOT_A_MEMBER</c>, <c>429 RATE_LIMITED</c> (commands limit per user).
+    /// </remarks>
+    /// <param name="chatId">Chat ID</param>
+    /// <param name="dto">Message text</param>
+    /// <param name="ct">Request cancellation.</param>
+    [HttpPost("{chatId}/messages")]
+    [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
+    [RequestSizeLimit(64 * 1024)]
+    [ProducesResponseType(typeof(MessageDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> SendMessage(Guid chatId, [FromBody] SendMessageDto dto, CancellationToken ct)
+        => Created(string.Empty, await messages.SendAsync(chatId, User.GetUserId(), dto.Text, ct));
+
+    /// <summary>
+    /// Report typing.
+    /// </summary>
+    /// <remarks>
+    /// Same as the hub method <c>Typing</c>: other members receive <c>TypingChanged</c>.
+    /// "Typing" expires after 6 seconds unless repeated, so send <c>isTyping: true</c>
+    /// every few seconds while the user types and <c>false</c> when they stop.
+    /// </remarks>
+    /// <param name="chatId">Chat ID</param>
+    /// <param name="dto">Typing state</param>
+    /// <param name="ct">Request cancellation.</param>
+    [HttpPost("{chatId}/typing")]
+    [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> Typing(Guid chatId, [FromBody] TypingDto dto, CancellationToken ct)
+    {
+        await presence.SetTypingAsync(chatId, User.GetUserId(), dto.IsTyping, ct);
+        return NoContent();
+    }
+
+    /// <summary>
     /// Mark messages as read
     /// </summary>
     [HttpPost("{chatId}/read")]
