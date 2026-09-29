@@ -22,7 +22,8 @@ public class UserRepository(IDbConnectionFactory connectionFactory) : IUserRepos
                 last_login_at as LastLoginAt, 
                 is_active as IsActive
             FROM users 
-            WHERE username = @Value OR email = @Value
+            -- Регистр и пробелы по краям не важны: Alice, alice и ' alice ' — один логин.
+            WHERE username_normalized = lower(trim(@Value)) OR email_normalized = lower(trim(@Value))
             LIMIT 1";
 
         using var connection = connectionFactory.CreateConnection();

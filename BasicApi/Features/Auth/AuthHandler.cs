@@ -36,6 +36,12 @@ public class AuthHandler(
     public async Task<IActionResult> RegisterAsync(
         RegisterRequestDto request, string? userAgent = null, string? ip = null, CancellationToken ct = default)
     {
+        // Пробелы по краям — случайность ввода, в логин и почту они не попадают.
+        // Регистр сохраняем как ввёл пользователь (для отображения), а уникальность
+        // и вход — без учёта регистра (нормализованные колонки в базе).
+        request.Username = request.Username.Trim();
+        request.Email = request.Email.Trim();
+
         var existingUser = await userRepository.GetByUsernameOrEmailAsync(request.Username, ct);
 
         if (existingUser != null)
