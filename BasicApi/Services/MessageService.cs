@@ -42,6 +42,22 @@ public interface IMessageService
     /// <c>MESSAGE_NOT_FOUND</c>; an attempt to move it back is not an error, nothing changes.
     /// </summary>
     Task MarkReadAsync(Guid chatId, Guid userId, Guid messageId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Replaces the text; members get <c>MessageUpdated</c>. The same text is not an edit: the
+    /// message comes back unchanged and nothing is sent.
+    /// Errors: 400 <c>MESSAGE_EMPTY</c>/<c>MESSAGE_TOO_LONG</c>, 403 <c>NOT_A_MEMBER</c>/
+    /// <c>NOT_MESSAGE_AUTHOR</c>/<c>EDIT_WINDOW_EXPIRED</c>, 404 <c>MESSAGE_NOT_FOUND</c>.
+    /// </summary>
+    Task<MessageDto> EditAsync(Guid chatId, Guid userId, Guid messageId, string? text, CancellationToken ct = default);
+
+    /// <summary>
+    /// Deletes for everyone (a tombstone; all members get <c>MessageDeleted</c>) or only for the
+    /// user (their own devices get it). Repeating a delete is not an error.
+    /// Errors: 403 <c>NOT_A_MEMBER</c>/<c>NOT_MESSAGE_AUTHOR</c>/<c>DELETE_WINDOW_EXPIRED</c>,
+    /// 404 <c>MESSAGE_NOT_FOUND</c>.
+    /// </summary>
+    Task DeleteAsync(Guid chatId, Guid userId, Guid messageId, bool forEveryone, CancellationToken ct = default);
 }
 
 /// <param name="Message">The message - new or found by clientMessageId.</param>
@@ -61,7 +77,7 @@ public sealed class MessageService(
         var parsed = ParseCursor(cursor);
         await policy.DemandReadAsync(userId, chatId, ct);
 
-        return await PageAsync(chatId, await ResolveCursorAsync(chatId, parsed, ct), limit, ct);
+        return await PageAsync(chatId, userId, await ResolveCursorAsync(chatId, parsed, ct), limit, ct);
     }
 
     public async Task<CursorPaginatedResponse<MessageDto>> GetPageAtAsync(
@@ -82,13 +98,13 @@ public sealed class MessageService(
         // it ends with the last message up to and including the date. If there are no messages after
         // the date, it is simply the last page.
         var firstAfter = await messageRepository.GetFirstSeqAfterAsync(chatId, utcDate, ct);
-        return await PageAsync(chatId, firstAfter, limit, ct);
+        return await PageAsync(chatId, userId, firstAfter, limit, ct);
     }
 
     private async Task<CursorPaginatedResponse<MessageDto>> PageAsync(
-        Guid chatId, long? beforeSeq, int limit, CancellationToken ct)
+        Guid chatId, Guid viewerId, long? beforeSeq, int limit, CancellationToken ct)
     {
-        var result = await messageRepository.GetMessagesWithSenderCursorAsync(chatId, beforeSeq, limit, ct);
+        var result = await messageRepository.GetMessagesWithSenderCursorAsync(chatId, viewerId, beforeSeq, limit, ct);
         var messages = result.Items.Select(Map).ToList();
 
         return new CursorPaginatedResponse<MessageDto>
@@ -109,7 +125,7 @@ public sealed class MessageService(
         await policy.DemandReadAsync(userId, chatId, ct);
 
         var beforeSeq = await ResolveCursorAsync(chatId, parsed, ct);
-        var (result, totalCount) = await messageRepository.SearchMessagesCursorAsync(chatId, query, beforeSeq, limit, ct);
+        var (result, totalCount) = await messageRepository.SearchMessagesCursorAsync(chatId, userId, query, beforeSeq, limit, ct);
         var messages = result.Items.Select(Map).ToList();
 
         return new SearchMessagesResponseDto
@@ -126,11 +142,7 @@ public sealed class MessageService(
         Guid chatId, Guid senderId, string? text, Guid? clientMessageId = null, CancellationToken ct = default)
     {
         // Validate the text before going to the DB: it is free.
-        var textError = MessageText.Normalize(text, out var normalized);
-        if (textError == MessageText.EmptyCode)
-            throw new BadRequestException("Message text is empty", textError);
-        if (textError == MessageText.TooLongCode)
-            throw new BadRequestException($"Message text is longer than {MessageText.MaxLength} characters", textError);
+        var normalized = NormalizeText(text);
 
         await policy.DemandPostAsync(senderId, chatId, ct);
 
@@ -154,8 +166,7 @@ public sealed class MessageService(
                     ChatId = chatId,
                     SenderId = senderId,
                     Text = normalized,
-                    CreatedAt = DateTime.UtcNow,
-                    IsDeleted = false
+                    CreatedAt = DateTime.UtcNow
                 }, clientMessageId, ct));
 
                 await events.MessageCreatedAsync(created, memberIds, ct);
@@ -187,8 +198,88 @@ public sealed class MessageService(
         // message, and the unread counter would break.
         var update = await messageRepository.MarkReadAsync(chatId, userId, messageId, ct);
         if (update == ReadPointerUpdate.MessageNotFound)
-            throw new NotFoundException("Message not found in this chat", "MESSAGE_NOT_FOUND");
+            throw MessageNotFound();
     }
+
+    public async Task<MessageDto> EditAsync(
+        Guid chatId, Guid userId, Guid messageId, string? text, CancellationToken ct = default)
+    {
+        var normalized = NormalizeText(text);
+        await policy.DemandPostAsync(userId, chatId, ct);
+
+        var message = await FindAsync(chatId, messageId, ct);
+        (await policy.CanEditMessageAsync(userId, message, ct)).Demand();
+
+        if (message.Text == normalized)
+            return Map(message);
+
+        var memberIds = await membership.GetMemberIdsAsync(chatId, ct);
+        return await db.InTransactionAsync(async ct =>
+        {
+            var edited = await messageRepository.EditTextAsync(messageId, normalized, DateTime.UtcNow, ct)
+                ?? throw MessageNotFound(); // deleted in the meantime
+            var dto = Map(edited);
+            await events.MessageUpdatedAsync(dto, memberIds, ct);
+            return dto;
+        }, ct: ct);
+    }
+
+    public async Task DeleteAsync(
+        Guid chatId, Guid userId, Guid messageId, bool forEveryone, CancellationToken ct = default)
+    {
+        await policy.DemandReadAsync(userId, chatId, ct);
+
+        var message = await messageRepository.GetAsync(chatId, messageId, ct) ?? throw MessageNotFound();
+        if (message.DeletedAt is not null)
+            return; // already gone for everyone — nothing left to delete
+
+        var deleted = new MessageDeletedDto
+        {
+            ChatId = chatId,
+            MessageId = messageId,
+            Seq = message.Seq,
+            ForEveryone = forEveryone
+        };
+
+        if (forEveryone)
+        {
+            (await policy.CanDeleteForEveryoneAsync(userId, message, ct)).Demand();
+            var memberIds = await membership.GetMemberIdsAsync(chatId, ct);
+            await db.InTransactionAsync(async ct =>
+            {
+                if (await messageRepository.DeleteForEveryoneAsync(messageId, DateTime.UtcNow, ct))
+                    await events.MessageDeletedAsync(deleted, memberIds, ct);
+                return true;
+            }, ct: ct);
+        }
+        else
+        {
+            await db.InTransactionAsync(async ct =>
+            {
+                if (await messageRepository.HideAsync(userId, messageId, ct))
+                    await events.MessageDeletedAsync(deleted, [userId], ct);
+                return true;
+            }, ct: ct);
+        }
+    }
+
+    /// <summary>A live message of the chat; a tombstone or a message of another chat is 404.</summary>
+    private async Task<MessageWithSender> FindAsync(Guid chatId, Guid messageId, CancellationToken ct) =>
+        await messageRepository.GetAsync(chatId, messageId, ct) is { DeletedAt: null } message
+            ? message
+            : throw MessageNotFound();
+
+    private static string NormalizeText(string? text)
+    {
+        var error = MessageText.Normalize(text, out var normalized);
+        if (error == MessageText.EmptyCode)
+            throw new BadRequestException("Message text is empty", error);
+        if (error == MessageText.TooLongCode)
+            throw new BadRequestException($"Message text is longer than {MessageText.MaxLength} characters", error);
+        return normalized;
+    }
+
+    private static NotFoundException MessageNotFound() => new("Message not found in this chat", "MESSAGE_NOT_FOUND");
 
     private static MessageDto Map(MessageWithSender m) => new()
     {
@@ -200,7 +291,9 @@ public sealed class MessageService(
         CreatedAt = m.CreatedAt,
         IsRead = false, // TODO: read status by the companion - plan 2
         Seq = m.Seq,
-        ClientMessageId = m.ClientMessageId
+        ClientMessageId = m.ClientMessageId,
+        Type = m.Type,
+        EditedAt = m.EditedAt
     };
 
     /// <summary>

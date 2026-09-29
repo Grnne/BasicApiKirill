@@ -1,4 +1,4 @@
-﻿namespace BasicApi.Storage.Entities;
+namespace BasicApi.Storage.Entities;
 
 public class Message
 {
@@ -7,5 +7,10 @@ public class Message
     public Guid SenderId { get; set; }
     public string Text { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-    public bool IsDeleted { get; set; } = false;
+    public string Type { get; set; } = MessageTypes.Text;
+}
+
+public static class MessageTypes
+{
+    public const string Text = "text";
 }

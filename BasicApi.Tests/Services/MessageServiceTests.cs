@@ -232,12 +232,12 @@ public class MessageServiceTests
             .Setup(r => r.GetFirstSeqAfterAsync(_chatId, date, It.IsAny<CancellationToken>()))
             .ReturnsAsync(7);
         _msgRepoMock
-            .Setup(r => r.GetMessagesWithSenderCursorAsync(_chatId, It.IsAny<long?>(), 20, It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetMessagesWithSenderCursorAsync(_chatId, _userId, It.IsAny<long?>(), 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new CursorResult<MessageWithSender>());
 
         await _service.GetPageAtAsync(_chatId, _userId, date, 20);
 
-        _msgRepoMock.Verify(r => r.GetMessagesWithSenderCursorAsync(_chatId, 7L, 20, It.IsAny<CancellationToken>()),
+        _msgRepoMock.Verify(r => r.GetMessagesWithSenderCursorAsync(_chatId, _userId, 7L, 20, It.IsAny<CancellationToken>()),
             Times.Once);
     }
 

@@ -11,7 +11,12 @@ public class MessageWithSender
     public Guid SenderId { get; set; }
     public string Text { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
-    public bool IsDeleted { get; set; }
+    public string Type { get; set; } = Entities.MessageTypes.Text;
+    public DateTime? EditedAt { get; set; }
+
+    /// <summary>Deleted for everyone: a tombstone without text.</summary>
+    public DateTime? DeletedAt { get; set; }
+
     public long Seq { get; set; }
     public Guid? ClientMessageId { get; set; }
     public string SenderName { get; set; } = string.Empty;

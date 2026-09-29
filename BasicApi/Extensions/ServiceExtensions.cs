@@ -108,6 +108,7 @@ public static class ServiceExtensions
 
         // Domain services: controllers and the hub are only adapters over them.
         services.AddScoped<IMembershipService, MembershipService>();
+        services.Configure<MessageOptions>(configuration.GetSection(MessageOptions.Section));
         services.AddScoped<IChatPolicy, ChatPolicy>();
         services.AddScoped<IChatService, ChatService>();
         services.AddScoped<IMessageService, MessageService>();

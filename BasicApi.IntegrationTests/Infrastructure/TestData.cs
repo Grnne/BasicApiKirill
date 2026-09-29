@@ -70,8 +70,10 @@ public sealed class TestData(IDbConnectionFactory connectionFactory)
         using var connection = connectionFactory.CreateConnection();
         await connection.ExecuteAsync(@"
             WITH next AS (UPDATE chats SET last_seq = last_seq + 1 WHERE id = @chatId RETURNING last_seq)
-            INSERT INTO messages (id, chat_id, sender_id, text, created_at, is_deleted, seq)
-            SELECT @messageId, @chatId, @senderId, @text, @createdAt, @isDeleted, next.last_seq FROM next",
+            INSERT INTO messages (id, chat_id, sender_id, text, created_at, deleted_at, seq)
+            SELECT @messageId, @chatId, @senderId, @text, @createdAt,
+                   CASE WHEN @isDeleted THEN @createdAt END, next.last_seq
+            FROM next",
             new { messageId, chatId, senderId, text, createdAt, isDeleted });
         return messageId;
     }

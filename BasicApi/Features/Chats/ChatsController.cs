@@ -173,6 +173,70 @@ public class ChatsController(IChatService chats, IMessageService messages, IPres
     }
 
     /// <summary>
+    /// Edit a message.
+    /// </summary>
+    /// <remarks>
+    /// Only the author, within <c>Messages:EditWindowHours</c> (48 by default) of sending.
+    /// The text follows the same rules as when sending. Members receive <c>MessageUpdated</c>
+    /// with the whole message; <c>editedAt</c> is set. The same text again changes nothing
+    /// and sends no event.
+    ///
+    /// Errors: <c>400 MESSAGE_EMPTY</c>, <c>400 MESSAGE_TOO_LONG</c>, <c>403 NOT_A_MEMBER</c>,
+    /// <c>403 NOT_MESSAGE_AUTHOR</c>, <c>403 EDIT_WINDOW_EXPIRED</c>,
+    /// <c>404 MESSAGE_NOT_FOUND</c> (not in this chat or deleted), <c>429 RATE_LIMITED</c>.
+    /// </remarks>
+    /// <param name="chatId">Chat ID</param>
+    /// <param name="messageId">Message ID</param>
+    /// <param name="dto">New text</param>
+    /// <param name="ct">Request cancellation.</param>
+    [HttpPatch("{chatId}/messages/{messageId}")]
+    [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
+    [RequestSizeLimit(64 * 1024)]
+    [ProducesResponseType(typeof(MessageDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> EditMessage(
+        Guid chatId, Guid messageId, [FromBody] EditMessageDto dto, CancellationToken ct)
+        => Ok(await messages.EditAsync(chatId, User.GetUserId(), messageId, dto.Text, ct));
+
+    /// <summary>
+    /// Delete a message for everyone or only for yourself.
+    /// </summary>
+    /// <remarks>
+    /// <c>forEveryone=true</c> — only the author, within <c>Messages:DeleteWindowHours</c>
+    /// (48 by default). The message disappears from history, search and the chat list for
+    /// all members; they receive <c>MessageDeleted</c> with <c>forEveryone: true</c>.
+    ///
+    /// Without it — any member, any message, any time: the message disappears only for the
+    /// caller; their devices receive <c>MessageDeleted</c> with <c>forEveryone: false</c>.
+    ///
+    /// Repeating a delete returns <c>204</c> and sends nothing.
+    ///
+    /// Errors: <c>403 NOT_A_MEMBER</c>, <c>403 NOT_MESSAGE_AUTHOR</c>,
+    /// <c>403 DELETE_WINDOW_EXPIRED</c>, <c>404 MESSAGE_NOT_FOUND</c>, <c>429 RATE_LIMITED</c>.
+    /// </remarks>
+    /// <param name="chatId">Chat ID</param>
+    /// <param name="messageId">Message ID</param>
+    /// <param name="forEveryone">Delete for all members, not only for yourself.</param>
+    /// <param name="ct">Request cancellation.</param>
+    [HttpDelete("{chatId}/messages/{messageId}")]
+    [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> DeleteMessage(
+        Guid chatId, Guid messageId, [FromQuery] bool forEveryone = false, CancellationToken ct = default)
+    {
+        await messages.DeleteAsync(chatId, User.GetUserId(), messageId, forEveryone, ct);
+        return NoContent();
+    }
+
+    /// <summary>
     /// Report typing.
     /// </summary>
     /// <remarks>

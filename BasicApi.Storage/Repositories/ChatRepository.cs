@@ -1,4 +1,4 @@
-﻿using BasicApi.Storage.Dto;
+using BasicApi.Storage.Dto;
 using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
 
@@ -106,14 +106,17 @@ public class ChatRepository(IDbSession db) : IChatRepository
             comp.display_name AS CompanionName,
             comp.username AS CompanionUsername,
 
-            -- Unread: other members' messages after the read pointer. Own messages do not count.
+            -- Unread: other members' messages after the read pointer. Own messages do not count,
+            -- nor do deleted ones and those the user deleted for themselves.
             (
                 SELECT COUNT(*)
                 FROM messages m_unread
                 WHERE m_unread.chat_id = c.id
                   AND m_unread.seq > cm.last_read_seq
-                  AND m_unread.is_deleted = false
+                  AND m_unread.deleted_at IS NULL
                   AND m_unread.sender_id <> @userId
+                  AND NOT EXISTS (
+                      SELECT 1 FROM hidden_messages h WHERE h.user_id = @userId AND h.message_id = m_unread.id)
             ) AS UnreadCount,
 
             lm.id AS LastMessageId,
@@ -137,7 +140,9 @@ public class ChatRepository(IDbSession db) : IChatRepository
         LEFT JOIN LATERAL (
             SELECT m.id, m.seq, m.sender_id, m.text, m.created_at
             FROM messages m
-            WHERE m.chat_id = c.id AND m.is_deleted = false
+            WHERE m.chat_id = c.id
+              AND m.deleted_at IS NULL
+              AND NOT EXISTS (SELECT 1 FROM hidden_messages h WHERE h.user_id = @userId AND h.message_id = m.id)
             ORDER BY m.seq DESC
             LIMIT 1
         ) lm ON TRUE

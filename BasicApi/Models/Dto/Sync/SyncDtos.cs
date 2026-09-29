@@ -37,7 +37,7 @@ public class SyncUpdateDto
 {
     public long Pts { get; set; }
 
-    /// <summary>Hub event name: <c>MessageCreated</c>, <c>ChatCreated</c>.</summary>
+    /// <summary>Hub event name: <c>MessageCreated</c>, <c>MessageUpdated</c>, <c>MessageDeleted</c>, <c>ChatCreated</c>.</summary>
     public string Type { get; set; } = string.Empty;
 
     /// <summary>The same object that arrives in the hub event with this name.</summary>

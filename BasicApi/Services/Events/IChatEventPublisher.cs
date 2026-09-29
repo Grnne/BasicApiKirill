@@ -16,6 +16,15 @@ public interface IChatEventPublisher
     /// </summary>
     Task MessageCreatedAsync(MessageDto message, IReadOnlyCollection<Guid> memberIds, CancellationToken ct = default);
 
+    /// <summary><c>MessageUpdated</c> with the whole message to all participants.</summary>
+    Task MessageUpdatedAsync(MessageDto message, IReadOnlyCollection<Guid> memberIds, CancellationToken ct = default);
+
+    /// <summary>
+    /// <c>MessageDeleted</c>: to all participants when deleted for everyone, to the user's own
+    /// devices when deleted for themselves.
+    /// </summary>
+    Task MessageDeletedAsync(MessageDeletedDto deleted, IReadOnlyCollection<Guid> recipientIds, CancellationToken ct = default);
+
     /// <summary>
     /// A new chat for a user; the card is built for them. <paramref name="live"/> —
     /// whether to send <c>ChatCreated</c> right away: the chat creator does not get it, they got the card

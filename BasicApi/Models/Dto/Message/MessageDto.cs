@@ -1,4 +1,4 @@
-﻿namespace BasicApi.Models.Dto.Message;
+namespace BasicApi.Models.Dto.Message;
 
 public class MessageDto
 {
@@ -15,4 +15,10 @@ public class MessageDto
 
     /// <summary>Id supplied by the sender when sending via REST; null — not supplied.</summary>
     public Guid? ClientMessageId { get; set; }
+
+    /// <summary>Kind of message: <c>text</c> for now.</summary>
+    public string Type { get; set; } = "text";
+
+    /// <summary>When the text was last edited; null — never edited.</summary>
+    public DateTime? EditedAt { get; set; }
 }
