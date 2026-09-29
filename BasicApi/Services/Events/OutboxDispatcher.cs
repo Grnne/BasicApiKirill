@@ -31,6 +31,7 @@ public sealed class OutboxSignal
 public sealed class OutboxDispatcher(
     IServiceScopeFactory scopes,
     IHubContext<ChatHub> hub,
+    HubConnectionRegistry connections,
     OutboxSignal signal,
     IConfiguration configuration,
     ILogger<OutboxDispatcher> logger) : BackgroundService
@@ -123,6 +124,12 @@ public sealed class OutboxDispatcher(
     {
         foreach (var send in OutboxEnvelope.Deserialize(row.Payload).Sends)
         {
+            if (send.Target == "leave-group")
+            {
+                await connections.RemoveFromGroupAsync(hub.Groups, send.Ids.Select(Guid.Parse), send.Method, ct);
+                continue;
+            }
+
             IClientProxy target = send.Target switch
             {
                 "group" => hub.Clients.Group(send.Ids[0]),

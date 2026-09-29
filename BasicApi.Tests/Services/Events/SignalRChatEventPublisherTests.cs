@@ -1,3 +1,4 @@
+using BasicApi.Hubs;
 using BasicApi.Models.Dto.Chat;
 using BasicApi.Models.Dto.Message;
 using BasicApi.Services.Events;
@@ -14,7 +15,7 @@ public class SignalRChatEventPublisherTests
     private readonly RecordingHubContext _hub = new();
     private readonly SignalRChatEventPublisher _publisher;
 
-    public SignalRChatEventPublisherTests() => _publisher = new SignalRChatEventPublisher(_hub);
+    public SignalRChatEventPublisherTests() => _publisher = new SignalRChatEventPublisher(_hub, new HubConnectionRegistry());
 
     private static MessageDto Message(string text) => new()
     {

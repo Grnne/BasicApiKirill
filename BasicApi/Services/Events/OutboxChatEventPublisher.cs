@@ -58,6 +58,21 @@ public sealed class OutboxChatEventPublisher(
     public Task MemberUpdatedAsync(MemberUpdatedDto update, IReadOnlyCollection<Guid> memberIds, CancellationToken ct = default) =>
         ToAllAsync(UpdateTypes.MemberUpdated, update, memberIds, ct);
 
+    public Task MembersAddedAsync(MembersAddedDto added, IReadOnlyCollection<Guid> recipientIds, CancellationToken ct = default) =>
+        ToAllAsync(UpdateTypes.MemberAdded, added, recipientIds, ct);
+
+    public Task MemberRemovedAsync(
+        MemberRemovedDto removed, IReadOnlyCollection<Guid> recipientIds, CancellationToken ct = default) =>
+        db.InTransactionAsync(async ct =>
+        {
+            await journal.AppendAsync(recipientIds, UpdateTypes.MemberRemoved, Json(removed), ct);
+            // Out of the chat's group first: nothing of the chat reaches them after this point.
+            await EnqueueAsync(UpdateTypes.MemberRemoved, ct,
+                HubSend.LeaveGroup([removed.UserId], removed.ChatId),
+                HubSend.Users(recipientIds, UpdateTypes.MemberRemoved, removed));
+            return true;
+        }, ct: ct);
+
     /// <summary>
     /// The same payload to the journal and to every connection of the recipients — not just the
     /// open chat: a client updates the chat list preview from it too.
@@ -112,5 +127,7 @@ public static class UpdateTypes
     public const string ReadStateChanged = "ReadStateChanged";
     public const string DraftUpdated = "DraftUpdated";
     public const string MemberUpdated = "MemberUpdated";
+    public const string MemberAdded = "MemberAdded";
+    public const string MemberRemoved = "MemberRemoved";
     public const string ChatCreated = "ChatCreated";
 }

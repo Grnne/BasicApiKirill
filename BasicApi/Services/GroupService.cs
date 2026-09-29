@@ -46,6 +46,29 @@ public interface IGroupService
     /// </summary>
     Task<GroupMemberDto> SetPermissionsAsync(
         Guid chatId, Guid userId, Guid targetId, PermissionsPatchDto? permissions, CancellationToken ct = default);
+
+    /// <summary>
+    /// Adds members (those already in are skipped) with a system message. They get
+    /// <c>ChatCreated</c>, the members already there — <c>MemberAdded</c>. Returns who was added.
+    /// Errors: 400 <c>NOT_A_GROUP</c>/<c>INVALID_REQUEST</c>/<c>TOO_MANY_MEMBERS</c>,
+    /// 403 <c>NOT_A_MEMBER</c>/<c>PERMISSION_DENIED</c>, 404 <c>USER_NOT_FOUND</c>.
+    /// </summary>
+    Task<IReadOnlyList<GroupMemberDto>> AddMembersAsync(
+        Guid chatId, Guid userId, IReadOnlyList<Guid>? userIds, CancellationToken ct = default);
+
+    /// <summary>
+    /// Removes a member (or the caller themselves — then it is leaving) with a system message.
+    /// Everyone, the removed one included, gets <c>MemberRemoved</c>; the removed one loses the chat.
+    /// Errors: 400 <c>NOT_A_GROUP</c>, 403 <c>NOT_A_MEMBER</c>/<c>PERMISSION_DENIED</c>,
+    /// 404 <c>MEMBER_NOT_FOUND</c>.
+    /// </summary>
+    Task RemoveMemberAsync(Guid chatId, Guid userId, Guid targetId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Leaves the group. The owner hands it over to the longest-standing admin, or else member;
+    /// the last one to leave deletes the group. Errors: 400 <c>NOT_A_GROUP</c>, 403 <c>NOT_A_MEMBER</c>.
+    /// </summary>
+    Task LeaveAsync(Guid chatId, Guid userId, CancellationToken ct = default);
 }
 
 public sealed class GroupService(
@@ -180,6 +203,113 @@ public sealed class GroupService(
             await events.MemberUpdatedAsync(
                 new MemberUpdatedDto { ChatId = chatId, Member = updated }, await chats.GetMemberIdsAsync(chatId, ct), ct);
             return updated;
+        }, ct: ct);
+    }
+
+    public async Task<IReadOnlyList<GroupMemberDto>> AddMembersAsync(
+        Guid chatId, Guid userId, IReadOnlyList<Guid>? userIds, CancellationToken ct = default)
+    {
+        var invited = (userIds ?? []).Where(id => id != userId).Distinct().ToList();
+        if (invited.Count == 0)
+            throw new BadRequestException("userIds must name at least one other user", "INVALID_REQUEST");
+        await DemandGroupAsync(chatId, userId, ct);
+        var names = (await DemandActiveUsersAsync(invited, ct)).ToDictionary(u => u.Id, u => u.DisplayName);
+
+        var now = Now();
+        var (added, before) = await db.InTransactionAsync(async ct =>
+        {
+            // One membership change of the group at a time: the limit holds under concurrent adds.
+            var count = await groups.LockAsync(chatId, ct) ?? 0;
+            (await policy.CanManageAsync(userId, chatId, GroupAction.AddMembers, ct: ct)).Demand();
+
+            var before = await chats.GetMemberIdsAsync(chatId, ct);
+            var fresh = invited.Except(before).ToList();
+            if (fresh.Count == 0)
+                return ((IReadOnlyList<GroupMemberDto>)[], before);
+            if (count + fresh.Count > _options.MaxMembers)
+                throw TooManyMembers();
+
+            var added = await groups.AddMembersAsync(chatId, fresh, now, ct);
+            await PostSystemMessageAsync(chatId, userId,
+                SystemMessages.Added([.. added.Select(id => (id, names[id]))]), now, recipients: before, ct);
+            await AuditAsync(chatId, userId, "members_added", null, new { userIds = added }, now, ct);
+
+            // The new members all see the chat alike: one card for all of them.
+            await events.ChatCreatedAsync(added, await CardAsync(chatId, added[0], ct), ct);
+            var members = await groups.GetMembersAsync(chatId, ct);
+            var dtos = members.Where(m => added.Contains(m.UserId)).Select(ToDto).ToList();
+            await events.MembersAddedAsync(new MembersAddedDto { ChatId = chatId, AddedBy = userId, Members = dtos }, before, ct);
+            return ((IReadOnlyList<GroupMemberDto>)dtos, before);
+        }, ct: ct);
+
+        if (added.Count > 0)
+            await presence.IntroduceAsync([.. added.Select(m => m.UserId)], before, CancellationToken.None);
+        return added;
+    }
+
+    public async Task RemoveMemberAsync(Guid chatId, Guid userId, Guid targetId, CancellationToken ct = default)
+    {
+        if (targetId == userId)
+        {
+            await LeaveAsync(chatId, userId, ct);
+            return;
+        }
+        await DemandGroupAsync(chatId, userId, ct);
+
+        var now = Now();
+        await db.InTransactionAsync(async ct =>
+        {
+            await groups.LockAsync(chatId, ct);
+            var target = await MemberAsync(chatId, targetId, ct);
+            (await policy.CanManageAsync(userId, chatId, GroupAction.RemoveMember, target, ct)).Demand();
+
+            await groups.RemoveMemberAsync(chatId, targetId, ct);
+            var remaining = await chats.GetMemberIdsAsync(chatId, ct);
+            await PostSystemMessageAsync(chatId, userId, SystemMessages.Removed(targetId, target.DisplayName), now, remaining, ct);
+            await AuditAsync(chatId, userId, "member_removed", targetId, null, now, ct);
+            await events.MemberRemovedAsync(
+                new MemberRemovedDto { ChatId = chatId, UserId = targetId, RemovedBy = userId }, [.. remaining, targetId], ct);
+            return true;
+        }, ct: ct);
+    }
+
+    public async Task LeaveAsync(Guid chatId, Guid userId, CancellationToken ct = default)
+    {
+        await DemandGroupAsync(chatId, userId, ct);
+
+        var now = Now();
+        await db.InTransactionAsync(async ct =>
+        {
+            await groups.LockAsync(chatId, ct);
+            var me = await MemberAsync(chatId, userId, ct);
+            var others = (await groups.GetMembersAsync(chatId, ct)).Where(m => m.UserId != userId).ToList();
+            if (others.Count == 0)
+            {
+                // Nobody left to hand it to: the group goes with its last member.
+                await groups.DeleteAsync(chatId, ct);
+                await events.MemberRemovedAsync(new MemberRemovedDto { ChatId = chatId, UserId = userId }, [userId], ct);
+                return true;
+            }
+
+            await groups.RemoveMemberAsync(chatId, userId, ct);
+            var remaining = others.Select(m => m.UserId).ToList();
+            if (me.Role == ChatRoles.Owner)
+            {
+                // Members come ordered: admins first, each group by joining time.
+                var heir = others.FirstOrDefault(m => m.Role == ChatRoles.Admin) ?? others[0];
+                await groups.SetRoleAsync(chatId, heir.UserId, ChatRoles.Owner, ct);
+                await groups.SetPermissionsAsync(chatId, heir.UserId, null, ct);
+                await AuditAsync(chatId, userId, "ownership_transferred", heir.UserId, new { reason = "owner_left" }, now, ct);
+                await events.MemberUpdatedAsync(
+                    new MemberUpdatedDto { ChatId = chatId, Member = ToDto(await MemberAsync(chatId, heir.UserId, ct)) },
+                    remaining, ct);
+            }
+
+            await PostSystemMessageAsync(chatId, userId, SystemMessages.Left(userId, me.DisplayName), now, remaining, ct);
+            await AuditAsync(chatId, userId, "member_left", userId, null, now, ct);
+            await events.MemberRemovedAsync(
+                new MemberRemovedDto { ChatId = chatId, UserId = userId }, [.. remaining, userId], ct);
+            return true;
         }, ct: ct);
     }
 

@@ -61,6 +61,62 @@ public class GroupsController(IGroupService groups) : ControllerBase
         Ok(await groups.GetMembersAsync(chatId, User.GetUserId(), ct));
 
     /// <summary>
+    /// Add members to a group.
+    /// </summary>
+    /// <remarks>
+    /// Needs <c>addMembers</c>. Those already in the group are skipped; the body lists who was
+    /// added (empty — nobody new). New members see the whole history, but only what comes after
+    /// joining counts as unread; they receive <c>ChatCreated</c>. The members already there receive
+    /// <c>MemberAdded</c> and a system message "members added".
+    ///
+    /// Errors: <c>400 NOT_A_GROUP</c>, <c>400 INVALID_REQUEST</c> (nobody besides the caller),
+    /// <c>400 TOO_MANY_MEMBERS</c>, <c>403 NOT_A_MEMBER</c>, <c>403 PERMISSION_DENIED</c>,
+    /// <c>404 USER_NOT_FOUND</c>, <c>429 RATE_LIMITED</c>.
+    /// </remarks>
+    /// <param name="chatId">Group ID</param>
+    /// <param name="dto">Who to add</param>
+    /// <param name="ct">Request cancellation.</param>
+    [HttpPost("{chatId}/members")]
+    [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
+    [ProducesResponseType(typeof(IEnumerable<GroupMemberDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> AddMembers(Guid chatId, [FromBody] AddMembersDto dto, CancellationToken ct) =>
+        Ok(await groups.AddMembersAsync(chatId, User.GetUserId(), dto.UserIds, ct));
+
+    /// <summary>
+    /// Remove a member, or leave the group.
+    /// </summary>
+    /// <remarks>
+    /// Another member — the owner removes anyone, an admin with <c>removeMembers</c> — members only.
+    /// Oneself — leaving: the owner hands the group over to the longest-standing admin (or member),
+    /// the last member deletes it. The removed one loses the chat with its history.
+    ///
+    /// Everyone, the removed one included, receives <c>MemberRemoved</c>; the rest also get a system
+    /// message. The removed one's connections stop getting the chat's events.
+    ///
+    /// Errors: <c>400 NOT_A_GROUP</c>, <c>403 NOT_A_MEMBER</c>, <c>403 PERMISSION_DENIED</c>,
+    /// <c>404 MEMBER_NOT_FOUND</c>, <c>429 RATE_LIMITED</c>.
+    /// </remarks>
+    /// <param name="chatId">Group ID</param>
+    /// <param name="userId">The member; the caller's own id — leave</param>
+    /// <param name="ct">Request cancellation.</param>
+    [HttpDelete("{chatId}/members/{userId}")]
+    [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> RemoveMember(Guid chatId, Guid userId, CancellationToken ct)
+    {
+        await groups.RemoveMemberAsync(chatId, User.GetUserId(), userId, ct);
+        return NoContent();
+    }
+
+    /// <summary>
     /// Change a member's role, or hand the group over.
     /// </summary>
     /// <remarks>

@@ -19,9 +19,12 @@ public sealed record OutboxEnvelope(IReadOnlyList<HubSend> Sends)
         ?? throw new InvalidOperationException("Empty outbox payload");
 }
 
-/// <param name="Target"><c>group</c>, <c>user</c> or <c>users</c>.</param>
+/// <param name="Target">
+/// <c>group</c>, <c>user</c> or <c>users</c> — an event; <c>leave-group</c> — take the users'
+/// connections out of a hub group.
+/// </param>
 /// <param name="Ids">Group name or user ids.</param>
-/// <param name="Method">Event name on the client.</param>
+/// <param name="Method">Event name on the client; for <c>leave-group</c> — the group.</param>
 /// <param name="Args">Event arguments.</param>
 public sealed record HubSend(string Target, IReadOnlyList<string> Ids, string Method, IReadOnlyList<JsonElement> Args)
 {
@@ -33,6 +36,9 @@ public sealed record HubSend(string Target, IReadOnlyList<string> Ids, string Me
 
     public static HubSend Users(IEnumerable<Guid> userIds, string method, params object?[] args) =>
         new("users", [.. userIds.Select(id => id.ToString())], method, ToJson(args));
+
+    public static HubSend LeaveGroup(IEnumerable<Guid> userIds, Guid chatId) =>
+        new("leave-group", [.. userIds.Select(id => id.ToString())], chatId.ToString(), []);
 
     private static JsonElement[] ToJson(object?[] args) =>
         [.. args.Select(a => JsonSerializer.SerializeToElement(a, a?.GetType() ?? typeof(object), OutboxEnvelope.Json))];
