@@ -305,7 +305,8 @@
             <strong>Доставка — «хотя бы один раз».</strong> <code>MessageCreated</code>, <code>ChatListUpdated</code>,
             <code>MessageUpdated</code>, <code>MessageDeleted</code>, <code>ReactionsChanged</code>,
             <code>MessagesDelivered</code>, <code>MessagesRead</code>, <code>ReadStateChanged</code>,
-            <code>DraftUpdated</code> и <code>ChatCreated</code> сохраняются в той же транзакции, что и само изменение, и рассылаются
+            <code>DraftUpdated</code>, <code>ChatCreated</code>, <code>ChatUpdated</code>, <code>ChatDeleted</code>,
+            <code>MemberAdded</code>, <code>MemberRemoved</code> и <code>MemberUpdated</code> сохраняются в той же транзакции, что и само изменение, и рассылаются
             из очереди: сбой сервера не теряет событие, но изредка оно может прийти дважды — сообщения
             различаются по <code>id</code> (или <code>chatId</code> + <code>seq</code>). Пропущенное, пока
             клиент был отключён, забирается через <code>GET /api/sync?since={pts}</code>.
@@ -343,13 +344,14 @@
                     <tr><td><code>status</code></td><td class="type-cell">string?</td><td>Только у своих: <code>sent</code> / <code>delivered</code> / <code>read</code>. В истории и поиске; в событиях <code>null</code></td></tr>
                     <tr><td><code>seq</code></td><td class="type-cell">long</td><td>Номер сообщения в чате: 1, 2, 3, … — сообщения упорядочены по нему</td></tr>
                     <tr><td><code>clientMessageId</code></td><td class="type-cell">Guid?</td><td>ID, который отправитель передал при REST-отправке; иначе <code>null</code></td></tr>
-                    <tr><td><code>type</code></td><td class="type-cell">string</td><td>Вид сообщения; пока всегда <code>"text"</code>. Незнакомый тип — показать заглушкой</td></tr>
+                    <tr><td><code>type</code></td><td class="type-cell">string</td><td><code>"text"</code> или <code>"system"</code> — запись о событии группы (см. <code>action</code>). Незнакомый тип — показать заглушкой</td></tr>
                     <tr><td><code>editedAt</code></td><td class="type-cell">DateTime?</td><td>Когда текст правили; <code>null</code> — не правили</td></tr>
                     <tr><td><code>entities</code></td><td class="type-cell">MessageEntity[]</td><td>Разметка и упоминания поверх <code>text</code>, смещения в UTF-16; пусто — обычный текст</td></tr>
                     <tr><td><code>reactions</code></td><td class="type-cell">{ emoji, count }[]</td><td>Реакции, самые популярные первыми</td></tr>
                     <tr><td><code>myReaction</code></td><td class="type-cell">string?</td><td>Своя реакция — только в истории и поиске; в событиях <code>null</code></td></tr>
                     <tr><td><code>replyTo</code></td><td class="type-cell">object?</td><td>Ответ на: <code>messageId</code>, <code>senderId</code>, <code>senderName</code>, <code>text</code> (≤ 100 символов), <code>deleted</code></td></tr>
                     <tr><td><code>forwardFrom</code></td><td class="type-cell">object?</td><td>Переслано от: <code>senderId</code>, <code>senderName</code> — автор оригинала</td></tr>
+                    <tr><td><code>action</code></td><td class="type-cell">object?</td><td>У системных: <code>type</code> (<code>group_created</code>, <code>title_changed</code>, <code>members_added</code>, <code>member_removed</code>, <code>member_left</code>), <code>userIds</code>, <code>title</code>; <code>text</code> — то же словами</td></tr>
                 </tbody>
             </table>
             <div class="note">
@@ -527,8 +529,9 @@
             </div>
             <div class="method-description" style="margin-top: 0.5rem;">
                 Вас добавили в новый чат: собеседник создал личный чат
-                (<code>POST /api/chats/private/{userId}</code>). Создателю событие не приходит —
-                чат уже есть в ответе на его запрос.
+                (<code>POST /api/chats/private/{userId}</code>), вас добавили в группу при создании
+                (<code>POST /api/chats/groups</code>) или позже (<code>POST /api/chats/{chatId}/members</code>).
+                Создателю событие не приходит — чат уже есть в ответе на его запрос.
             </div>
             <table>
                 <thead><tr><th>Аргумент</th><th>Тип</th><th>Описание</th></tr></thead>
@@ -562,6 +565,101 @@
             <div class="note">
                 <strong>Клиент:</strong> вставить <code>item</code> в список как есть; дополнительный запрос не нужен.
                 Поля <code>companion*</code> собраны с точки зрения <em>получателя</em> — в них создатель чата.
+            </div>
+        </div>
+
+        <div class="event-card">
+            <div class="event-header">
+                <span class="direction-badge server-client">Server → Client</span>
+                <span class="event-name">ChatUpdated</span>
+            </div>
+            <div class="method-description" style="margin-top: 0.5rem;">
+                Группу переименовали или изменили права участников по умолчанию (<code>PATCH /api/chats/{chatId}</code>). Получают все участники.
+            </div>
+            <table>
+                <thead><tr><th>Аргумент</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                    <tr><td><code>update</code></td><td class="type-cell">object</td><td><code>chatId</code>, <code>title</code>, <code>memberPermissions</code> — права участников по умолчанию</td></tr>
+                </tbody>
+            </table>
+            <div class="note">
+                <strong>Клиент:</strong> обновить название в списке и шапке; свои права — <code>GET /api/chats/{chatId}</code> → <code>myPermissions</code>.
+            </div>
+        </div>
+
+        <div class="event-card">
+            <div class="event-header">
+                <span class="direction-badge server-client">Server → Client</span>
+                <span class="event-name">ChatDeleted</span>
+            </div>
+            <div class="method-description" style="margin-top: 0.5rem;">
+                Владелец удалил группу (<code>DELETE /api/chats/{chatId}</code>). Получают все участники; события группы им больше не приходят.
+            </div>
+            <table>
+                <thead><tr><th>Аргумент</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                    <tr><td><code>deleted</code></td><td class="type-cell">object</td><td><code>chatId</code></td></tr>
+                </tbody>
+            </table>
+            <div class="note">
+                <strong>Клиент:</strong> убрать чат из списка, закрыть, если открыт.
+            </div>
+        </div>
+
+        <div class="event-card">
+            <div class="event-header">
+                <span class="direction-badge server-client">Server → Client</span>
+                <span class="event-name">MemberAdded</span>
+            </div>
+            <div class="method-description" style="margin-top: 0.5rem;">
+                В группу добавили участников. Получают те, кто уже был в группе; новым приходит <code>ChatCreated</code>.
+            </div>
+            <table>
+                <thead><tr><th>Аргумент</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                    <tr><td><code>added</code></td><td class="type-cell">object</td><td><code>chatId</code>, <code>addedBy</code>, <code>members</code> — <code>{ userId, displayName, username, role, permissions }</code>[]</td></tr>
+                </tbody>
+            </table>
+            <div class="note">
+                <strong>Клиент:</strong> обновить список участников, если он открыт. Системное сообщение приходит отдельно, как обычное.
+            </div>
+        </div>
+
+        <div class="event-card">
+            <div class="event-header">
+                <span class="direction-badge server-client">Server → Client</span>
+                <span class="event-name">MemberRemoved</span>
+            </div>
+            <div class="method-description" style="margin-top: 0.5rem;">
+                Участника исключили или он вышел. Получают все, включая его самого; его соединения перестают получать события группы.
+            </div>
+            <table>
+                <thead><tr><th>Аргумент</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                    <tr><td><code>removed</code></td><td class="type-cell">object</td><td><code>chatId</code>, <code>userId</code>, <code>removedBy</code> (<code>null</code> — вышел сам)</td></tr>
+                </tbody>
+            </table>
+            <div class="note">
+                <strong>Клиент:</strong> свой <code>userId</code> — убрать чат из списка; чужой — убрать из списка участников.
+            </div>
+        </div>
+
+        <div class="event-card">
+            <div class="event-header">
+                <span class="direction-badge server-client">Server → Client</span>
+                <span class="event-name">MemberUpdated</span>
+            </div>
+            <div class="method-description" style="margin-top: 0.5rem;">
+                У участника сменилась роль или права (при передаче группы — два события: о старом и новом владельце). Получают все участники.
+            </div>
+            <table>
+                <thead><tr><th>Аргумент</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                    <tr><td><code>update</code></td><td class="type-cell">object</td><td><code>chatId</code>, <code>member</code> — <code>{ userId, displayName, username, role, permissions }</code></td></tr>
+                </tbody>
+            </table>
+            <div class="note">
+                <strong>Клиент:</strong> обновить участника; если это вы — пересчитать доступные действия.
             </div>
         </div>
 
@@ -644,7 +742,7 @@
         <footer>
             <a href="/swagger">REST API (Swagger)</a> ·
             <a href="/signalr-docs">SignalR Docs</a> ·
-            v1.3
+            v1.4
         </footer>
     </div>
 </body>

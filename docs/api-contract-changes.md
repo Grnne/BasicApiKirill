@@ -1117,7 +1117,8 @@ MessagesRead:      { "chatId": "…", "userId": "<кто прочитал>", "se
   { "chatId": "…", "userId": "<кого>", "removedBy": "<кто>" }   // removedBy: null — вышел сам
   ```
 
-  Оставшимся приходит и системное сообщение (`member_removed` или `member_left`).
+  Оставшимся приходит и системное сообщение (`member_removed` или `member_left`). У кого чат
+  открыт (`JoinChat`), исключённому оно тоже приходит — это последнее событие группы для него.
 - `204`. Ошибки: `400 NOT_A_GROUP`, `403 NOT_A_MEMBER`, `403 PERMISSION_DENIED`,
   `404 MEMBER_NOT_FOUND`, `429 RATE_LIMITED`.
 
