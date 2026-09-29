@@ -15,7 +15,10 @@ public class Program
     {
         var builder = WebApplication.CreateBuilder(args);
 
-        builder.Services.AddApiServices(builder.Configuration);
+        // Падаем до старта, если конфиг опасен или неполон (дефолтный JWT-ключ и т.п.).
+        ConfigurationValidation.Validate(builder.Configuration, builder.Environment);
+
+        builder.Services.AddApiServices(builder.Configuration, builder.Environment);
 
         // Сжатие статики фронтенда: бандл ужимается втрое.
         // Пока раздачей занимается Kestrel, это его работа; появится nginx —
@@ -85,10 +88,12 @@ public class Program
         // CORS
         app.UseCors("Default");
 
-        app.UseSwaggerWithUI();
+        // Swagger по умолчанию только в Development; в проде — флагом Swagger:Enabled.
+        if (app.Configuration.GetValue("Swagger:Enabled", false))
+            app.UseSwaggerWithUI();
 
-        // Order: HTTPS → Auth → Authorization → endpoints
-        app.UseHttpsRedirection();
+        // TLS завершается на обратном прокси, поэтому HTTPS-редиректа здесь нет.
+        // Order: Auth → Authorization → endpoints
         app.UseAuthentication();
         app.UseAuthorization();
         app.UseRateLimiter();

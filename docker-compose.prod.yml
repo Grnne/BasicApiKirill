@@ -97,6 +97,8 @@ services:
       Jwt__Audience: ${JWT_AUDIENCE:-ChatClient}
       Jwt__ExpiryMinutes: ${JWT_EXPIRY_MINUTES:-60}
       AllowedHosts: ${ALLOWED_HOSTS:-*}
+      # Swagger UI и схема API; в проде по умолчанию выключены.
+      Swagger__Enabled: ${SWAGGER_ENABLED:-false}
       # Фронтенд отдаётся тем же API (wwwroot/app), поэтому по умолчанию
       # cross-origin доступ с credentials не нужен. Заполняй, только если
       # ходишь на API с отдельного домена/порта.

@@ -23,7 +23,8 @@ public static class ServiceExtensions
 {
     public const string ReadyTag = "ready";
 
-    public static IServiceCollection AddApiServices(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddApiServices(
+        this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
     {
                                 services.AddControllers()
             .ConfigureApiBehaviorOptions(options =>
@@ -70,8 +71,9 @@ public static class ServiceExtensions
                 {
                     // Разрешаем параллельную обработку вызовов
                     options.MaximumParallelInvocationsPerClient = 2;
-                    // EnableDetailedErrors — помогает понять что падает при разработке
-                    options.EnableDetailedErrors = true;
+                    // Текст исключений клиенту — только при разработке: в проде он
+                    // раскрывает внутренности (SQL, пути, имена классов).
+                    options.EnableDetailedErrors = environment.IsDevelopment();
                     // Максимальный размер входящего сообщения (128KB для поддержки base64 изображений)
                     options.MaximumReceiveMessageSize = 128 * 1024;
                     // Ограничиваем буфер для команд, чтобы избежать накопления зависших вызовов
