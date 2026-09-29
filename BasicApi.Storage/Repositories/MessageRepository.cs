@@ -19,6 +19,7 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
         m.edited_at AS EditedAt,
         m.deleted_at AS DeletedAt,
         m.entities::text AS EntitiesJson,
+        m.reactions_summary::text AS ReactionsJson,
         m.seq AS Seq,
         m.client_message_id AS ClientMessageId,
         COALESCE(u.display_name, 'Unknown') AS SenderName,
@@ -39,6 +40,10 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
         LEFT JOIN users ru ON ru.id = r.sender_id
         LEFT JOIN users fu ON fu.id = m.forward_from_user_id";
 
+    /// <summary>The viewer's own reaction — only in queries made for a viewer (history, search).</summary>
+    private const string MyReactionColumn = @",
+        (SELECT mr.emoji FROM message_reactions mr WHERE mr.message_id = m.id AND mr.user_id = @viewerId) AS MyReaction";
+
     /// <summary>
     /// What a member sees: not deleted for everyone and not hidden by them ("delete for me").
     /// </summary>
@@ -53,7 +58,7 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
         Guid chatId, Guid viewerId, long? beforeSeq, int limit, CancellationToken ct = default)
     {
         var sql = $@"
-            SELECT {SelectColumns}
+            SELECT {SelectColumns}{MyReactionColumn}
             FROM messages m
             {Joins}
             WHERE m.chat_id = @chatId
@@ -160,9 +165,16 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
             new { messageId, text, entitiesJson, editedAt }, ct);
 
     public async Task<bool> DeleteForEveryoneAsync(Guid messageId, DateTime deletedAt, CancellationToken ct = default) =>
-        await db.ExecuteAsync(@"
-            UPDATE messages SET deleted_at = @deletedAt, text = '', entities = NULL
-            WHERE id = @messageId AND deleted_at IS NULL",
+        // A tombstone keeps nothing of the content: text, formatting and reactions go.
+        await db.ExecuteScalarAsync<long>(@"
+            WITH m AS (
+                UPDATE messages SET deleted_at = @deletedAt, text = '', entities = NULL, reactions_summary = NULL
+                WHERE id = @messageId AND deleted_at IS NULL
+                RETURNING id
+            ), r AS (
+                DELETE FROM message_reactions WHERE message_id IN (SELECT id FROM m)
+            )
+            SELECT COUNT(*) FROM m",
             new { messageId, deletedAt }, ct) > 0;
 
     // Two statements, not a CTE: a DELETE and an INSERT of the same key in one statement
@@ -239,7 +251,7 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
         var prefixQuery = ToPrefixQuery(query);
 
         var sql = $@"
-            SELECT {SelectColumns}
+            SELECT {SelectColumns}{MyReactionColumn}
             FROM messages m
             {Joins}
             WHERE m.chat_id = @chatId

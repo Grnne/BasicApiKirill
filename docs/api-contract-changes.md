@@ -768,6 +768,56 @@ Authorization: Bearer {access}
 его со счётчика. У пересланных сообщений разметка сохраняется, но упоминания в них никого
 не уведомляют.
 
+### 12.4. Реакции
+
+Одна реакция пользователя на сообщение, как в WhatsApp: новая заменяет прежнюю. Набор
+задаёт сервер (`Messages:Reactions`), по умолчанию: 👍 ❤️ 😂 😮 😢 🙏 👎 🔥 🎉.
+«❤» без невидимого селектора варианта (U+FE0F) и «❤️» с ним — одна реакция.
+
+**`MessageDto` — ещё два поля:**
+
+```json
+{
+  "reactions": [ { "emoji": "🔥", "count": 2 }, { "emoji": "🎉", "count": 1 } ],
+  "myReaction": "🔥"
+}
+```
+
+- `reactions` — всегда массив, самые популярные первыми (при равенстве — какая появилась
+  раньше).
+- `myReaction` — своя реакция или `null`. Заполняется **только в истории и поиске**.
+  В событиях (`MessageCreated`, `MessageUpdated`) — `null`: своё отслеживайте по
+  `ReactionsChanged`.
+- В `lastMessage` списка чатов реакций нет — это превью.
+
+**`PUT /api/chats/{chatId}/messages/{messageId}/reactions`** — поставить.
+
+```json
+{ "emoji": "🔥" }
+```
+
+- `200` — `MessageReactionsDto` (как в событии, ниже).
+- Та же реакция ещё раз — `200` без события.
+- Ошибки: `400 INVALID_REACTION` (не из набора), `403 NOT_A_MEMBER`,
+  `404 MESSAGE_NOT_FOUND` (нет в чате, удалено у всех или у себя), `429 RATE_LIMITED`.
+
+**`DELETE /api/chats/{chatId}/messages/{messageId}/reactions`** — убрать свою. `204`;
+без реакции — `204` без события.
+
+**`ReactionsChanged(reactions)`** — всем участникам на все соединения и в журнал:
+
+```json
+{
+  "chatId": "…", "messageId": "…",
+  "reactions": [ { "emoji": "🔥", "count": 2 } ],   // сводка после изменения
+  "userId": "…",                                   // кто изменил
+  "emoji": "🔥"                                    // его реакция теперь; null — убрал
+}
+```
+
+Клиенту: заменить `reactions` сообщения; если `userId` — свой, запомнить `emoji` как
+`myReaction`. Удаление сообщения у всех убирает и его реакции.
+
 ---
 
 ## Справочник кодов ошибок
@@ -786,6 +836,7 @@ Authorization: Bearer {access}
 | `INVALID_REQUEST` | 400 | `POST /api/users/status`: пустой `userIds`; пересылка: пустой или повторяющийся `messageIds`, `clientMessageIds` другой длины |
 | `TOO_MANY_MESSAGES` | 400 | Пересылка: больше 100 сообщений |
 | `REPLY_TARGET_NOT_FOUND` | 400 | Отправка: `replyToMessageId` не из этого чата или удалено |
+| `INVALID_REACTION` | 400 | Реакция не из набора сервера |
 | `INVALID_ENTITIES` | 400 | Отправка, правка: неверная разметка — диапазон, тип, ссылка, упоминание не участника |
 | `TOO_MANY_IDS` | 400 | `POST /api/users/status`: больше 200 `userIds` |
 | `INVALID_PTS` | 400 | `/api/sync`: `since` или `pts` вне допустимого диапазона |

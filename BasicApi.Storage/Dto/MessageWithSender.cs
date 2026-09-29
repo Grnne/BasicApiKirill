@@ -17,6 +17,12 @@ public class MessageWithSender
     /// <summary>Formatting as JSON; null — plain text.</summary>
     public string? EntitiesJson { get; set; }
 
+    /// <summary>Reactions summary as JSON: [{emoji, count}]; null — none.</summary>
+    public string? ReactionsJson { get; set; }
+
+    /// <summary>The viewer's own reaction; filled only by queries made for a viewer.</summary>
+    public string? MyReaction { get; set; }
+
     /// <summary>Deleted for everyone: a tombstone without text.</summary>
     public DateTime? DeletedAt { get; set; }
 

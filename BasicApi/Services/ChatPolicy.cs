@@ -37,6 +37,9 @@ public interface IChatPolicy
     /// </summary>
     Task<PolicyDecision> CanDeleteForEveryoneAsync(Guid userId, MessageWithSender message, CancellationToken ct = default);
 
+    /// <summary>Put or remove a reaction on a message of the chat.</summary>
+    Task<PolicyDecision> CanReactAsync(Guid userId, Guid chatId, CancellationToken ct = default);
+
     /// <summary>Who sees a user's online status — their changes are broadcast to them.</summary>
     Task<IReadOnlyCollection<Guid>> GetPresenceAudienceAsync(Guid userId, CancellationToken ct = default);
 
@@ -65,6 +68,9 @@ public sealed class ChatPolicy(
         MemberOnlyAsync(userId, chatId, ct);
 
     public Task<PolicyDecision> CanPostAsync(Guid userId, Guid chatId, CancellationToken ct = default) =>
+        MemberOnlyAsync(userId, chatId, ct);
+
+    public Task<PolicyDecision> CanReactAsync(Guid userId, Guid chatId, CancellationToken ct = default) =>
         MemberOnlyAsync(userId, chatId, ct);
 
     public Task<PolicyDecision> CanEditMessageAsync(Guid userId, MessageWithSender message, CancellationToken ct = default) =>

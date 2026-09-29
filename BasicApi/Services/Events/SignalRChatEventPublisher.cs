@@ -36,6 +36,12 @@ public sealed class SignalRChatEventPublisher(IHubContext<ChatHub> hub) : IChatE
             ? Task.CompletedTask
             : hub.Clients.Users(ToStrings(recipientIds)).SendAsync("MessageDeleted", deleted, ct);
 
+    public Task ReactionsChangedAsync(
+        MessageReactionsDto reactions, IReadOnlyCollection<Guid> memberIds, CancellationToken ct = default) =>
+        memberIds.Count == 0
+            ? Task.CompletedTask
+            : hub.Clients.Users(ToStrings(memberIds)).SendAsync("ReactionsChanged", reactions, ct);
+
     public Task ChatCreatedAsync(Guid recipientId, ChatListItemDto item, bool live = true, CancellationToken ct = default) =>
         live ? hub.Clients.User(recipientId.ToString()).SendAsync("ChatCreated", item, ct) : Task.CompletedTask;
 

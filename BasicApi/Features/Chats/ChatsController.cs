@@ -13,7 +13,8 @@ namespace BasicApi.Features.Chats;
 [Route("api/chats")]
 [Produces("application/json")]
 [Tags("Chats")]
-public class ChatsController(IChatService chats, IMessageService messages, IPresenceService presence) : ControllerBase
+public class ChatsController(
+    IChatService chats, IMessageService messages, IReactionService reactions, IPresenceService presence) : ControllerBase
 {
     /// <summary>
     /// Get all chats for the current user
@@ -272,6 +273,57 @@ public class ChatsController(IChatService chats, IMessageService messages, IPres
         Guid chatId, Guid messageId, [FromQuery] bool forEveryone = false, CancellationToken ct = default)
     {
         await messages.DeleteAsync(chatId, User.GetUserId(), messageId, forEveryone, ct);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Put a reaction on a message.
+    /// </summary>
+    /// <remarks>
+    /// One reaction per user per message: a new one replaces the previous. The emoji must be one
+    /// of the instance's set (<c>Messages:Reactions</c>). Members receive <c>ReactionsChanged</c>;
+    /// the same reaction again changes nothing and sends no event.
+    ///
+    /// Errors: <c>400 INVALID_REACTION</c>, <c>403 NOT_A_MEMBER</c>,
+    /// <c>404 MESSAGE_NOT_FOUND</c> (not in this chat, deleted, or hidden by the caller),
+    /// <c>429 RATE_LIMITED</c>.
+    /// </remarks>
+    /// <param name="chatId">Chat ID</param>
+    /// <param name="messageId">Message ID</param>
+    /// <param name="dto">The reaction</param>
+    /// <param name="ct">Request cancellation.</param>
+    [HttpPut("{chatId}/messages/{messageId}/reactions")]
+    [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
+    [ProducesResponseType(typeof(MessageReactionsDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> SetReaction(
+        Guid chatId, Guid messageId, [FromBody] SetReactionDto dto, CancellationToken ct)
+        => Ok(await reactions.SetAsync(chatId, User.GetUserId(), messageId, dto.Emoji, ct));
+
+    /// <summary>
+    /// Remove your reaction from a message.
+    /// </summary>
+    /// <remarks>
+    /// Members receive <c>ReactionsChanged</c> with <c>emoji: null</c>. Without a reaction —
+    /// <c>204</c> and no event. Errors as for putting one.
+    /// </remarks>
+    /// <param name="chatId">Chat ID</param>
+    /// <param name="messageId">Message ID</param>
+    /// <param name="ct">Request cancellation.</param>
+    [HttpDelete("{chatId}/messages/{messageId}/reactions")]
+    [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> RemoveReaction(Guid chatId, Guid messageId, CancellationToken ct)
+    {
+        await reactions.RemoveAsync(chatId, User.GetUserId(), messageId, ct);
         return NoContent();
     }
 

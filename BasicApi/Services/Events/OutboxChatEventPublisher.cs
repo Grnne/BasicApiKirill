@@ -37,6 +37,10 @@ public sealed class OutboxChatEventPublisher(
         MessageDeletedDto deleted, IReadOnlyCollection<Guid> recipientIds, CancellationToken ct = default) =>
         ToAllAsync(UpdateTypes.MessageDeleted, deleted, recipientIds, ct);
 
+    public Task ReactionsChangedAsync(
+        MessageReactionsDto reactions, IReadOnlyCollection<Guid> memberIds, CancellationToken ct = default) =>
+        ToAllAsync(UpdateTypes.ReactionsChanged, reactions, memberIds, ct);
+
     /// <summary>
     /// The same payload to the journal and to every connection of the recipients — not just the
     /// open chat: a client updates the chat list preview from it too.
@@ -82,5 +86,6 @@ public static class UpdateTypes
     public const string MessageCreated = "MessageCreated";
     public const string MessageUpdated = "MessageUpdated";
     public const string MessageDeleted = "MessageDeleted";
+    public const string ReactionsChanged = "ReactionsChanged";
     public const string ChatCreated = "ChatCreated";
 }

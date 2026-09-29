@@ -447,6 +447,8 @@ public sealed class MessageService(
         Type = m.Type,
         EditedAt = m.EditedAt,
         Entities = MessageEntities.Deserialize(m.EntitiesJson),
+        Reactions = ReactionService.Summary(m.ReactionsJson),
+        MyReaction = m.MyReaction,
         ReplyTo = m.ReplyToMessageId is { } replyId
             ? new MessageReplyDto
             {

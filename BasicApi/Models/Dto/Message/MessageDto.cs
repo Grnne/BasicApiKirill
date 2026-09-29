@@ -25,6 +25,15 @@ public class MessageDto
     /// <summary>Formatting and mentions over <see cref="Text"/>; empty — plain text.</summary>
     public List<MessageEntityDto> Entities { get; set; } = [];
 
+    /// <summary>Reactions, most popular first; empty — none.</summary>
+    public List<ReactionCountDto> Reactions { get; set; } = [];
+
+    /// <summary>
+    /// The caller's own reaction. Filled in history and search; in events it is null —
+    /// track your own from <c>ReactionsChanged</c>.
+    /// </summary>
+    public string? MyReaction { get; set; }
+
     /// <summary>The message this one answers; null — not a reply.</summary>
     public MessageReplyDto? ReplyTo { get; set; }
 
