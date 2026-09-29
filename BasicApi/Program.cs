@@ -111,10 +111,13 @@ public class Program
             app.UseSwaggerWithUI();
 
         // TLS завершается на обратном прокси, поэтому HTTPS-редиректа здесь нет.
-        // Order: Auth → Authorization → endpoints
+        // Порядок: Authentication → RateLimiter → Authorization.
+        // Лимитеру нужен уже известный пользователь (лимит по userId), и он должен
+        // стоять до авторизации — иначе поток запросов без токена обрывается на 401
+        // раньше лимитера и не ограничивается вовсе.
         app.UseAuthentication();
-        app.UseAuthorization();
         app.UseRateLimiter();
+        app.UseAuthorization();
 
         app.MapHub<ChatHub>("/hubs/chat");
         app.MapControllers();

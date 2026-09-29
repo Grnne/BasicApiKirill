@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using System.Threading.RateLimiting;
@@ -16,6 +17,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 
 namespace BasicApi.Extensions;
@@ -67,7 +69,7 @@ public static class ServiceExtensions
         });
                 services.AddSwaggerWithDocs(configuration);
                 services.AddJwtAuth(configuration);
-                services.AddApiRateLimiting();
+                services.AddApiRateLimiting(configuration);
                 services.AddSignalR(options =>
                 {
                     // Разрешаем параллельную обработку вызовов
@@ -202,23 +204,32 @@ public static class ServiceExtensions
         return services;
     }
 
-    public static IServiceCollection AddApiRateLimiting(this IServiceCollection services)
+    public static IServiceCollection AddApiRateLimiting(this IServiceCollection services, IConfiguration configuration)
     {
+        // Реальный клиент при открытии и листании чатов делает десятки запросов в минуту,
+        // поэтому лимит на пользователя щедрый. Анонимам (вход, регистрация, запросы без
+        // токена) — отдельный, по IP. Лимит только по IP не годится: вся команда за
+        // офисным NAT делила бы один бюджет.
+        var perUser = configuration.GetValue("RateLimiting:PerUserPerMinute", 300);
+        var perIp = configuration.GetValue("RateLimiting:PerIpPerMinute", 100);
+
         services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
-            // Защита от перегрузки: базовый лимит на весь REST API с одного IP,
-            // чтобы никто не мог заDDoS'ить сервер потоком обычных запросов.
             options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
-                RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                    factory: _ => new FixedWindowRateLimiterOptions
-                    {
-                        PermitLimit = 60,
-                        Window = TimeSpan.FromMinutes(1),
-                        QueueLimit = 0
-                    }));
+            {
+                var userId = context.User.Identity?.IsAuthenticated == true
+                    ? context.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                      ?? context.User.FindFirstValue(JwtRegisteredClaimNames.Sub)
+                    : null;
+
+                return userId is not null
+                    ? RateLimitPartition.GetSlidingWindowLimiter("user:" + userId, _ => PerMinute(perUser))
+                    : RateLimitPartition.GetSlidingWindowLimiter(
+                        "ip:" + (context.Connection.RemoteIpAddress?.ToString() ?? "unknown"),
+                        _ => PerMinute(perIp));
+            });
 
             // Брутфорс-защита: 5 попыток логина/регистрации в минуту с одного IP
             // (действует ДОПОЛНИТЕЛЬНО к глобальному лимиту, оба должны пройти).
@@ -266,6 +277,15 @@ public static class ServiceExtensions
 
         return services;
     }
+
+    /// <summary>Скользящее окно в минуту из 6 сегментов: без двойного всплеска на стыке окон.</summary>
+    private static SlidingWindowRateLimiterOptions PerMinute(int permits) => new()
+    {
+        PermitLimit = permits,
+        Window = TimeSpan.FromMinutes(1),
+        SegmentsPerWindow = 6,
+        QueueLimit = 0
+    };
 
     /// <summary>
     /// Maps ASP.NET default validation error messages to machine-readable codes.
