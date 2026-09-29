@@ -5,7 +5,7 @@ namespace BasicApi.Storage.Repositories;
 
 public sealed class GroupRepository(IDbSession db) : IGroupRepository
 {
-    private const string MemberColumns = @"
+    internal const string MemberColumns = @"
         cm.chat_id AS ChatId,
         cm.user_id AS UserId,
         c.type AS ChatType,
@@ -33,15 +33,6 @@ public sealed class GroupRepository(IDbSession db) : IGroupRepository
                 new { chatId, creatorId, now, userIds = memberIds.Append(creatorId).Distinct().ToArray() }, ct);
             return true;
         }, ct: ct);
-
-    public Task<ChatMember?> GetMemberAsync(Guid chatId, Guid userId, CancellationToken ct = default) =>
-        db.QueryFirstOrDefaultAsync<ChatMember>($@"
-            SELECT {MemberColumns}
-            FROM chat_members cm
-            JOIN chats c ON c.id = cm.chat_id
-            JOIN users u ON u.id = cm.user_id
-            WHERE cm.chat_id = @chatId AND cm.user_id = @userId",
-            new { chatId, userId }, ct);
 
     public Task<IReadOnlyList<ChatMember>> GetMembersAsync(Guid chatId, CancellationToken ct = default) =>
         db.QueryAsync<ChatMember>($@"

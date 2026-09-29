@@ -24,6 +24,28 @@ public interface IGroupService
     /// <c>TOO_MANY_MEMBERS</c>, 404 <c>USER_NOT_FOUND</c> (missing or deactivated).
     /// </summary>
     Task<ChatListItemDto> CreateAsync(Guid creatorId, string? title, IReadOnlyList<Guid>? memberIds, CancellationToken ct = default);
+
+    /// <summary>Members with roles and what each may do. Errors: 400 <c>NOT_A_GROUP</c>, 403 <c>NOT_A_MEMBER</c>.</summary>
+    Task<IReadOnlyList<GroupMemberDto>> GetMembersAsync(Guid chatId, Guid userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Makes a member an admin (owner, or an admin allowed to add admins), an admin a member again
+    /// (owner), or hands the group over (<c>owner</c>: the owner becomes an admin). A new role
+    /// starts without the member's own overrides. Members get <c>MemberUpdated</c>; the same role
+    /// again changes nothing. Errors: 400 <c>NOT_A_GROUP</c>/<c>INVALID_ROLE</c>,
+    /// 403 <c>NOT_A_MEMBER</c>/<c>PERMISSION_DENIED</c>, 404 <c>MEMBER_NOT_FOUND</c>.
+    /// </summary>
+    Task<GroupMemberDto> SetRoleAsync(Guid chatId, Guid userId, Guid targetId, string? role, CancellationToken ct = default);
+
+    /// <summary>
+    /// Replaces the member's own permission overrides: given fields override the role and the
+    /// group's defaults, omitted ones follow them. A member's — by the owner or an admin allowed to
+    /// remove members, and only member permissions; an admin's — by the owner. Members get
+    /// <c>MemberUpdated</c>. Errors: 400 <c>NOT_A_GROUP</c>/<c>INVALID_PERMISSIONS</c>,
+    /// 403 <c>NOT_A_MEMBER</c>/<c>PERMISSION_DENIED</c>, 404 <c>MEMBER_NOT_FOUND</c>.
+    /// </summary>
+    Task<GroupMemberDto> SetPermissionsAsync(
+        Guid chatId, Guid userId, Guid targetId, PermissionsPatchDto? permissions, CancellationToken ct = default);
 }
 
 public sealed class GroupService(
@@ -32,6 +54,7 @@ public sealed class GroupService(
     IChatRepository chats,
     IUserRepository users,
     IMessageRepository messages,
+    IChatPolicy policy,
     IPresenceService presence,
     IChatEventPublisher events,
     IOptions<GroupOptions> options,
@@ -72,6 +95,116 @@ public sealed class GroupService(
         await presence.IntroduceAsync([creatorId, .. invited], [], CancellationToken.None);
         return card;
     }
+
+    public async Task<IReadOnlyList<GroupMemberDto>> GetMembersAsync(Guid chatId, Guid userId, CancellationToken ct = default)
+    {
+        await DemandGroupAsync(chatId, userId, ct);
+        return [.. (await groups.GetMembersAsync(chatId, ct)).Select(ToDto)];
+    }
+
+    public async Task<GroupMemberDto> SetRoleAsync(
+        Guid chatId, Guid userId, Guid targetId, string? role, CancellationToken ct = default)
+    {
+        if (!ChatRoles.IsValid(role))
+            throw new BadRequestException("Role must be owner, admin or member", "INVALID_ROLE");
+        await DemandGroupAsync(chatId, userId, ct);
+
+        var now = Now();
+        return await db.InTransactionAsync(async ct =>
+        {
+            // Role changes of one group go one at a time: two admins cannot both hand it over.
+            await groups.LockAsync(chatId, ct);
+            var target = await MemberAsync(chatId, targetId, ct);
+            if (target.Role == role)
+                return ToDto(target);
+
+            if (target.Role == ChatRoles.Owner)
+                throw new ForbiddenException(
+                    "The owner's role changes only by handing the group over", ChatPolicy.PermissionDeniedCode);
+            var action = role switch
+            {
+                ChatRoles.Owner => GroupAction.TransferOwnership,
+                ChatRoles.Admin => GroupAction.PromoteToAdmin,
+                _ => GroupAction.DemoteAdmin
+            };
+            (await policy.CanManageAsync(userId, chatId, action, target, ct)).Demand();
+
+            var memberIds = await chats.GetMemberIdsAsync(chatId, ct);
+            if (action == GroupAction.TransferOwnership)
+            {
+                // The old owner steps down first: one owner per group at any moment.
+                await groups.SetRoleAsync(chatId, userId, ChatRoles.Admin, ct);
+                await groups.SetPermissionsAsync(chatId, userId, null, ct);
+                await AuditAsync(chatId, userId, "ownership_transferred", targetId, null, now, ct);
+                await events.MemberUpdatedAsync(
+                    new MemberUpdatedDto { ChatId = chatId, Member = ToDto(await MemberAsync(chatId, userId, ct)) }, memberIds, ct);
+            }
+            else
+            {
+                await AuditAsync(chatId, userId, "role_changed", targetId, new { role }, now, ct);
+            }
+
+            await groups.SetRoleAsync(chatId, targetId, role!, ct);
+            await groups.SetPermissionsAsync(chatId, targetId, null, ct);
+            var updated = ToDto(await MemberAsync(chatId, targetId, ct));
+            await events.MemberUpdatedAsync(new MemberUpdatedDto { ChatId = chatId, Member = updated }, memberIds, ct);
+            return updated;
+        }, ct: ct);
+    }
+
+    public async Task<GroupMemberDto> SetPermissionsAsync(
+        Guid chatId, Guid userId, Guid targetId, PermissionsPatchDto? permissions, CancellationToken ct = default)
+    {
+        await DemandGroupAsync(chatId, userId, ct);
+
+        var now = Now();
+        return await db.InTransactionAsync(async ct =>
+        {
+            await groups.LockAsync(chatId, ct);
+            var target = await MemberAsync(chatId, targetId, ct);
+            var action = target.Role == ChatRoles.Admin ? GroupAction.RestrictAdmin : GroupAction.RestrictMember;
+            (await policy.CanManageAsync(userId, chatId, action, target, ct)).Demand();
+            if (target.Role == ChatRoles.Member && permissions is not null && GroupRights.TouchesAdminPermissions(permissions))
+                throw new BadRequestException(
+                    "A member cannot get admin permissions; make them an admin instead", "INVALID_PERMISSIONS");
+
+            var json = GroupRights.WritePatch(permissions);
+            if (json == GroupRights.WritePatch(GroupRights.ReadPatch(target.PermissionsJson)))
+                return ToDto(target);
+
+            await groups.SetPermissionsAsync(chatId, targetId, json, ct);
+            await AuditAsync(chatId, userId, "permissions_changed", targetId,
+                new { permissions = GroupRights.ReadPatch(json) }, now, ct);
+
+            var updated = ToDto(await MemberAsync(chatId, targetId, ct));
+            await events.MemberUpdatedAsync(
+                new MemberUpdatedDto { ChatId = chatId, Member = updated }, await chats.GetMemberIdsAsync(chatId, ct), ct);
+            return updated;
+        }, ct: ct);
+    }
+
+    /// <summary>The caller is a member (403 otherwise, before anything about the chat is told) of a group (400 otherwise).</summary>
+    private async Task<Chat> DemandGroupAsync(Guid chatId, Guid userId, CancellationToken ct)
+    {
+        await policy.DemandReadAsync(userId, chatId, ct);
+        var chat = await chats.GetByIdAsync(chatId, ct) ?? throw new NotFoundException("Chat not found", "CHAT_NOT_FOUND");
+        return chat.Type == ChatTypes.Group
+            ? chat
+            : throw new BadRequestException("This can only be done in a group", "NOT_A_GROUP");
+    }
+
+    private async Task<ChatMember> MemberAsync(Guid chatId, Guid userId, CancellationToken ct) =>
+        await chats.GetMemberAsync(chatId, userId, ct)
+        ?? throw new NotFoundException("The user is not a member of this group", "MEMBER_NOT_FOUND");
+
+    public static GroupMemberDto ToDto(ChatMember member) => new()
+    {
+        UserId = member.UserId,
+        DisplayName = member.DisplayName,
+        Username = member.Username,
+        Role = member.Role,
+        Permissions = GroupRights.Effective(member)
+    };
 
     private static string NormalizeTitle(string? title)
     {

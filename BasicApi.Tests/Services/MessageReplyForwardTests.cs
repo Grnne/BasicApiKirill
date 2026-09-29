@@ -25,6 +25,7 @@ public class MessageReplyForwardTests
 
     public MessageReplyForwardTests()
     {
+        _chatRepoMock.WithMembersFromIsMember();
         foreach (var chat in new[] { _chatId, _sourceChatId })
         {
             _chatRepoMock.Setup(r => r.IsMemberAsync(chat, _userId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
@@ -47,7 +48,7 @@ public class MessageReplyForwardTests
             });
 
         var membership = new MembershipService(_chatRepoMock.Object);
-        _service = new MessageService(new FakeDbSession(), _msgRepoMock.Object, membership, new ChatPolicy(membership), _eventsMock.Object, Mock.Of<IDraftRepository>());
+        _service = new MessageService(new FakeDbSession(), _msgRepoMock.Object, membership, new ChatPolicy(membership), _eventsMock.Object, Mock.Of<IDraftRepository>(), Mock.Of<IGroupRepository>());
     }
 
     private MessageWithSender Source(string text, long seq, Guid? forwardFromUser = null) => new()

@@ -20,6 +20,7 @@ public class ChatPolicyTests
 
     public ChatPolicyTests()
     {
+        _chatRepoMock.WithMembersFromIsMember();
         _chatRepoMock
             .Setup(r => r.IsMemberAsync(_chatId, _userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
@@ -98,7 +99,7 @@ public class ChatPolicyEnforcementTests
     }
 
     private MessageService Messages() =>
-        new(new FakeDbSession(), _msgRepoMock.Object, new MembershipService(_chatRepoMock.Object), _policyMock.Object, _eventsMock.Object, Mock.Of<IDraftRepository>());
+        new(new FakeDbSession(), _msgRepoMock.Object, new MembershipService(_chatRepoMock.Object), _policyMock.Object, _eventsMock.Object, Mock.Of<IDraftRepository>(), Mock.Of<IGroupRepository>());
 
     private static async Task AssertDenied(Func<Task> action) =>
         Assert.Equal(Code, (await Assert.ThrowsAsync<ForbiddenException>(action)).ErrorCode);

@@ -25,6 +25,7 @@ public class MessageServiceTests
 
     public MessageServiceTests()
     {
+        _chatRepoMock.WithMembersFromIsMember();
         _chatRepoMock
             .Setup(r => r.GetMemberIdsAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
@@ -46,7 +47,7 @@ public class MessageServiceTests
             .ReturnsAsync((Message m, Guid? clientMessageId, CancellationToken _) => Stored(m.ChatId, m.Text, clientMessageId, m.Id));
 
         var membership = new MembershipService(_chatRepoMock.Object);
-        _service = new MessageService(new FakeDbSession(), _msgRepoMock.Object, membership, new ChatPolicy(membership), _eventsMock.Object, Mock.Of<IDraftRepository>());
+        _service = new MessageService(new FakeDbSession(), _msgRepoMock.Object, membership, new ChatPolicy(membership), _eventsMock.Object, Mock.Of<IDraftRepository>(), Mock.Of<IGroupRepository>());
     }
 
     private MessageWithSender Stored(Guid chatId, string text, Guid? clientMessageId = null, Guid? id = null) => new()

@@ -1012,6 +1012,77 @@ MessagesRead:      { "chatId": "…", "userId": "<кто прочитал>", "se
 - Сообщение о создании группы не приходит отдельным `MessageCreated`: оно уже есть в
   карточке `ChatCreated` как `lastMessage`.
 
+### 14.2. Роли и права
+
+Роли: `owner` (один на группу), `admin`, `member`. Права:
+
+| Право | Что даёт | `member` по умолчанию | `admin` по умолчанию |
+|---|---|---|---|
+| `sendMessages` | писать и «печатает» | да | да |
+| `sendMedia` | отправлять медиа (с Ф4) | да | да |
+| `addMembers` | добавлять участников | да | да |
+| `changeInfo` | менять название | нет | да |
+| `removeMembers` | исключать участников и ограничивать их права | — | да |
+| `deleteMessages` | удалять чужие сообщения у всех, в любое время | — | да |
+| `addAdmins` | назначать админов | — | нет |
+
+Владелец может всё. Итог для участника — права группы по умолчанию (`memberPermissions`),
+поверх них его личные переопределения; для админа — набор админа, поверх него его
+переопределения. Права админа (`removeMembers`, `deleteMessages`, `addAdmins`) участнику не
+выдаются: для этого его назначают админом.
+
+**`GET /api/chats/{chatId}`** — новые поля:
+
+```json
+{ "createdBy": "…",                 // создатель группы; null — не группа
+  "myRole": "admin",
+  "myPermissions": { … },            // что могу я; null — не группа
+  "memberPermissions": { … } }       // права участников по умолчанию; null — не группа
+```
+
+**`GET /api/chats/{chatId}/members`** — участники группы: владелец, админы, затем участники
+по времени вступления:
+
+```json
+[ { "userId": "…", "displayName": "Боб", "username": "bob", "role": "admin",
+    "permissions": { "sendMessages": true, "sendMedia": true, "addMembers": true, "changeInfo": true,
+                     "removeMembers": true, "deleteMessages": true, "addAdmins": false } } ]
+```
+
+**`PUT /api/chats/{chatId}/members/{userId}/role`** — `{ "role": "admin" }`:
+
+- `admin` — назначить админом: владелец или админ с `addAdmins`.
+- `member` — снять админа: только владелец.
+- `owner` — передать группу: только владелец; сам он становится админом.
+- Новая роль начинается без личных переопределений. `200` — `GroupMemberDto`.
+- Ошибки: `400 NOT_A_GROUP`, `400 INVALID_ROLE`, `403 NOT_A_MEMBER`, `403 PERMISSION_DENIED`,
+  `404 MEMBER_NOT_FOUND`, `429 RATE_LIMITED`.
+
+**`PUT /api/chats/{chatId}/members/{userId}/permissions`** — личные переопределения, **целиком**:
+
+```json
+{ "sendMessages": false }     // указанное переопределяет, не указанное — как у роли; {} — снять всё
+```
+
+- Участника — владелец или админ с `removeMembers`, и только `sendMessages`, `sendMedia`,
+  `addMembers`, `changeInfo`. Админа — только владелец, любые права. Владельца — никто.
+- `200` — `GroupMemberDto` с итоговыми правами. То же ещё раз — без события.
+- Ошибки: `400 NOT_A_GROUP`, `400 INVALID_PERMISSIONS` (право админа участнику),
+  `403 NOT_A_MEMBER`, `403 PERMISSION_DENIED`, `404 MEMBER_NOT_FOUND`, `429 RATE_LIMITED`.
+
+**`MemberUpdated`** — всем участникам, на все соединения и в журнал:
+
+```json
+{ "chatId": "…", "member": { GroupMemberDto } }   // при передаче группы — два события
+```
+
+**Что меняется для уже существующих команд в группе:**
+- Отправка, пересылка в группу, правка и «печатает» без `sendMessages` —
+  `403 PERMISSION_DENIED`. Чтение, реакции и прочтение — остаются.
+- `DELETE …/messages/{messageId}?forEveryone=true` — участник с `deleteMessages` удаляет
+  чужие сообщения в любое время; это попадает в журнал действий группы. Системные сообщения
+  удаляет только он (их автор — нет).
+
 ---
 
 ## Справочник кодов ошибок
@@ -1037,6 +1108,9 @@ MessagesRead:      { "chatId": "…", "userId": "<кто прочитал>", "se
 | `SELF_CHAT` | 400 | Личный чат с самим собой |
 | `INVALID_TITLE` | 400 | Группа: название пустое или длиннее 128 символов |
 | `TOO_MANY_MEMBERS` | 400 | Группа: участников больше `Groups:MaxMembers` (500) |
+| `NOT_A_GROUP` | 400 | Действие только для групп (участники, роли, права) в личном чате или «Избранном» |
+| `INVALID_ROLE` | 400 | Роль не `owner`, `admin` или `member` |
+| `INVALID_PERMISSIONS` | 400 | Участнику — право админа (`removeMembers`, `deleteMessages`, `addAdmins`) |
 | `PASSWORD_TOO_LONG` | 400 | Регистрация: пароль длиннее 72 байт в UTF-8 |
 | `TOKEN_MISSING_OR_EXPIRED` | 401 | Нет access-токена или он истёк/неверен — сделать `refresh` |
 | `INVALID_CREDENTIALS` | 401 | Неверный логин или пароль (одинаково для несуществующего аккаунта) |
@@ -1047,13 +1121,15 @@ MessagesRead:      { "chatId": "…", "userId": "<кто прочитал>", "se
 | `USER_INACTIVE` | 401 | Аккаунт деактивирован |
 | `USER_NOT_FOUND` | 401 | Refresh: пользователя больше нет |
 | `NOT_A_MEMBER` | 403 | Действие в чате, где пользователь не участник (и в хабе) |
-| `NOT_MESSAGE_AUTHOR` | 403 | Правка или удаление у всех чужого сообщения |
+| `NOT_MESSAGE_AUTHOR` | 403 | Правка или удаление у всех чужого сообщения (без права `deleteMessages` в группе) |
 | `EDIT_WINDOW_EXPIRED` | 403 | Правка: прошло больше `Messages:EditWindowHours` (48 ч) |
 | `DELETE_WINDOW_EXPIRED` | 403 | Удаление у всех: прошло больше `Messages:DeleteWindowHours` (48 ч) |
 | `MESSAGE_NOT_EDITABLE` | 403 | Правка пересланного или системного сообщения |
+| `PERMISSION_DENIED` | 403 | Группа: у пользователя нет нужного права или роли (в `detail` — какого) |
 | `ACCESS_DENIED` | 403 | Прочие отказы в доступе |
 | `USER_NOT_FOUND` | 404 | Пользователь не найден (или вне общих чатов — для статуса) |
 | `CHAT_NOT_FOUND` | 404 | Чат не найден |
+| `MEMBER_NOT_FOUND` | 404 | Группа: пользователь не её участник |
 | `MESSAGE_NOT_FOUND` | 404 | `read`, правка, удаление: сообщения нет в этом чате (для правки — или оно удалено); пересылка: сообщение не видно пользователю |
 | `USERNAME_TAKEN` | 409 | Регистрация: логин занят (без учёта регистра) |
 | `EMAIL_TAKEN` | 409 | Регистрация: email занят (без учёта регистра) |

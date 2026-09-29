@@ -2,6 +2,7 @@ using BasicApi.Middleware.Exceptions;
 using BasicApi.Models.Dto.Chat;
 using BasicApi.Services.Events;
 using BasicApi.Storage;
+using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
 
 namespace BasicApi.Services;
@@ -43,6 +44,8 @@ public sealed class ChatService(
         await policy.DemandReadAsync(userId, chatId, ct);
 
         var participants = await chatRepository.GetChatParticipantsAsync(chatId, ct);
+        var me = await chatRepository.GetMemberAsync(chatId, userId, ct);
+        var isGroup = chat.Type == ChatTypes.Group;
 
         return new ChatDetailDto
         {
@@ -55,7 +58,11 @@ public sealed class ChatService(
                 DisplayName = p.DisplayName,
                 Username = p.Username,
                 Role = p.Role
-            })]
+            })],
+            CreatedBy = chat.CreatedBy,
+            MyRole = me?.Role ?? ChatRoles.Member,
+            MyPermissions = isGroup && me is not null ? GroupRights.Effective(me) : null,
+            MemberPermissions = isGroup ? GroupRights.MemberPermissions(chat.SettingsJson) : null
         };
     }
 

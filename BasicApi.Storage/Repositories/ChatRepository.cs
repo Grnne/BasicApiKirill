@@ -96,6 +96,15 @@ public class ChatRepository(IDbSession db) : IChatRepository
         return await db.ExecuteScalarAsync<bool>(sql, new { chatId, userId }, ct);
     }
 
+    public Task<ChatMember?> GetMemberAsync(Guid chatId, Guid userId, CancellationToken ct = default) =>
+        db.QueryFirstOrDefaultAsync<ChatMember>($@"
+            SELECT {GroupRepository.MemberColumns}
+            FROM chat_members cm
+            JOIN chats c ON c.id = cm.chat_id
+            JOIN users u ON u.id = cm.user_id
+            WHERE cm.chat_id = @chatId AND cm.user_id = @userId",
+            new { chatId, userId }, ct);
+
     public async Task<bool> SetMarkedUnreadAsync(Guid chatId, Guid userId, bool markedUnread, CancellationToken ct = default) =>
         await db.ExecuteAsync(@"
             UPDATE chat_members SET marked_unread = @markedUnread

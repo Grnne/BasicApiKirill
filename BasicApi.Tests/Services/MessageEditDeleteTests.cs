@@ -24,6 +24,7 @@ public class MessageEditDeleteTests
 
     public MessageEditDeleteTests()
     {
+        _chatRepoMock.WithMembersFromIsMember();
         _chatRepoMock
             .Setup(r => r.IsMemberAsync(_chatId, It.Is<Guid>(u => u == _author || u == _other), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
@@ -40,7 +41,7 @@ public class MessageEditDeleteTests
     {
         var membership = new MembershipService(_chatRepoMock.Object);
         var policy = new ChatPolicy(membership, Options.Create(options ?? new MessageOptions()));
-        return new MessageService(new FakeDbSession(), _msgRepoMock.Object, membership, policy, _eventsMock.Object, Mock.Of<IDraftRepository>());
+        return new MessageService(new FakeDbSession(), _msgRepoMock.Object, membership, policy, _eventsMock.Object, Mock.Of<IDraftRepository>(), Mock.Of<IGroupRepository>());
     }
 
     private MessageWithSender Stored(

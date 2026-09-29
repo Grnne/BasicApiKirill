@@ -56,6 +56,9 @@ public sealed class SignalRChatEventPublisher(IHubContext<ChatHub> hub) : IChatE
     public Task DraftUpdatedAsync(DraftUpdatedDto draft, Guid userId, CancellationToken ct = default) =>
         hub.Clients.User(userId.ToString()).SendAsync("DraftUpdated", draft, ct);
 
+    public Task MemberUpdatedAsync(MemberUpdatedDto update, IReadOnlyCollection<Guid> memberIds, CancellationToken ct = default) =>
+        ToUsers(memberIds, "MemberUpdated", update, ct);
+
     public Task ChatCreatedAsync(Guid recipientId, ChatListItemDto item, bool live = true, CancellationToken ct = default) =>
         live ? hub.Clients.User(recipientId.ToString()).SendAsync("ChatCreated", item, ct) : Task.CompletedTask;
 

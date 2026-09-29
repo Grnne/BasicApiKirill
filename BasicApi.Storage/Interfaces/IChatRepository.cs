@@ -34,6 +34,9 @@ public interface IChatRepository
 
     Task<bool> IsMemberAsync(Guid chatId, Guid userId, CancellationToken ct = default);
 
+    /// <summary>A member with the chat's type and settings; null — not a member or no such chat.</summary>
+    Task<ChatMember?> GetMemberAsync(Guid chatId, Guid userId, CancellationToken ct = default);
+
     /// <summary>Sets or clears the member's "marked as unread"; false when it already was so or no such member.</summary>
     Task<bool> SetMarkedUnreadAsync(Guid chatId, Guid userId, bool markedUnread, CancellationToken ct = default);
     /// <summary>Ids of the chat's members; empty when the chat does not exist.</summary>

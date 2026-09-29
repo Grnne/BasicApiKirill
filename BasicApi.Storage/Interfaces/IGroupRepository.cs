@@ -10,9 +10,6 @@ public interface IGroupRepository
         Guid chatId, string title, Guid creatorId, IReadOnlyCollection<Guid> memberIds, DateTime now,
         CancellationToken ct = default);
 
-    /// <summary>A member with the chat's type and settings; null — not a member or no such chat.</summary>
-    Task<ChatMember?> GetMemberAsync(Guid chatId, Guid userId, CancellationToken ct = default);
-
     /// <summary>All members, owner and admins first, then by joining time.</summary>
     Task<IReadOnlyList<ChatMember>> GetMembersAsync(Guid chatId, CancellationToken ct = default);
 

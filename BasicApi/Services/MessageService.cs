@@ -87,7 +87,8 @@ public sealed class MessageService(
     IMembershipService membership,
     IChatPolicy policy,
     IChatEventPublisher events,
-    IDraftRepository drafts) : IMessageService
+    IDraftRepository drafts,
+    IGroupRepository groups) : IMessageService
 {
     /// <summary>How many messages one forward may carry.</summary>
     public const int MaxForward = 100;
@@ -369,10 +370,25 @@ public sealed class MessageService(
         {
             (await policy.CanDeleteForEveryoneAsync(userId, message, ct)).Demand();
             var memberIds = await membership.GetMemberIdsAsync(chatId, ct);
+            var now = DateTime.UtcNow;
             await db.InTransactionAsync(async ct =>
             {
-                if (await messageRepository.DeleteForEveryoneAsync(messageId, DateTime.UtcNow, ct))
-                    await events.MessageDeletedAsync(deleted, memberIds, ct);
+                if (!await messageRepository.DeleteForEveryoneAsync(messageId, now, ct))
+                    return true;
+
+                // A group admin removing what is not theirs: the other admins see it in the log.
+                if (message.SenderId != userId || message.Type != MessageTypes.Text)
+                    await groups.AppendAuditAsync(new ChatAuditEntry
+                    {
+                        ChatId = chatId,
+                        ActorId = userId,
+                        Action = "message_deleted",
+                        TargetUserId = message.SenderId,
+                        DataJson = System.Text.Json.JsonSerializer.Serialize(
+                            new { messageId, seq = message.Seq }, OutboxEnvelope.Json),
+                        CreatedAt = now
+                    }, ct);
+                await events.MessageDeletedAsync(deleted, memberIds, ct);
                 return true;
             }, ct: ct);
         }

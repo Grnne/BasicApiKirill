@@ -40,6 +40,9 @@ public interface IChatEventPublisher
     /// <summary><c>DraftUpdated</c> to the user's own devices.</summary>
     Task DraftUpdatedAsync(DraftUpdatedDto draft, Guid userId, CancellationToken ct = default);
 
+    /// <summary><c>MemberUpdated</c> — a member's role or permissions changed — to all members.</summary>
+    Task MemberUpdatedAsync(MemberUpdatedDto update, IReadOnlyCollection<Guid> memberIds, CancellationToken ct = default);
+
     /// <summary>
     /// A new chat for a user; the card is built for them. <paramref name="live"/> —
     /// whether to send <c>ChatCreated</c> right away: the chat creator does not get it, they got the card

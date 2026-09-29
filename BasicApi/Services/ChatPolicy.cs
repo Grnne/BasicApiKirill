@@ -17,29 +17,37 @@ public sealed record PolicyDecision(bool Allowed, string? Code = null, string? R
 
 /// <summary>
 /// The single place that decides who may do what in a chat. Services ask the
-/// policy and do not check membership themselves. For now the rules are "chat member" and
-/// "author of the message"; group permissions, blocks and privacy settings (plan 2) will go here
-/// without touching the calling code.
+/// policy and do not check membership themselves. The rules: membership, the author of a message,
+/// and in groups the member's role and permissions (D8); blocks and privacy settings (plan 2, F5)
+/// will go here without touching the calling code.
 /// </summary>
 public interface IChatPolicy
 {
     /// <summary>Read history, search, see the member list, subscribe to chat events, mark as read.</summary>
     Task<PolicyDecision> CanReadAsync(Guid userId, Guid chatId, CancellationToken ct = default);
 
-    /// <summary>Write messages and show "typing".</summary>
+    /// <summary>Write messages and show "typing"; in a group — with the permission to send.</summary>
     Task<PolicyDecision> CanPostAsync(Guid userId, Guid chatId, CancellationToken ct = default);
 
     /// <summary>Edit the text of a message. The caller has already checked they can post in the chat.</summary>
     Task<PolicyDecision> CanEditMessageAsync(Guid userId, MessageWithSender message, CancellationToken ct = default);
 
     /// <summary>
-    /// Delete a message for everyone. The caller has already checked they can read the chat;
-    /// "delete for me" needs nothing more.
+    /// Delete a message for everyone: the author within the window, and in a group a member with
+    /// the permission to delete others' messages — any message at any time. The caller has already
+    /// checked they can read the chat; "delete for me" needs nothing more.
     /// </summary>
     Task<PolicyDecision> CanDeleteForEveryoneAsync(Guid userId, MessageWithSender message, CancellationToken ct = default);
 
     /// <summary>Put or remove a reaction on a message of the chat.</summary>
     Task<PolicyDecision> CanReactAsync(Guid userId, Guid chatId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Manage a group: <paramref name="target"/> is the member the action is about, where there is
+    /// one. The caller has already checked that the chat is a group.
+    /// </summary>
+    Task<PolicyDecision> CanManageAsync(
+        Guid userId, Guid chatId, GroupAction action, ChatMember? target = null, CancellationToken ct = default);
 
     /// <summary>Who sees a user's online status — their changes are broadcast to them.</summary>
     Task<IReadOnlyCollection<Guid>> GetPresenceAudienceAsync(Guid userId, CancellationToken ct = default);
@@ -61,6 +69,7 @@ public sealed class ChatPolicy(
     public const string EditWindowExpiredCode = "EDIT_WINDOW_EXPIRED";
     public const string DeleteWindowExpiredCode = "DELETE_WINDOW_EXPIRED";
     public const string MessageNotEditableCode = "MESSAGE_NOT_EDITABLE";
+    public const string PermissionDeniedCode = "PERMISSION_DENIED";
 
     private readonly MessageOptions _messages = options?.Value ?? new MessageOptions();
     private readonly TimeProvider _time = time ?? TimeProvider.System;
@@ -68,8 +77,14 @@ public sealed class ChatPolicy(
     public Task<PolicyDecision> CanReadAsync(Guid userId, Guid chatId, CancellationToken ct = default) =>
         MemberOnlyAsync(userId, chatId, ct);
 
-    public Task<PolicyDecision> CanPostAsync(Guid userId, Guid chatId, CancellationToken ct = default) =>
-        MemberOnlyAsync(userId, chatId, ct);
+    public async Task<PolicyDecision> CanPostAsync(Guid userId, Guid chatId, CancellationToken ct = default) =>
+        await membership.GetMemberAsync(chatId, userId, ct) switch
+        {
+            null => NotAMember(),
+            { ChatType: ChatTypes.Group } member when !GroupRights.Effective(member).SendMessages =>
+                PermissionDenied("You may not send messages in this group"),
+            _ => PolicyDecision.Allow
+        };
 
     public Task<PolicyDecision> CanReactAsync(Guid userId, Guid chatId, CancellationToken ct = default) =>
         MemberOnlyAsync(userId, chatId, ct);
@@ -84,10 +99,65 @@ public sealed class ChatPolicy(
             : AuthorWithin(userId, message, _messages.EditWindowHours,
                 EditWindowExpiredCode, "The time to edit this message has passed"));
 
-    // Group admins who may delete other members' messages come with groups (F3).
-    public Task<PolicyDecision> CanDeleteForEveryoneAsync(Guid userId, MessageWithSender message, CancellationToken ct = default) =>
-        Task.FromResult(AuthorWithin(userId, message, _messages.DeleteWindowHours,
-            DeleteWindowExpiredCode, "The time to delete this message for everyone has passed"));
+    public async Task<PolicyDecision> CanDeleteForEveryoneAsync(
+        Guid userId, MessageWithSender message, CancellationToken ct = default)
+    {
+        // A system message is the group's record, not its author's words: only a moderator removes it.
+        var asAuthor = message.Type == MessageTypes.Text
+            ? AuthorWithin(userId, message, _messages.DeleteWindowHours,
+                DeleteWindowExpiredCode, "The time to delete this message for everyone has passed")
+            : PolicyDecision.Deny(NotMessageAuthorCode, "Only a group admin can delete a system message");
+        if (asAuthor.Allowed)
+            return asAuthor;
+
+        return await membership.GetMemberAsync(message.ChatId, userId, ct) is { ChatType: ChatTypes.Group } member &&
+               GroupRights.Effective(member).DeleteMessages
+            ? PolicyDecision.Allow
+            : asAuthor;
+    }
+
+    public async Task<PolicyDecision> CanManageAsync(
+        Guid userId, Guid chatId, GroupAction action, ChatMember? target = null, CancellationToken ct = default)
+    {
+        if (await membership.GetMemberAsync(chatId, userId, ct) is not { } actor)
+            return NotAMember();
+
+        var isOwner = actor.Role == ChatRoles.Owner;
+        var isAdmin = isOwner || actor.Role == ChatRoles.Admin;
+        var rights = GroupRights.Effective(actor);
+        var targetRole = target?.Role;
+
+        var allowed = action switch
+        {
+            GroupAction.AddMembers => rights.AddMembers,
+            GroupAction.ChangeInfo => rights.ChangeInfo,
+            // Removing and restricting: the owner anyone but themselves, an admin with the right — members only.
+            GroupAction.RemoveMember or GroupAction.RestrictMember =>
+                targetRole != ChatRoles.Owner && (isOwner || targetRole == ChatRoles.Member && rights.RemoveMembers),
+            GroupAction.ChangeMemberDefaults => isOwner || isAdmin && rights.RemoveMembers,
+            GroupAction.PromoteToAdmin => targetRole == ChatRoles.Member && rights.AddAdmins,
+            GroupAction.DemoteAdmin or GroupAction.RestrictAdmin => isOwner && targetRole == ChatRoles.Admin,
+            GroupAction.TransferOwnership => isOwner && targetRole is ChatRoles.Admin or ChatRoles.Member,
+            GroupAction.DeleteGroup => isOwner,
+            GroupAction.ViewAudit => isAdmin,
+            _ => false
+        };
+
+        return allowed ? PolicyDecision.Allow : PermissionDenied(DeniedReason(action));
+    }
+
+    private static string DeniedReason(GroupAction action) => action switch
+    {
+        GroupAction.AddMembers => "You may not add members to this group",
+        GroupAction.ChangeInfo => "You may not change this group",
+        GroupAction.RemoveMember => "You may not remove this member",
+        GroupAction.RestrictMember or GroupAction.RestrictAdmin => "You may not change this member's permissions",
+        GroupAction.ChangeMemberDefaults => "You may not change the members' permissions",
+        GroupAction.PromoteToAdmin or GroupAction.DemoteAdmin => "You may not change this member's role",
+        GroupAction.TransferOwnership or GroupAction.DeleteGroup => "Only the owner can do this",
+        GroupAction.ViewAudit => "Only admins can see the group's actions",
+        _ => "Access denied"
+    };
 
     public async Task<IReadOnlyCollection<Guid>> GetPresenceAudienceAsync(Guid userId, CancellationToken ct = default) =>
         await membership.GetContactIdsAsync(userId, ct);
@@ -102,9 +172,11 @@ public sealed class ChatPolicy(
     }
 
     private async Task<PolicyDecision> MemberOnlyAsync(Guid userId, Guid chatId, CancellationToken ct) =>
-        await membership.IsMemberAsync(chatId, userId, ct)
-            ? PolicyDecision.Allow
-            : PolicyDecision.Deny(NotAMemberCode, NotAMemberReason);
+        await membership.IsMemberAsync(chatId, userId, ct) ? PolicyDecision.Allow : NotAMember();
+
+    private static PolicyDecision NotAMember() => PolicyDecision.Deny(NotAMemberCode, NotAMemberReason);
+
+    private static PolicyDecision PermissionDenied(string reason) => PolicyDecision.Deny(PermissionDeniedCode, reason);
 
     /// <summary>Only the author, and only within the window (0 — no window).</summary>
     private PolicyDecision AuthorWithin(
@@ -117,6 +189,26 @@ public sealed class ChatPolicy(
                       _time.GetUtcNow().UtcDateTime - message.CreatedAt > TimeSpan.FromHours(windowHours);
         return expired ? PolicyDecision.Deny(expiredCode, expiredReason) : PolicyDecision.Allow;
     }
+}
+
+/// <summary>What is done to a group; see <see cref="IChatPolicy.CanManageAsync"/>.</summary>
+public enum GroupAction
+{
+    AddMembers,
+    RemoveMember,
+    /// <summary>Change the title.</summary>
+    ChangeInfo,
+    /// <summary>Change what members may do by default.</summary>
+    ChangeMemberDefaults,
+    /// <summary>Change a member's own permissions.</summary>
+    RestrictMember,
+    /// <summary>Change an admin's permissions.</summary>
+    RestrictAdmin,
+    PromoteToAdmin,
+    DemoteAdmin,
+    TransferOwnership,
+    DeleteGroup,
+    ViewAudit
 }
 
 public static class ChatPolicyExtensions
