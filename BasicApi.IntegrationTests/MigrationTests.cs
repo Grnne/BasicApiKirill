@@ -52,4 +52,18 @@ public class MigrationTests(PostgresFixture db)
 
         PostgresFixture.MigrateUp(connectionString);
     }
+
+    [Theory]
+    [InlineData("chat_members", "ix_chat_members_user_id")]
+    public async Task Schema_HasIndex(string table, string index)
+    {
+        // «Все чаты пользователя» — самый частый запрос; PK (chat_id, user_id)
+        // по user_id не помогает, без отдельного индекса — полный скан.
+        await using var connection = new NpgsqlConnection(db.ConnectionString);
+        var exists = await connection.ExecuteScalarAsync<bool>(
+            "SELECT EXISTS (SELECT 1 FROM pg_indexes WHERE tablename = @table AND indexname = @index)",
+            new { table, index });
+
+        Assert.True(exists, $"{table}.{index} is missing");
+    }
 }

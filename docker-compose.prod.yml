@@ -95,7 +95,9 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production     # ✅ НЕ Development!
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${DB_NAME};Username=${DB_USER};Password=${DB_PASSWORD};Timeout=15;Command Timeout=30;Pooling=true"
+      # Maximum Pool Size заметно ниже max_connections Postgres (100): под пиком
+      # запросы ждут в очереди пула, а не получают отказ сервера (capacity-and-limits.md).
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${DB_NAME};Username=${DB_USER};Password=${DB_PASSWORD};Timeout=15;Command Timeout=30;Pooling=true;Maximum Pool Size=30"
       Jwt__Key: ${JWT_KEY}                   # 🛡 сильный секрет, не дефолтный
       Jwt__Issuer: ${JWT_ISSUER:-ChatApi}
       Jwt__Audience: ${JWT_AUDIENCE:-ChatClient}

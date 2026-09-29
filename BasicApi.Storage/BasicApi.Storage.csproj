@@ -11,8 +11,6 @@
 		<PackageReference Include="Dapper" Version="2.1.72" />
 		<PackageReference Include="Npgsql" Version="10.0.2" />
 		<PackageReference Include="FluentMigrator" Version="8.0.1" />
-		<PackageReference Include="FluentMigrator.Runner" Version="8.0.1" />
-		<PackageReference Include="FluentMigrator.Runner.Postgres" Version="8.0.1" />
 	</ItemGroup>
 
 </Project>

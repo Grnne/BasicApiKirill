@@ -27,7 +27,7 @@
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
-      - ConnectionStrings__DefaultConnection=Host=postgres;Database=${DB_NAME:-postgres};Username=${DB_USER:-postgres};Password=${DB_PASSWORD:-postgres}
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=${DB_NAME:-postgres};Username=${DB_USER:-postgres};Password=${DB_PASSWORD:-postgres};Maximum Pool Size=30
     ports:
       - "${HOST_PORT:-8080}:8080"
     volumes:
