@@ -95,6 +95,32 @@ public class GroupsController(IGroupService groups) : ControllerBase
     }
 
     /// <summary>
+    /// The group's action log.
+    /// </summary>
+    /// <remarks>
+    /// For the owner and admins. Newest first; <c>nextCursor</c> — pass it as <c>cursor</c> for
+    /// older entries. Actions: <c>group_created</c>, <c>title_changed</c>,
+    /// <c>member_permissions_changed</c>, <c>members_added</c>, <c>member_removed</c>,
+    /// <c>member_left</c>, <c>role_changed</c>, <c>permissions_changed</c>,
+    /// <c>ownership_transferred</c>, <c>message_deleted</c> (someone else's message deleted by an
+    /// admin); <c>data</c> holds the details.
+    ///
+    /// Errors: <c>400 NOT_A_GROUP</c>, <c>400 INVALID_CURSOR</c>, <c>403 NOT_A_MEMBER</c>,
+    /// <c>403 PERMISSION_DENIED</c> (not an admin).
+    /// </remarks>
+    /// <param name="chatId">Group ID</param>
+    /// <param name="cursor">From the previous page; omit for the newest.</param>
+    /// <param name="limit">Entries per page (default 50, max 200).</param>
+    /// <param name="ct">Request cancellation.</param>
+    [HttpGet("{chatId}/audit")]
+    [ProducesResponseType(typeof(AuditPageDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetAudit(
+        Guid chatId, [FromQuery] string? cursor, [FromQuery] int limit = 50, CancellationToken ct = default) =>
+        Ok(await groups.GetAuditAsync(chatId, User.GetUserId(), cursor, Math.Clamp(limit, 1, 200), ct));
+
+    /// <summary>
     /// Members of a group with their roles and permissions.
     /// </summary>
     /// <remarks>

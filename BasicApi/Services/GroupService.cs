@@ -85,6 +85,13 @@ public interface IGroupService
     /// Errors: 400 <c>NOT_A_GROUP</c>, 403 <c>NOT_A_MEMBER</c>/<c>PERMISSION_DENIED</c>.
     /// </summary>
     Task DeleteAsync(Guid chatId, Guid userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// The group's action log for its owner and admins, newest first; <paramref name="cursor"/> is
+    /// the <c>nextCursor</c> of the previous page. Errors: 400 <c>NOT_A_GROUP</c>/<c>INVALID_CURSOR</c>,
+    /// 403 <c>NOT_A_MEMBER</c>/<c>PERMISSION_DENIED</c>.
+    /// </summary>
+    Task<AuditPageDto> GetAuditAsync(Guid chatId, Guid userId, string? cursor, int limit, CancellationToken ct = default);
 }
 
 public sealed class GroupService(
@@ -391,6 +398,38 @@ public sealed class GroupService(
             await events.ChatDeletedAsync(new ChatDeletedDto { ChatId = chatId }, memberIds, ct);
             return true;
         }, ct: ct);
+    }
+
+    public async Task<AuditPageDto> GetAuditAsync(
+        Guid chatId, Guid userId, string? cursor, int limit, CancellationToken ct = default)
+    {
+        // The cursor is the id of the last entry of the previous page: entries only get appended.
+        long? beforeId = null;
+        if (!string.IsNullOrEmpty(cursor))
+            beforeId = long.TryParse(cursor, out var id) && id > 0
+                ? id
+                : throw new BadRequestException("Cursor is malformed", "INVALID_CURSOR");
+
+        await DemandGroupAsync(chatId, userId, ct);
+        (await policy.CanManageAsync(userId, chatId, GroupAction.ViewAudit, ct: ct)).Demand();
+
+        var rows = await groups.GetAuditAsync(chatId, beforeId, limit + 1, ct);
+        var page = rows.Take(limit).ToList();
+        var hasMore = rows.Count > limit;
+        return new AuditPageDto
+        {
+            Items = [.. page.Select(e => new AuditEntryDto
+            {
+                Id = e.Id,
+                Action = e.Action,
+                ActorId = e.ActorId,
+                TargetUserId = e.TargetUserId,
+                Data = e.DataJson is null ? null : JsonDocument.Parse(e.DataJson).RootElement.Clone(),
+                CreatedAt = e.CreatedAt
+            })],
+            HasMore = hasMore,
+            NextCursor = hasMore ? page[^1].Id.ToString() : null
+        };
     }
 
     /// <summary>The caller is a member (403 otherwise, before anything about the chat is told) of a group (400 otherwise).</summary>

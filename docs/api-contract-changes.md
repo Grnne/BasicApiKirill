@@ -1149,6 +1149,38 @@ MessagesRead:      { "chatId": "…", "userId": "<кто прочитал>", "se
 события группы; история удаляется. Ошибки: `400 NOT_A_GROUP`, `403 NOT_A_MEMBER`,
 `403 PERMISSION_DENIED`, `429 RATE_LIMITED`.
 
+### 14.5. Журнал действий группы
+
+**`GET /api/chats/{chatId}/audit?cursor=&limit=`** — для владельца и админов, новые первыми,
+по умолчанию 50 записей (до 200):
+
+```json
+{
+  "items": [
+    { "id": 42, "action": "member_removed", "actorId": "…", "targetUserId": "…",
+      "data": null, "createdAt": "2026-09-30T10:15:00Z" }
+  ],
+  "nextCursor": "41",     // передать как cursor за более старыми; null — всё
+  "hasMore": true
+}
+```
+
+| `action` | `targetUserId` | `data` |
+|---|---|---|
+| `group_created` | — | `{ title, memberIds }` |
+| `title_changed` | — | `{ from, to }` |
+| `member_permissions_changed` | — | `{ memberPermissions }` — переопределения по умолчанию |
+| `members_added` | — | `{ userIds }` |
+| `member_removed` | исключённый | — |
+| `member_left` | вышедший | — |
+| `role_changed` | участник | `{ role }` |
+| `permissions_changed` | участник | `{ permissions }` — его переопределения |
+| `ownership_transferred` | новый владелец | `{ reason: "owner_left" }` — если владелец вышел |
+| `message_deleted` | автор сообщения | `{ messageId, seq }` — админ удалил чужое |
+
+`actorId` — `null`, если аккаунта больше нет. Ошибки: `400 NOT_A_GROUP`, `400 INVALID_CURSOR`,
+`403 NOT_A_MEMBER`, `403 PERMISSION_DENIED` (не админ).
+
 ---
 
 ## Справочник кодов ошибок
@@ -1162,7 +1194,7 @@ MessagesRead:      { "chatId": "…", "userId": "<кто прочитал>", "se
 | `VALIDATION_ERROR` | 400 | Тело или параметры не прошли валидацию модели; подробности — в `errors` (коды полей: `REQUIRED`, `MAX_LENGTH`, `MIN_LENGTH`, `INVALID_FORMAT`, `OUT_OF_RANGE`, `MISMATCH`) |
 | `MESSAGE_EMPTY` | 400 | Отправка: текст пустой или из одних пробелов (и в хабе) |
 | `MESSAGE_TOO_LONG` | 400 | Отправка: длиннее 4096 символов после обрезки пробелов (и в хабе) |
-| `INVALID_CURSOR` | 400 | Битый или подделанный `cursor` в истории и поиске |
+| `INVALID_CURSOR` | 400 | Битый или подделанный `cursor` в истории, поиске и журнале действий группы |
 | `INVALID_QUERY` | 400 | Пустой запрос поиска чатов и пользователей; в поиске по сообщениям — короче 2 символов |
 | `INVALID_REQUEST` | 400 | `POST /api/users/status`: пустой `userIds`; пересылка: пустой или повторяющийся `messageIds`, `clientMessageIds` другой длины; добавление в группу: никого, кроме себя |
 | `TOO_MANY_MESSAGES` | 400 | Пересылка: больше 100 сообщений |
