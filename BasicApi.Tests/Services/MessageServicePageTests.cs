@@ -19,7 +19,8 @@ public class MessageServicePageTests
     {
         _chatRepoMock = new Mock<IChatRepository>();
         _msgRepoMock = new Mock<IMessageRepository>();
-        _service = new MessageService(_msgRepoMock.Object, new MembershipService(_chatRepoMock.Object), Mock.Of<IChatEventPublisher>());
+        _service = new MessageService(_msgRepoMock.Object, new MembershipService(_chatRepoMock.Object),
+            new ChatPolicy(new MembershipService(_chatRepoMock.Object)), Mock.Of<IChatEventPublisher>());
     }
 
     private static MessageWithSender ToMessageWithSender(Storage.Entities.Message msg, string senderName)

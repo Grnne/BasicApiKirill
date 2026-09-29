@@ -25,7 +25,7 @@ public class ChatServicePrivateChatTests
             .ReturnsAsync((Guid id, CancellationToken _) => new User { Id = id, IsActive = true });
 
         _service = new ChatService(_chatRepoMock.Object, _userRepoMock.Object,
-            new MembershipService(_chatRepoMock.Object), _presenceMock.Object, _eventsMock.Object);
+            new ChatPolicy(new MembershipService(_chatRepoMock.Object)), _presenceMock.Object, _eventsMock.Object);
     }
 
     /// <summary>

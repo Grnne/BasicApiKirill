@@ -8,7 +8,7 @@ namespace BasicApi.Services;
 public sealed class ChatService(
     IChatRepository chatRepository,
     IUserRepository userRepository,
-    IMembershipService membership,
+    IChatPolicy policy,
     IPresenceService presence,
     IChatEventPublisher events) : IChatService
 {
@@ -25,7 +25,7 @@ public sealed class ChatService(
         _ = await chatRepository.GetByIdAsync(chatId, ct)
             ?? throw ChatNotFound();
 
-        await membership.EnsureMemberAsync(chatId, userId, ct);
+        await policy.DemandReadAsync(userId, chatId, ct);
 
         var row = await chatRepository.GetChatListItemAsync(chatId, userId, ct)
             ?? throw ChatNotFound();
@@ -38,7 +38,7 @@ public sealed class ChatService(
         var chat = await chatRepository.GetByIdAsync(chatId, ct)
             ?? throw ChatNotFound();
 
-        await membership.EnsureMemberAsync(chatId, userId, ct);
+        await policy.DemandReadAsync(userId, chatId, ct);
 
         var participants = await chatRepository.GetChatParticipantsAsync(chatId, ct);
 

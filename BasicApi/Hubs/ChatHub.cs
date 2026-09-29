@@ -16,7 +16,7 @@ namespace BasicApi.Hubs;
 public class ChatHub(
     IMessageService messages,
     IPresenceService presence,
-    IMembershipService membership,
+    IChatPolicy policy,
     ISessionService sessions,
     HubConnectionRegistry connectionRegistry,
     ILogger<ChatHub> logger) : Hub
@@ -93,7 +93,7 @@ public class ChatHub(
     {
         if (UserId is not { } userId) return;
 
-        await membership.EnsureMemberAsync(chatId, userId, Context.ConnectionAborted);
+        await policy.DemandReadAsync(userId, chatId, Context.ConnectionAborted);
         await Groups.AddToGroupAsync(Context.ConnectionId, chatId.ToString());
     }
 

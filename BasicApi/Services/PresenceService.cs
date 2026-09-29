@@ -5,9 +5,8 @@ using BasicApi.Services.Events;
 namespace BasicApi.Services;
 
 /// <summary>
-/// Онлайн и «печатает»: состояние (в памяти, <see cref="IUserStatusService"/>),
-/// кому его показывать и кого уведомлять об изменениях.
-/// Показываем только тем, с кем есть общий чат.
+/// Онлайн и «печатает»: состояние (в памяти, <see cref="IUserStatusService"/>)
+/// и рассылка изменений. Кому статус виден — решает <see cref="IChatPolicy"/>.
 /// </summary>
 public interface IPresenceService
 {
@@ -52,6 +51,7 @@ public sealed record ConnectionInfo(int ConnectionCount, bool IsCurrentActive);
 public sealed class PresenceService(
     IUserStatusService status,
     IMembershipService membership,
+    IChatPolicy policy,
     IChatEventPublisher events,
     ILogger<PresenceService> logger) : IPresenceService
 {
@@ -68,7 +68,7 @@ public sealed class PresenceService(
         }
 
         if (isFirstConnection)
-            await events.UserOnlineChangedAsync(userId, true, await membership.GetContactIdsAsync(userId, ct), ct);
+            await events.UserOnlineChangedAsync(userId, true, await policy.GetPresenceAudienceAsync(userId, ct), ct);
     }
 
     public async Task DisconnectedAsync(Guid userId, string connectionId)
@@ -84,7 +84,7 @@ public sealed class PresenceService(
         if (!wentOffline)
             return;
 
-        await events.UserOnlineChangedAsync(userId, false, await membership.GetContactIdsAsync(userId));
+        await events.UserOnlineChangedAsync(userId, false, await policy.GetPresenceAudienceAsync(userId));
 
         // Ушёл последним соединением посреди набора — «печатает» гасим сразу, не дожидаясь TTL.
         foreach (var chatId in await status.ClearTypingAsync(userId))
@@ -99,10 +99,8 @@ public sealed class PresenceService(
 
     public async Task SetTypingAsync(Guid chatId, Guid userId, bool isTyping, CancellationToken ct = default)
     {
-        // Участники нужны для рассылки; заодно по ним проверяем членство.
+        await policy.DemandPostAsync(userId, chatId, ct);
         var memberIds = await membership.GetMemberIdsAsync(chatId, ct);
-        if (!memberIds.Contains(userId))
-            throw MembershipService.NotAMember();
 
         await status.SetTypingAsync(chatId, userId, isTyping);
         await events.TypingChangedAsync(chatId, userId, isTyping, Others(memberIds, userId), ct);
@@ -124,7 +122,8 @@ public sealed class PresenceService(
         if (contacts.Count == 0)
             return new UserStatusResponseDto();
 
-        var onlineIds = await status.GetOnlineUserIdsAsync(contacts.ToHashSet());
+        var visible = await policy.FilterPresenceVisibleAsync(userId, contacts, ct);
+        var onlineIds = await status.GetOnlineUserIdsAsync(visible);
 
         return new UserStatusResponseDto
         {
@@ -134,7 +133,7 @@ public sealed class PresenceService(
 
     public async Task<UserStatusDto> GetUserStatusAsync(Guid viewerId, Guid targetId, CancellationToken ct = default)
     {
-        if (viewerId != targetId && !(await membership.GetContactIdsAsync(viewerId, ct)).Contains(targetId))
+        if ((await policy.FilterPresenceVisibleAsync(viewerId, [targetId], ct)).Count == 0)
             throw new NotFoundException("User not found", "USER_NOT_FOUND");
 
         var onlineIds = await status.GetOnlineUserIdsAsync(new HashSet<Guid> { targetId });
@@ -151,10 +150,7 @@ public sealed class PresenceService(
             throw new BadRequestException(
                 $"At most {UserStatusBatchRequestDto.MaxUserIds} userIds per request", "TOO_MANY_IDS");
 
-        var visible = (await membership.GetContactIdsAsync(viewerId, ct)).ToHashSet();
-        visible.Add(viewerId);
-
-        var requested = userIds.Where(visible.Contains).ToHashSet();
+        var requested = await policy.FilterPresenceVisibleAsync(viewerId, userIds, ct);
         if (requested.Count == 0)
             return new UserStatusResponseDto();
 

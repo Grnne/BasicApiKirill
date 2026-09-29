@@ -19,7 +19,7 @@ public class ChatHubTests
 {
     private readonly Mock<IMessageService> _messagesMock = new();
     private readonly Mock<IPresenceService> _presenceMock = new();
-    private readonly Mock<IMembershipService> _membershipMock = new();
+    private readonly Mock<IChatPolicy> _policyMock = new();
     private readonly Mock<ISessionService> _sessionsMock = new();
     private readonly Mock<IGroupManager> _groupsMock = new();
     private readonly RecordingHubClients _clients = new();
@@ -37,6 +37,9 @@ public class ChatHubTests
         _presenceMock
             .Setup(p => p.GetConnectionInfoAsync(It.IsAny<Guid>(), It.IsAny<string>()))
             .ReturnsAsync(new ConnectionInfo(1, true));
+        _policyMock
+            .Setup(p => p.CanReadAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(PolicyDecision.Allow);
     }
 
     private Mock<HubCallerContext> Context(bool authenticated = true)
@@ -55,7 +58,7 @@ public class ChatHubTests
     }
 
     private ChatHub Hub(Mock<HubCallerContext>? context = null) =>
-        new(_messagesMock.Object, _presenceMock.Object, _membershipMock.Object, _sessionsMock.Object,
+        new(_messagesMock.Object, _presenceMock.Object, _policyMock.Object, _sessionsMock.Object,
             new HubConnectionRegistry(), NullLogger<ChatHub>.Instance)
         {
             Context = (context ?? Context()).Object,
@@ -114,7 +117,7 @@ public class ChatHubTests
 
         await Hub().JoinChat(chatId);
 
-        _membershipMock.Verify(m => m.EnsureMemberAsync(chatId, _userId, It.IsAny<CancellationToken>()), Times.Once);
+        _policyMock.Verify(p => p.CanReadAsync(_userId, chatId, It.IsAny<CancellationToken>()), Times.Once);
         _groupsMock.Verify(g => g.AddToGroupAsync(_connectionId, chatId.ToString(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
@@ -123,11 +126,13 @@ public class ChatHubTests
     public async Task JoinChat_NonMember_IsRejected_AndNotAddedToGroup()
     {
         var chatId = Guid.NewGuid();
-        _membershipMock
-            .Setup(m => m.EnsureMemberAsync(chatId, _userId, It.IsAny<CancellationToken>()))
-            .ThrowsAsync(MembershipService.NotAMember());
+        _policyMock
+            .Setup(p => p.CanReadAsync(_userId, chatId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(PolicyDecision.Deny("NOT_A_MEMBER", "User is not a member of this chat"));
 
-        await Assert.ThrowsAsync<ForbiddenException>(() => Hub().JoinChat(chatId));
+        var ex = await Assert.ThrowsAsync<ForbiddenException>(() => Hub().JoinChat(chatId));
+
+        Assert.Equal("NOT_A_MEMBER", ex.ErrorCode);
 
         _groupsMock.Verify(g => g.AddToGroupAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -208,7 +213,7 @@ public class ChatHubTests
 
         _messagesMock.VerifyNoOtherCalls();
         _presenceMock.VerifyNoOtherCalls();
-        _membershipMock.VerifyNoOtherCalls();
+        _policyMock.VerifyNoOtherCalls();
         Assert.Empty(_clients.Sent);
     }
 

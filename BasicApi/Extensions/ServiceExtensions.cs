@@ -101,6 +101,7 @@ public static class ServiceExtensions
 
         // Доменные сервисы: контроллеры и хаб — только адаптеры над ними.
         services.AddScoped<IMembershipService, MembershipService>();
+        services.AddScoped<IChatPolicy, ChatPolicy>();
         services.AddScoped<IChatService, ChatService>();
         services.AddScoped<IMessageService, MessageService>();
         services.AddScoped<IPresenceService, PresenceService>();

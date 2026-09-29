@@ -21,6 +21,7 @@ public class PresenceServiceStatusTests
         _service = new PresenceService(
             _statusServiceMock.Object,
             new MembershipService(_chatRepoMock.Object),
+            new ChatPolicy(new MembershipService(_chatRepoMock.Object)),
             Mock.Of<IChatEventPublisher>(),
             NullLogger<PresenceService>.Instance);
     }

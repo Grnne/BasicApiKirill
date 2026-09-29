@@ -16,7 +16,7 @@ public class ChatServiceChatDetailsTests
     public ChatServiceChatDetailsTests()
     {
         _chatRepoMock = new Mock<IChatRepository>();
-        _service = new ChatService(_chatRepoMock.Object, Mock.Of<IUserRepository>(), new MembershipService(_chatRepoMock.Object),
+        _service = new ChatService(_chatRepoMock.Object, Mock.Of<IUserRepository>(), new ChatPolicy(new MembershipService(_chatRepoMock.Object)),
             Mock.Of<IPresenceService>(), Mock.Of<IChatEventPublisher>());
     }
 

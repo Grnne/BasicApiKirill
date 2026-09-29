@@ -41,13 +41,14 @@ public interface IMessageService
 public sealed class MessageService(
     IMessageRepository messageRepository,
     IMembershipService membership,
+    IChatPolicy policy,
     IChatEventPublisher events) : IMessageService
 {
     public async Task<CursorPaginatedResponse<MessageDto>> GetPageAsync(
         Guid chatId, Guid userId, string? cursor, int limit, CancellationToken ct = default)
     {
         EnsureValidCursor(cursor);
-        await membership.EnsureMemberAsync(chatId, userId, ct);
+        await policy.DemandReadAsync(userId, chatId, ct);
 
         var result = await messageRepository.GetMessagesWithSenderCursorAsync(chatId, cursor, limit, ct);
         var messages = result.Items.Select(Map).ToList();
@@ -63,8 +64,8 @@ public sealed class MessageService(
     public async Task<CursorPaginatedResponse<MessageDto>> GetPageAtAsync(
         Guid chatId, Guid userId, DateTime date, int limit, CancellationToken ct = default)
     {
-        // Членство — до любых запросов к сообщениям чата.
-        await membership.EnsureMemberAsync(chatId, userId, ct);
+        // Доступ — до любых запросов к сообщениям чата.
+        await policy.DemandReadAsync(userId, chatId, ct);
 
         // Дата с любым смещением (…Z, …+03:00) — один и тот же момент; в базе — UTC.
         var utcDate = date.Kind switch
@@ -92,7 +93,7 @@ public sealed class MessageService(
             throw new BadRequestException("Query must be at least 2 characters long", "INVALID_QUERY");
 
         EnsureValidCursor(cursor);
-        await membership.EnsureMemberAsync(chatId, userId, ct);
+        await policy.DemandReadAsync(userId, chatId, ct);
 
         var (result, totalCount) = await messageRepository.SearchMessagesCursorAsync(chatId, query, cursor, limit, ct);
         var messages = result.Items.Select(Map).ToList();
@@ -116,10 +117,8 @@ public sealed class MessageService(
         if (textError == MessageText.TooLongCode)
             throw new BadRequestException($"Message text is longer than {MessageText.MaxLength} characters", textError);
 
-        // Участники нужны для рассылки; заодно по ним проверяем членство.
+        await policy.DemandPostAsync(senderId, chatId, ct);
         var memberIds = await membership.GetMemberIdsAsync(chatId, ct);
-        if (!memberIds.Contains(senderId))
-            throw MembershipService.NotAMember();
 
         var created = await messageRepository.CreateAsync(new Message
         {
@@ -143,7 +142,7 @@ public sealed class MessageService(
 
     public async Task MarkReadAsync(Guid chatId, Guid userId, Guid messageId, CancellationToken ct = default)
     {
-        await membership.EnsureMemberAsync(chatId, userId, ct);
+        await policy.DemandReadAsync(userId, chatId, ct);
 
         // Сообщение из чужого чата — 404: иначе указатель мог бы встать на чужое
         // сообщение, и счётчик непрочитанных сломался бы.

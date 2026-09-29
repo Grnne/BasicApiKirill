@@ -34,8 +34,12 @@ public class PresenceServiceTests
         _chatRepoMock
             .Setup(r => r.GetMemberIdsAsync(_chatId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([_userId, _contactA]);
+        _chatRepoMock
+            .Setup(r => r.IsMemberAsync(_chatId, _userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
 
-        _service = new PresenceService(_status, new MembershipService(_chatRepoMock.Object), _eventsMock.Object,
+        var membership = new MembershipService(_chatRepoMock.Object);
+        _service = new PresenceService(_status, membership, new ChatPolicy(membership), _eventsMock.Object,
             NullLogger<PresenceService>.Instance);
     }
 

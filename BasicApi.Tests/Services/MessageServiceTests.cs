@@ -42,7 +42,8 @@ public class MessageServiceTests
                 CreatedAt = m.CreatedAt, SenderName = "Alice"
             });
 
-        _service = new MessageService(_msgRepoMock.Object, new MembershipService(_chatRepoMock.Object), _eventsMock.Object);
+        var membership = new MembershipService(_chatRepoMock.Object);
+        _service = new MessageService(_msgRepoMock.Object, membership, new ChatPolicy(membership), _eventsMock.Object);
     }
 
     // ========== Send ==========
