@@ -303,8 +303,9 @@
 
         <div class="note">
             <strong>Доставка — «хотя бы один раз».</strong> <code>MessageCreated</code>, <code>ChatListUpdated</code>,
-            <code>MessageUpdated</code>, <code>MessageDeleted</code>, <code>ReactionsChanged</code>
-            и <code>ChatCreated</code> сохраняются в той же транзакции, что и само изменение, и рассылаются
+            <code>MessageUpdated</code>, <code>MessageDeleted</code>, <code>ReactionsChanged</code>,
+            <code>MessagesDelivered</code>, <code>MessagesRead</code>, <code>ReadStateChanged</code>,
+            <code>DraftUpdated</code> и <code>ChatCreated</code> сохраняются в той же транзакции, что и само изменение, и рассылаются
             из очереди: сбой сервера не теряет событие, но изредка оно может прийти дважды — сообщения
             различаются по <code>id</code> (или <code>chatId</code> + <code>seq</code>). Пропущенное, пока
             клиент был отключён, забирается через <code>GET /api/sync?since={pts}</code>.
@@ -338,7 +339,8 @@
                     <tr><td><code>senderName</code></td><td class="type-cell">string</td><td>Отображаемое имя отправителя</td></tr>
                     <tr><td><code>text</code></td><td class="type-cell">string</td><td>Текст</td></tr>
                     <tr><td><code>createdAt</code></td><td class="type-cell">DateTime</td><td>Время отправки, UTC с <code>Z</code></td></tr>
-                    <tr><td><code>isRead</code></td><td class="type-cell">boolean</td><td>Прочитано ли текущим пользователем</td></tr>
+                    <tr><td><code>isRead</code></td><td class="type-cell">boolean</td><td>Чужое — прочитано ли вами; своё — прочитано ли другим участником. В истории и поиске; в событиях <code>false</code></td></tr>
+                    <tr><td><code>status</code></td><td class="type-cell">string?</td><td>Только у своих: <code>sent</code> / <code>delivered</code> / <code>read</code>. В истории и поиске; в событиях <code>null</code></td></tr>
                     <tr><td><code>seq</code></td><td class="type-cell">long</td><td>Номер сообщения в чате: 1, 2, 3, … — сообщения упорядочены по нему</td></tr>
                     <tr><td><code>clientMessageId</code></td><td class="type-cell">Guid?</td><td>ID, который отправитель передал при REST-отправке; иначе <code>null</code></td></tr>
                     <tr><td><code>type</code></td><td class="type-cell">string</td><td>Вид сообщения; пока всегда <code>"text"</code>. Незнакомый тип — показать заглушкой</td></tr>
@@ -445,6 +447,82 @@
         <div class="event-card">
             <div class="event-header">
                 <span class="direction-badge server-client">Server → Client</span>
+                <span class="event-name">MessagesDelivered</span>
+            </div>
+            <div class="method-description" style="margin-top: 0.5rem;">
+                Устройство другого участника получило ваши сообщения и подтвердило это через <code>POST /api/sync/ack</code>. Приходит только авторам, чьи сообщения <em>впервые</em> стали доставленными; в группе решает первый получивший.
+            </div>
+            <table>
+                <thead><tr><th>Аргумент</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                    <tr><td><code>receipt</code></td><td class="type-cell">object</td><td><code>chatId</code>, <code>userId</code> — кто получил, <code>seq</code> — всё до этого номера включительно</td></tr>
+                </tbody>
+            </table>
+            <div class="note">
+                <strong>Клиент:</strong> <code>outboxDeliveredSeq = max(outboxDeliveredSeq, seq)</code> и пересчитать статусы своих сообщений чата: <code>seq ≤ outboxDeliveredSeq</code> — <code>delivered</code>.
+            </div>
+        </div>
+
+        <div class="event-card">
+            <div class="event-header">
+                <span class="direction-badge server-client">Server → Client</span>
+                <span class="event-name">MessagesRead</span>
+            </div>
+            <div class="method-description" style="margin-top: 0.5rem;">
+                Другой участник прочитал ваши сообщения (<code>POST /api/chats/{chatId}/read</code>). Приходит только авторам, чьи сообщения впервые стали прочитанными.
+            </div>
+            <table>
+                <thead><tr><th>Аргумент</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                    <tr><td><code>receipt</code></td><td class="type-cell">object</td><td><code>chatId</code>, <code>userId</code> — кто прочитал, <code>seq</code></td></tr>
+                </tbody>
+            </table>
+            <div class="note">
+                <strong>Клиент:</strong> поднять до <code>seq</code> и <code>outboxReadSeq</code>, и <code>outboxDeliveredSeq</code>; свои сообщения с <code>seq ≤ outboxReadSeq</code> — <code>read</code>.
+            </div>
+        </div>
+
+        <div class="event-card">
+            <div class="event-header">
+                <span class="direction-badge server-client">Server → Client</span>
+                <span class="event-name">ReadStateChanged</span>
+            </div>
+            <div class="method-description" style="margin-top: 0.5rem;">
+                На одном из ваших устройств сдвинулся указатель прочтения или изменилась метка «непрочитано». Получают все ваши устройства.
+            </div>
+            <table>
+                <thead><tr><th>Аргумент</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                    <tr><td><code>state</code></td><td class="type-cell">object</td><td><code>chatId</code>, <code>lastReadSeq</code>, <code>unreadCount</code>, <code>unreadMentionCount</code>, <code>markedUnread</code></td></tr>
+                </tbody>
+            </table>
+            <div class="note">
+                <strong>Клиент:</strong> заменить эти поля в строке чата.
+            </div>
+        </div>
+
+        <div class="event-card">
+            <div class="event-header">
+                <span class="direction-badge server-client">Server → Client</span>
+                <span class="event-name">DraftUpdated</span>
+            </div>
+            <div class="method-description" style="margin-top: 0.5rem;">
+                Черновик чата изменился на одном из ваших устройств или был отправлен. Получают все ваши устройства.
+            </div>
+            <table>
+                <thead><tr><th>Аргумент</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                    <tr><td><code>draft</code></td><td class="type-cell">object</td><td><code>chatId</code>, <code>draft</code> — <code>{ text, entities, replyToMessageId, updatedAt }</code>; <code>null</code> — удалён или отправлен</td></tr>
+                </tbody>
+            </table>
+            <div class="note">
+                <strong>Клиент:</strong> обновить черновик чата. Не перетирать поле ввода, в котором сейчас печатают, если <code>updatedAt</code> не новее своего последнего сохранения.
+            </div>
+        </div>
+
+        <div class="event-card">
+            <div class="event-header">
+                <span class="direction-badge server-client">Server → Client</span>
                 <span class="event-name">ChatCreated</span>
             </div>
             <div class="method-description" style="margin-top: 0.5rem;">
@@ -473,6 +551,11 @@
                     <tr><td><code>lastMessage</code></td><td class="type-cell">MessageDto?</td><td><code>null</code> у только что созданного чата</td></tr>
                     <tr><td><code>unreadCount</code></td><td class="type-cell">int</td><td>Непрочитанные (свои сообщения не считаются)</td></tr>
                     <tr><td><code>unreadMentionCount</code></td><td class="type-cell">int</td><td>Непрочитанные сообщения, где упомянут пользователь</td></tr>
+                    <tr><td><code>lastReadSeq</code></td><td class="type-cell">long</td><td>До какого <code>seq</code> вы прочитали</td></tr>
+                    <tr><td><code>markedUnread</code></td><td class="type-cell">boolean</td><td>Вы пометили чат непрочитанным</td></tr>
+                    <tr><td><code>outboxDeliveredSeq</code></td><td class="type-cell">long</td><td>Ваши сообщения до этого <code>seq</code> доставлены</td></tr>
+                    <tr><td><code>outboxReadSeq</code></td><td class="type-cell">long</td><td>Ваши сообщения до этого <code>seq</code> прочитаны</td></tr>
+                    <tr><td><code>draft</code></td><td class="type-cell">object?</td><td>Ваш черновик: <code>text</code>, <code>entities</code>, <code>replyToMessageId</code>, <code>updatedAt</code></td></tr>
                     <tr><td><code>lastActivityAt</code></td><td class="type-cell">DateTime</td><td>Время последней активности, UTC с <code>Z</code></td></tr>
                 </tbody>
             </table>
@@ -561,7 +644,7 @@
         <footer>
             <a href="/swagger">REST API (Swagger)</a> ·
             <a href="/signalr-docs">SignalR Docs</a> ·
-            v1.2
+            v1.3
         </footer>
     </div>
 </body>
