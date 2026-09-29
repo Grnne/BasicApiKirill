@@ -74,12 +74,17 @@ public static class ApiClient
     }
 
     /// <summary>Access-токен с заданным временем жизни, подписанный ключом тестового приложения.</summary>
-    public static string ShortLivedToken(Guid userId, TimeSpan lifetime)
+    /// <param name="sessionFamilyId">Вход, к которому относится токен (claim <c>sid</c>); без него — токен без сессии.</param>
+    public static string ShortLivedToken(Guid userId, TimeSpan lifetime, Guid? sessionFamilyId = null)
     {
+        List<Claim> claims = [new(JwtRegisteredClaimNames.Sub, userId.ToString())];
+        if (sessionFamilyId is not null)
+            claims.Add(new Claim(JwtRegisteredClaimNames.Sid, sessionFamilyId.Value.ToString()));
+
         var handler = new JwtSecurityTokenHandler();
         var token = handler.CreateToken(new SecurityTokenDescriptor
         {
-            Subject = new ClaimsIdentity([new Claim(JwtRegisteredClaimNames.Sub, userId.ToString())]),
+            Subject = new ClaimsIdentity(claims),
             NotBefore = DateTime.UtcNow.AddMinutes(-1),
             Expires = DateTime.UtcNow.Add(lifetime),
             Issuer = "ChatApi",
@@ -89,4 +94,9 @@ public static class ApiClient
         });
         return handler.WriteToken(token);
     }
+
+    /// <summary>Вход (claim <c>sid</c>), которому выдан access-токен.</summary>
+    public static Guid SessionFamilyOf(string token) =>
+        Guid.Parse(new JwtSecurityTokenHandler().ReadJwtToken(token).Claims
+            .First(c => c.Type == JwtRegisteredClaimNames.Sid).Value);
 }

@@ -37,4 +37,8 @@ public interface ISessionService
     /// An access token outlives logout by minutes; the hub checks this on connect.
     /// </summary>
     Task<bool> IsSessionFamilyLiveAsync(Guid sessionFamilyId, CancellationToken ct = default);
+
+    /// <summary>Which of the given sign-ins are still open — for checking many hub connections at once.</summary>
+    Task<IReadOnlyCollection<Guid>> GetLiveSessionFamiliesAsync(
+        IReadOnlyCollection<Guid> sessionFamilyIds, CancellationToken ct = default);
 }

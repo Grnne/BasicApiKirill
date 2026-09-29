@@ -144,6 +144,10 @@ public class SessionService(
     public Task<bool> IsSessionFamilyLiveAsync(Guid sessionFamilyId, CancellationToken ct = default)
         => sessionRepository.HasLiveSessionInFamilyAsync(sessionFamilyId, ct);
 
+    public Task<IReadOnlyCollection<Guid>> GetLiveSessionFamiliesAsync(
+        IReadOnlyCollection<Guid> sessionFamilyIds, CancellationToken ct = default)
+        => sessionRepository.GetLiveFamiliesAsync(sessionFamilyIds, ct);
+
     /// <summary>
     /// SHA-256 hex of the refresh token. Refresh tokens are 256 bits of CSPRNG output,
     /// so a plain hash is enough — unlike passwords there is nothing to brute-force.

@@ -1,25 +1,90 @@
+using System.Net;
 using System.Net.Http.Json;
 using BasicApi.IntegrationTests.Infrastructure;
+using Dapper;
 using Microsoft.AspNetCore.SignalR.Client;
+using Npgsql;
 
 namespace BasicApi.IntegrationTests.Api;
 
 /// <summary>
-/// Соединение с хабом живёт часами, а токен — минуты. Доступ, отозванный
-/// или истёкший, должен обрывать и уже открытые соединения.
+/// Соединение с хабом живёт часами, а access-токен — минуты. Соединение живёт, пока
+/// жив вход (сессия), с которого оно открыто: отозванный или истёкший вход обрывает
+/// и уже открытые соединения, а истечение одного access-токена — нет.
 /// </summary>
 public class HubAccessTests(PostgresFixture db) : DbTest(db)
 {
     private static readonly TimeSpan CloseTimeout = TimeSpan.FromSeconds(15);
 
-    [Fact]
-    public async Task Connection_IsClosed_WhenAccessTokenExpires()
+    /// <summary>Проверка сессий открытых соединений — раз в секунду, а не в минуту.</summary>
+    private static readonly Dictionary<string, string?> FastSessionCheck = new()
     {
-        await using var factory = new ApiFactory(Db.ConnectionString);
+        ["Hub:SessionCheckIntervalSeconds"] = "1",
+    };
+
+    [Fact]
+    public async Task Connection_OutlivesAccessToken_WhileSessionIsLive()
+    {
+        // Текущий веб-клиент при переподключении отдаёт тот же токен, пока не получит
+        // 401 на REST-запросе. Закрытие соединения по истечении токена оставляло его
+        // без событий до перезагрузки страницы (найдено ручной проверкой клиента).
+        await using var factory = new ApiFactory(Db.ConnectionString, FastSessionCheck);
+        var user = await factory.RegisterAsync("alice");
+        await using var hub = factory.CreateHubConnection(ApiClient.ShortLivedToken(
+            user.UserId, TimeSpan.FromSeconds(2), ApiClient.SessionFamilyOf(user.Token)));
+        await hub.StartAsync();
+
+        Assert.False(await hub.WaitForCloseAsync(TimeSpan.FromSeconds(5)));
+        Assert.Equal(HubConnectionState.Connected, hub.State);
+    }
+
+    [Fact]
+    public async Task Connection_WithoutSession_IsClosed_WhenAccessTokenExpires()
+    {
+        // Токен без sid не привязан ко входу — нечем проверить, что доступ ещё есть.
+        await using var factory = new ApiFactory(Db.ConnectionString, FastSessionCheck);
         var user = await factory.RegisterAsync("alice");
         await using var hub = factory.CreateHubConnection(
             ApiClient.ShortLivedToken(user.UserId, TimeSpan.FromSeconds(3)));
         await hub.StartAsync();
+
+        Assert.True(await hub.WaitForCloseAsync(CloseTimeout));
+    }
+
+    [Fact]
+    public async Task Connection_IsClosed_WhenRefreshTokenReuseRevokesTheSession()
+    {
+        // Повтор уже использованного refresh-токена гасит всю цепочку входа (кража).
+        // Соединение, открытое с этого входа, должно закрыться, хотя access-токен жив.
+        await using var factory = new ApiFactory(Db.ConnectionString, new Dictionary<string, string?>(FastSessionCheck)
+        {
+            ["Jwt:RefreshGraceSeconds"] = "0",
+        });
+        var user = await factory.RegisterAsync("alice");
+        await using var hub = factory.CreateHubConnection(user.Token);
+        await hub.StartAsync();
+
+        using var client = factory.CreateClient();
+        (await client.PostAsJsonAsync("/api/auth/refresh", new { refreshToken = user.RefreshToken }))
+            .EnsureSuccessStatusCode();
+        await Task.Delay(TimeSpan.FromSeconds(1.1));
+        var reuse = await client.PostAsJsonAsync("/api/auth/refresh", new { refreshToken = user.RefreshToken });
+        Assert.Equal(HttpStatusCode.Unauthorized, reuse.StatusCode);
+
+        Assert.True(await hub.WaitForCloseAsync(CloseTimeout));
+    }
+
+    [Fact]
+    public async Task Connection_IsClosed_WhenSessionExpires()
+    {
+        await using var factory = new ApiFactory(Db.ConnectionString, FastSessionCheck);
+        var user = await factory.RegisterAsync("alice");
+        await using var hub = factory.CreateHubConnection(user.Token);
+        await hub.StartAsync();
+
+        await using (var connection = new NpgsqlConnection(Db.ConnectionString))
+            await connection.ExecuteAsync("UPDATE sessions SET expires_at = now() - interval '1 second' WHERE family_id = @id",
+                new { id = ApiClient.SessionFamilyOf(user.Token) });
 
         Assert.True(await hub.WaitForCloseAsync(CloseTimeout));
     }

@@ -23,4 +23,9 @@ public static class ClaimsPrincipalExtensions
         return Guid.TryParse(value, out var id) ? id : null;
     }
 
+    /// <summary>When the access token expires (claim <c>exp</c>); null if the claim is missing.</summary>
+    public static DateTimeOffset? GetTokenExpiry(this ClaimsPrincipal user) =>
+        long.TryParse(user.FindFirstValue(JwtRegisteredClaimNames.Exp), out var seconds)
+            ? DateTimeOffset.FromUnixTimeSeconds(seconds)
+            : null;
 }

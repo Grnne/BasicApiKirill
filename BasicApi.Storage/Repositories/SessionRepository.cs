@@ -68,10 +68,23 @@ public class SessionRepository(IDbSession db) : ISessionRepository
         const string sql = @"
             SELECT EXISTS(
                 SELECT 1 FROM sessions
-                WHERE family_id = @familyId AND revoked_at IS NULL
+                WHERE family_id = @familyId AND revoked_at IS NULL AND expires_at > now()
             )";
 
         return await db.ExecuteScalarAsync<bool>(sql, new { familyId }, ct);
+    }
+
+    public async Task<IReadOnlyCollection<Guid>> GetLiveFamiliesAsync(
+        IReadOnlyCollection<Guid> familyIds, CancellationToken ct = default)
+    {
+        if (familyIds.Count == 0)
+            return [];
+
+        const string sql = @"
+            SELECT DISTINCT family_id FROM sessions
+            WHERE family_id = ANY(@familyIds) AND revoked_at IS NULL AND expires_at > now()";
+
+        return await db.QueryAsync<Guid>(sql, new { familyIds = familyIds.ToArray() }, ct);
     }
 
     public async Task RevokeAsync(Guid sessionId, DateTime revokedAt, CancellationToken ct = default)

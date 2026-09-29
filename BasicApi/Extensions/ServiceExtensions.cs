@@ -128,6 +128,7 @@ public static class ServiceExtensions
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IUserStatusService, UserStatusService>();
         services.AddSingleton<HubConnectionRegistry>();
+        services.AddHostedService<HubSessionMonitor>();
 
         // JWT
         services.AddScoped<IJwtService, JwtService>();

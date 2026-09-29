@@ -48,7 +48,7 @@ public class ChatHub(
             // Сначала регистрируем, потом проверяем сессию: logout между этими
             // шагами либо найдёт соединение в реестре, либо проверка увидит отзыв.
             var sessionFamilyId = Context.User?.GetSessionFamilyId();
-            connectionRegistry.Add(Context, userId, sessionFamilyId);
+            connectionRegistry.Add(Context, userId, sessionFamilyId, Context.User?.GetTokenExpiry());
 
             if (sessionFamilyId is not null &&
                 !await sessions.IsSessionFamilyLiveAsync(sessionFamilyId.Value, Context.ConnectionAborted))
