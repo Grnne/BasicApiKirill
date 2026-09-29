@@ -203,29 +203,69 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
         db.QueryFirstOrDefaultAsync<long?>(
             "SELECT seq FROM messages WHERE id = @messageId AND chat_id = @chatId", new { chatId, messageId }, ct);
 
-    public async Task<ReadPointerUpdate> MarkReadAsync(
-        Guid chatId, Guid userId, Guid messageId, CancellationToken ct = default)
+    public Task<ReadPointerMove> MarkReadAsync(
+        Guid chatId, Guid userId, Guid messageId, CancellationToken ct = default) =>
+        db.InTransactionAsync(async ct =>
+        {
+            // The message must belong to this chat, and the pointer moves only forward — two
+            // devices reporting out of order will not roll back what has been read. The member row
+            // is locked first: a concurrent move waits and then sees where this one left the pointer,
+            // so the reported range is exact.
+            var target = await db.QueryFirstOrDefaultAsync<long?>(
+                "SELECT seq FROM messages WHERE id = @messageId AND chat_id = @chatId", new { chatId, messageId }, ct);
+            if (target is not { } seq)
+                return new ReadPointerMove(ReadPointerUpdate.MessageNotFound);
+
+            var current = await db.QueryFirstOrDefaultAsync<long?>(@"
+                SELECT last_read_seq FROM chat_members WHERE chat_id = @chatId AND user_id = @userId FOR UPDATE",
+                new { chatId, userId }, ct);
+            if (current is not { } from || from >= seq)
+                return new ReadPointerMove(ReadPointerUpdate.NotMoved, current ?? 0, current ?? 0);
+
+            await db.ExecuteAsync(@"
+                UPDATE chat_members
+                SET last_read_seq = @seq, last_delivered_seq = GREATEST(last_delivered_seq, @seq)
+                WHERE chat_id = @chatId AND user_id = @userId",
+                new { chatId, userId, seq }, ct);
+            return new ReadPointerMove(ReadPointerUpdate.Moved, from, seq);
+        }, ct: ct);
+
+    public Task<ReadPointers?> GetReadPointersAsync(Guid chatId, Guid viewerId, CancellationToken ct = default) =>
+        db.QueryFirstOrDefaultAsync<ReadPointers>(@"
+            SELECT cm.last_read_seq AS ReadSeq,
+                   COALESCE(o.read_seq, 0) AS OutboxReadSeq,
+                   COALESCE(o.delivered_seq, 0) AS OutboxDeliveredSeq,
+                   o.members > 0 AS HasOthers
+            FROM chat_members cm
+            CROSS JOIN LATERAL (
+                SELECT MAX(last_read_seq) AS read_seq, MAX(last_delivered_seq) AS delivered_seq, COUNT(*) AS members
+                FROM chat_members
+                WHERE chat_id = @chatId AND user_id <> @viewerId
+            ) o
+            WHERE cm.chat_id = @chatId AND cm.user_id = @viewerId",
+            new { chatId, viewerId }, ct);
+
+    public Task<IReadOnlyList<Guid>> GetAuthorsNewlyReachedAsync(
+        Guid chatId, Guid memberId, long fromSeq, long toSeq, ReceiptKind kind, CancellationToken ct = default)
     {
-        // In one query: the message must belong to this chat, and the pointer moves
-        // only forward — two devices reporting out of order will not roll back
-        // what has been read.
-        const string sql = @"
-            WITH target AS (
-                SELECT seq FROM messages WHERE id = @messageId AND chat_id = @chatId
-            ), moved AS (
-                UPDATE chat_members cm
-                SET last_read_seq = t.seq
-                FROM target t
-                WHERE cm.chat_id = @chatId AND cm.user_id = @userId AND cm.last_read_seq < t.seq
-                RETURNING 1
+        var pointer = kind == ReceiptKind.Read ? "last_read_seq" : "last_delivered_seq";
+
+        // Per author, their newest message in the range against the furthest pointer of everyone
+        // else (neither the author nor this member): if nobody had reached it, the status is new.
+        return db.QueryAsync<Guid>($@"
+            WITH authors AS (
+                SELECT sender_id, MAX(seq) AS top
+                FROM messages
+                WHERE chat_id = @chatId AND seq > @fromSeq AND seq <= @toSeq
+                  AND sender_id <> @memberId AND deleted_at IS NULL
+                GROUP BY sender_id
             )
-            SELECT (SELECT COUNT(*) FROM target) AS Found, (SELECT COUNT(*) FROM moved) AS Moved";
-
-        var (found, moved) = await db.QuerySingleAsync<(long Found, long Moved)>(
-            sql, new { chatId, userId, messageId }, ct);
-
-        if (found == 0) return ReadPointerUpdate.MessageNotFound;
-        return moved > 0 ? ReadPointerUpdate.Moved : ReadPointerUpdate.NotMoved;
+            SELECT a.sender_id
+            FROM authors a
+            WHERE a.top > COALESCE((
+                SELECT MAX(o.{pointer}) FROM chat_members o
+                WHERE o.chat_id = @chatId AND o.user_id <> @memberId AND o.user_id <> a.sender_id), 0)",
+            new { chatId, memberId, fromSeq, toSeq }, ct);
     }
 
     /// <summary>

@@ -28,6 +28,12 @@ public interface IChatEventPublisher
     /// <summary><c>ReactionsChanged</c> with the message's reactions to all participants.</summary>
     Task ReactionsChangedAsync(MessageReactionsDto reactions, IReadOnlyCollection<Guid> memberIds, CancellationToken ct = default);
 
+    /// <summary><c>MessagesDelivered</c> to the authors whose messages the member's device received.</summary>
+    Task MessagesDeliveredAsync(ReceiptDto receipt, IReadOnlyCollection<Guid> authorIds, CancellationToken ct = default);
+
+    /// <summary><c>MessagesRead</c> to the authors whose messages the member read.</summary>
+    Task MessagesReadAsync(ReceiptDto receipt, IReadOnlyCollection<Guid> authorIds, CancellationToken ct = default);
+
     /// <summary>
     /// A new chat for a user; the card is built for them. <paramref name="live"/> —
     /// whether to send <c>ChatCreated</c> right away: the chat creator does not get it, they got the card

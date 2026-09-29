@@ -21,6 +21,9 @@ public static class ChatListItemMapper
         CompanionUsername = r.CompanionUsername,
         UnreadCount = r.UnreadCount,
         UnreadMentionCount = r.UnreadMentionCount,
+        LastReadSeq = r.LastReadSeq,
+        OutboxReadSeq = r.OutboxReadSeq,
+        OutboxDeliveredSeq = r.OutboxDeliveredSeq,
         LastActivityAt = r.LastMessageCreatedAt ?? r.CreatedAt,
         LastMessage = r.LastMessageId is not null ? new MessageDto
         {
@@ -30,7 +33,12 @@ public static class ChatListItemMapper
             SenderName = r.LastMessageSenderName ?? "Unknown",
             Text = r.LastMessageText ?? string.Empty,
             CreatedAt = r.LastMessageCreatedAt!.Value,
-            IsRead = false,
+            IsRead = r.LastMessageIsOwn
+                ? r.LastMessageSeq <= r.OutboxReadSeq && r.HasOthers
+                : r.LastMessageSeq <= r.LastReadSeq,
+            Status = r.LastMessageIsOwn
+                ? MessageStatuses.OfOwn(r.LastMessageSeq ?? 0, r.HasOthers, r.OutboxReadSeq, r.OutboxDeliveredSeq)
+                : null,
             Seq = r.LastMessageSeq ?? 0
         } : null
     };

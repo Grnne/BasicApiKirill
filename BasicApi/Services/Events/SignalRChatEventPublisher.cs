@@ -42,6 +42,14 @@ public sealed class SignalRChatEventPublisher(IHubContext<ChatHub> hub) : IChatE
             ? Task.CompletedTask
             : hub.Clients.Users(ToStrings(memberIds)).SendAsync("ReactionsChanged", reactions, ct);
 
+    public Task MessagesDeliveredAsync(
+        ReceiptDto receipt, IReadOnlyCollection<Guid> authorIds, CancellationToken ct = default) =>
+        ToUsers(authorIds, "MessagesDelivered", receipt, ct);
+
+    public Task MessagesReadAsync(
+        ReceiptDto receipt, IReadOnlyCollection<Guid> authorIds, CancellationToken ct = default) =>
+        ToUsers(authorIds, "MessagesRead", receipt, ct);
+
     public Task ChatCreatedAsync(Guid recipientId, ChatListItemDto item, bool live = true, CancellationToken ct = default) =>
         live ? hub.Clients.User(recipientId.ToString()).SendAsync("ChatCreated", item, ct) : Task.CompletedTask;
 
@@ -68,6 +76,9 @@ public sealed class SignalRChatEventPublisher(IHubContext<ChatHub> hub) : IChatE
         CreatedAt = message.CreatedAt,
         IsRead = message.IsRead
     };
+
+    private Task ToUsers(IReadOnlyCollection<Guid> userIds, string method, object payload, CancellationToken ct) =>
+        userIds.Count == 0 ? Task.CompletedTask : hub.Clients.Users(ToStrings(userIds)).SendAsync(method, payload, ct);
 
     private static string[] ToStrings(IReadOnlyCollection<Guid> ids) => [.. ids.Select(id => id.ToString())];
 }

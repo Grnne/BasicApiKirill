@@ -35,6 +35,11 @@ public class MessageServiceTests
             .Setup(r => r.IsMemberAsync(_chatId, _userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
+        _msgRepoMock
+            .Setup(r => r.GetAuthorsNewlyReachedAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<long>(),
+                It.IsAny<long>(), It.IsAny<ReceiptKind>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
         // The repository returns what was inserted, with the number and the sender name
         _msgRepoMock
             .Setup(r => r.CreateAsync(It.IsAny<Message>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
@@ -181,11 +186,45 @@ public class MessageServiceTests
         var messageId = Guid.NewGuid();
         _msgRepoMock
             .Setup(r => r.MarkReadAsync(_chatId, _userId, messageId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(ReadPointerUpdate.Moved);
+            .ReturnsAsync(new ReadPointerMove(ReadPointerUpdate.Moved));
 
         await _service.MarkReadAsync(_chatId, _userId, messageId);
 
         _msgRepoMock.Verify(r => r.MarkReadAsync(_chatId, _userId, messageId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task MarkRead_TellsTheAuthorsWhoseMessagesFirstBecameRead()
+    {
+        var messageId = Guid.NewGuid();
+        _msgRepoMock
+            .Setup(r => r.MarkReadAsync(_chatId, _userId, messageId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ReadPointerMove(ReadPointerUpdate.Moved, 3, 9));
+        _msgRepoMock
+            .Setup(r => r.GetAuthorsNewlyReachedAsync(_chatId, _userId, 3, 9, ReceiptKind.Read, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([_otherId]);
+
+        await _service.MarkReadAsync(_chatId, _userId, messageId);
+
+        _eventsMock.Verify(e => e.MessagesReadAsync(
+            It.Is<ReceiptDto>(r => r.ChatId == _chatId && r.UserId == _userId && r.Seq == 9),
+            It.Is<IReadOnlyCollection<Guid>>(ids => ids.SequenceEqual(new[] { _otherId })),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task MarkRead_WhenNobodyNewIsReached_SendsNothing()
+    {
+        _msgRepoMock
+            .Setup(r => r.MarkReadAsync(_chatId, _userId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ReadPointerMove(ReadPointerUpdate.Moved, 3, 9));
+        _msgRepoMock
+            .Setup(r => r.GetAuthorsNewlyReachedAsync(_chatId, _userId, 3, 9, ReceiptKind.Read, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        await _service.MarkReadAsync(_chatId, _userId, Guid.NewGuid());
+
+        _eventsMock.VerifyNoOtherCalls();
     }
 
     [Fact]
@@ -194,9 +233,13 @@ public class MessageServiceTests
         // The pointer does not move backwards, but for the client this is not an error: they have already read further.
         _msgRepoMock
             .Setup(r => r.MarkReadAsync(_chatId, _userId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(ReadPointerUpdate.NotMoved);
+            .ReturnsAsync(new ReadPointerMove(ReadPointerUpdate.NotMoved));
 
         await _service.MarkReadAsync(_chatId, _userId, Guid.NewGuid());
+
+        _msgRepoMock.Verify(r => r.GetAuthorsNewlyReachedAsync(It.IsAny<Guid>(), It.IsAny<Guid>(),
+            It.IsAny<long>(), It.IsAny<long>(), It.IsAny<ReceiptKind>(), It.IsAny<CancellationToken>()), Times.Never);
+        _eventsMock.VerifyNoOtherCalls();
     }
 
     [Fact]
@@ -204,7 +247,7 @@ public class MessageServiceTests
     {
         _msgRepoMock
             .Setup(r => r.MarkReadAsync(_chatId, _userId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(ReadPointerUpdate.MessageNotFound);
+            .ReturnsAsync(new ReadPointerMove(ReadPointerUpdate.MessageNotFound));
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(() =>
             _service.MarkReadAsync(_chatId, _userId, Guid.NewGuid()));

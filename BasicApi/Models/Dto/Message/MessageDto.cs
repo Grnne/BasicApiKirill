@@ -8,7 +8,19 @@ public class MessageDto
     public string SenderName { get; set; } = string.Empty;
     public string Text { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
+
+    /// <summary>
+    /// Someone else's message — the caller has read it; one's own — another member has read it
+    /// (<see cref="Status"/> is <c>read</c>). Filled in history and search; false in events.
+    /// </summary>
     public bool IsRead { get; set; }
+
+    /// <summary>
+    /// For the caller's own messages: <c>sent</c>, <c>delivered</c> (a device of another member
+    /// received it) or <c>read</c> (another member read it). Null for others' messages, in a chat
+    /// with oneself and in events. Filled in history and search.
+    /// </summary>
+    public string? Status { get; set; }
 
     /// <summary>Number of the message in the chat: 1, 2, 3, … Messages are ordered by it.</summary>
     public long Seq { get; set; }

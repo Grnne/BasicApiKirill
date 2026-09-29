@@ -159,12 +159,18 @@ public class ChatRepository(IDbSession db) : IChatRepository
                       SELECT 1 FROM hidden_messages h WHERE h.user_id = @userId AND h.message_id = mm.message_id)
             ) AS UnreadMentionCount,
 
+            cm.last_read_seq AS LastReadSeq,
+            COALESCE(ob.read_seq, 0) AS OutboxReadSeq,
+            COALESCE(ob.delivered_seq, 0) AS OutboxDeliveredSeq,
+            ob.members > 0 AS HasOthers,
+
             lm.id AS LastMessageId,
             lm.seq AS LastMessageSeq,
             lm.sender_id AS LastMessageSenderId,
             lm.text AS LastMessageText,
             lm.created_at AS LastMessageCreatedAt,
-            sender_u.display_name AS LastMessageSenderName
+            sender_u.display_name AS LastMessageSenderName,
+            COALESCE(lm.sender_id = @userId, false) AS LastMessageIsOwn
 
         FROM chats c
         INNER JOIN chat_members cm ON c.id = cm.chat_id AND cm.user_id = @userId
@@ -187,7 +193,14 @@ public class ChatRepository(IDbSession db) : IChatRepository
             LIMIT 1
         ) lm ON TRUE
 
-        LEFT JOIN users sender_u ON sender_u.id = lm.sender_id";
+        LEFT JOIN users sender_u ON sender_u.id = lm.sender_id
+
+        -- How far the other members got: the status of the user's own messages.
+        CROSS JOIN LATERAL (
+            SELECT MAX(o.last_read_seq) AS read_seq, MAX(o.last_delivered_seq) AS delivered_seq, COUNT(*) AS members
+            FROM chat_members o
+            WHERE o.chat_id = c.id AND o.user_id <> @userId
+        ) ob";
 
     private static string BuildSearchWhereClause(string? query, string? typeFilter, bool byChatId = false)
     {

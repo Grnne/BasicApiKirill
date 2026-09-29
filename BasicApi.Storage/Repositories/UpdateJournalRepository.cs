@@ -43,6 +43,34 @@ public sealed class UpdateJournalRepository(IDbSession db) : IUpdateJournal
             SET acked_pts = GREATEST(user_sync_state.acked_pts, EXCLUDED.acked_pts), updated_at = now()",
             new { userId, sessionFamilyId, pts }, ct);
 
+    public Task<IReadOnlyList<PointerMove>> DeliverUpToAsync(Guid userId, long pts, CancellationToken ct = default) =>
+        // New messages the journal handed out between the furthest earlier ack of any device and
+        // this one: per chat, the highest seq. Payloads are MessageDto in camelCase. The member rows
+        // are locked before reading the old pointer, so a concurrent ack of another device either
+        // sees this move or is seen by it; a chat the user has left since is skipped by the join.
+        db.QueryAsync<PointerMove>(@"
+            WITH prev AS (
+                SELECT COALESCE(MAX(acked_pts), 0) AS pts FROM user_sync_state WHERE user_id = @userId
+            ), reached AS (
+                SELECT (u.payload->>'chatId')::uuid AS chat_id, MAX((u.payload->>'seq')::bigint) AS seq
+                FROM user_updates u, prev
+                WHERE u.user_id = @userId AND u.pts > prev.pts AND u.pts <= @pts AND u.type = 'MessageCreated'
+                GROUP BY 1
+            ), locked AS (
+                SELECT cm.chat_id, cm.last_delivered_seq AS from_seq, r.seq AS to_seq
+                FROM chat_members cm
+                JOIN reached r ON r.chat_id = cm.chat_id
+                WHERE cm.user_id = @userId AND cm.last_delivered_seq < r.seq
+                FOR UPDATE OF cm
+            ), moved AS (
+                UPDATE chat_members cm SET last_delivered_seq = l.to_seq
+                FROM locked l
+                WHERE cm.chat_id = l.chat_id AND cm.user_id = @userId AND cm.last_delivered_seq < l.to_seq
+                RETURNING cm.chat_id, l.from_seq, l.to_seq
+            )
+            SELECT chat_id AS ChatId, from_seq AS FromSeq, to_seq AS ToSeq FROM moved",
+            new { userId, pts }, ct);
+
     public Task<int> DeleteOlderThanAsync(DateTime olderThan, int batchSize, CancellationToken ct = default) =>
         db.ExecuteAsync(@"
             DELETE FROM user_updates

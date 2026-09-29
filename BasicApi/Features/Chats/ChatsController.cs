@@ -373,6 +373,12 @@ public class ChatsController(
     /// <summary>
     /// Mark messages as read
     /// </summary>
+    /// <remarks>
+    /// Moves the caller's read pointer to this message (forward only; an older one is not an
+    /// error). Authors whose messages first became read receive <c>MessagesRead</c>.
+    ///
+    /// Errors: <c>403 NOT_A_MEMBER</c>, <c>404 MESSAGE_NOT_FOUND</c> (not in this chat).
+    /// </remarks>
     [HttpPost("{chatId}/read")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]

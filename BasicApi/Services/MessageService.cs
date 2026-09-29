@@ -53,8 +53,9 @@ public interface IMessageService
         IReadOnlyList<Guid>? clientMessageIds = null, CancellationToken ct = default);
 
     /// <summary>
-    /// Moves the read pointer forward. A message not from this chat - 404
-    /// <c>MESSAGE_NOT_FOUND</c>; an attempt to move it back is not an error, nothing changes.
+    /// Moves the read pointer forward. Authors whose messages first became read get
+    /// <c>MessagesRead</c>. A message not from this chat - 404 <c>MESSAGE_NOT_FOUND</c>; an attempt
+    /// to move it back is not an error, nothing changes.
     /// </summary>
     Task MarkReadAsync(Guid chatId, Guid userId, Guid messageId, CancellationToken ct = default);
 
@@ -130,7 +131,7 @@ public sealed class MessageService(
         Guid chatId, Guid viewerId, long? beforeSeq, int limit, CancellationToken ct)
     {
         var result = await messageRepository.GetMessagesWithSenderCursorAsync(chatId, viewerId, beforeSeq, limit, ct);
-        var messages = result.Items.Select(Map).ToList();
+        var messages = await MapForViewerAsync(result.Items, chatId, viewerId, ct);
 
         return new CursorPaginatedResponse<MessageDto>
         {
@@ -151,7 +152,7 @@ public sealed class MessageService(
 
         var beforeSeq = await ResolveCursorAsync(chatId, parsed, ct);
         var (result, totalCount) = await messageRepository.SearchMessagesCursorAsync(chatId, userId, query, beforeSeq, limit, ct);
-        var messages = result.Items.Select(Map).ToList();
+        var messages = await MapForViewerAsync(result.Items, chatId, userId, ct);
 
         return new SearchMessagesResponseDto
         {
@@ -321,11 +322,25 @@ public sealed class MessageService(
     {
         await policy.DemandReadAsync(userId, chatId, ct);
 
-        // A message from another chat - 404: otherwise the pointer could land on someone else's
-        // message, and the unread counter would break.
-        var update = await messageRepository.MarkReadAsync(chatId, userId, messageId, ct);
-        if (update == ReadPointerUpdate.MessageNotFound)
-            throw MessageNotFound();
+        await db.InTransactionAsync(async ct =>
+        {
+            // A message from another chat - 404: otherwise the pointer could land on someone else's
+            // message, and the unread counter would break.
+            var move = await messageRepository.MarkReadAsync(chatId, userId, messageId, ct);
+            if (move.Update == ReadPointerUpdate.MessageNotFound)
+                throw MessageNotFound();
+
+            if (move.Update == ReadPointerUpdate.Moved)
+            {
+                // Only authors whose messages nobody had read yet: the others already show "read".
+                var authors = await messageRepository.GetAuthorsNewlyReachedAsync(
+                    chatId, userId, move.FromSeq, move.ToSeq, ReceiptKind.Read, ct);
+                if (authors.Count > 0)
+                    await events.MessagesReadAsync(
+                        new ReceiptDto { ChatId = chatId, UserId = userId, Seq = move.ToSeq }, authors, ct);
+            }
+            return true;
+        }, ct: ct);
     }
 
     public async Task<MessageDto> EditAsync(
@@ -396,6 +411,19 @@ public sealed class MessageService(
         }
     }
 
+    /// <summary>Messages as the viewer sees them: with the read status (D1).</summary>
+    private async Task<List<MessageDto>> MapForViewerAsync(
+        IEnumerable<MessageWithSender> rows, Guid chatId, Guid viewerId, CancellationToken ct)
+    {
+        var messages = rows.Select(Map).ToList();
+        if (messages.Count > 0 && await messageRepository.GetReadPointersAsync(chatId, viewerId, ct) is { } pointers)
+        {
+            foreach (var message in messages)
+                MessageStatuses.Apply(message, viewerId, pointers);
+        }
+        return messages;
+    }
+
     /// <summary>A live message of the chat; a tombstone or a message of another chat is 404.</summary>
     private async Task<MessageWithSender> FindAsync(Guid chatId, Guid messageId, CancellationToken ct) =>
         await messageRepository.GetAsync(chatId, messageId, ct) is { DeletedAt: null } message
@@ -441,7 +469,7 @@ public sealed class MessageService(
         SenderName = m.SenderName,
         Text = m.Text,
         CreatedAt = m.CreatedAt,
-        IsRead = false, // TODO: read status by the companion - plan 2
+        IsRead = false, // for the viewer: MapForViewerAsync
         Seq = m.Seq,
         ClientMessageId = m.ClientMessageId,
         Type = m.Type,

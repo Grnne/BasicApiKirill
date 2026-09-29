@@ -65,7 +65,19 @@ public interface IMessageRepository
     /// <summary>
     /// Moves the member's read pointer to the given message — forward only, by seq.
     /// A message from another chat (or a non-existent one) is rejected without
-    /// touching the pointer.
+    /// touching the pointer. What is read is delivered too: the delivery pointer catches up.
     /// </summary>
-    Task<ReadPointerUpdate> MarkReadAsync(Guid chatId, Guid userId, Guid messageId, CancellationToken ct = default);
+    Task<ReadPointerMove> MarkReadAsync(Guid chatId, Guid userId, Guid messageId, CancellationToken ct = default);
+
+    /// <summary>The member's own read pointer and how far the others got; null for a non-member.</summary>
+    Task<ReadPointers?> GetReadPointersAsync(Guid chatId, Guid viewerId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Authors whose messages first got the status when <paramref name="memberId"/>'s pointer of
+    /// this kind moved from <paramref name="fromSeq"/> to <paramref name="toSeq"/>: they have a
+    /// message in that range that no other member had reached yet. The member's own messages
+    /// do not count.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> GetAuthorsNewlyReachedAsync(
+        Guid chatId, Guid memberId, long fromSeq, long toSeq, ReceiptKind kind, CancellationToken ct = default);
 }

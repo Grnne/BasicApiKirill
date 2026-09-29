@@ -1,8 +1,11 @@
 using System.Data;
 using System.Text.Json;
 using BasicApi.Middleware.Exceptions;
+using BasicApi.Models.Dto.Message;
 using BasicApi.Models.Dto.Sync;
+using BasicApi.Services.Events;
 using BasicApi.Storage;
+using BasicApi.Storage.Dto;
 using BasicApi.Storage.Interfaces;
 
 namespace BasicApi.Services;
@@ -20,13 +23,19 @@ public interface ISyncService
     Task<SyncDifferenceDto> GetDifferenceAsync(Guid userId, long since, int limit, CancellationToken ct = default);
 
     /// <summary>
-    /// The device has received the journal up to pts. Errors: 400 <c>INVALID_PTS</c> — negative
-    /// or greater than the user's last pts.
+    /// The device has received the journal up to pts: the new messages in it become delivered,
+    /// and their authors get <c>MessagesDelivered</c> if nobody had received them before.
+    /// Errors: 400 <c>INVALID_PTS</c> — negative or greater than the user's last pts.
     /// </summary>
     Task AckAsync(Guid userId, Guid sessionFamilyId, long pts, CancellationToken ct = default);
 }
 
-public sealed class SyncService(IDbSession db, IUpdateJournal journal, IChatService chats) : ISyncService
+public sealed class SyncService(
+    IDbSession db,
+    IUpdateJournal journal,
+    IChatService chats,
+    IMessageRepository messages,
+    IChatEventPublisher events) : ISyncService
 {
     public Task<SyncStateDto> GetStateAsync(Guid userId, CancellationToken ct = default) =>
         // One database snapshot for pts and the chat list: a change that made it into the list also made it into pts,
@@ -74,7 +83,21 @@ public sealed class SyncService(IDbSession db, IUpdateJournal journal, IChatServ
         if (pts < 0 || pts > await journal.GetPtsAsync(userId, ct))
             throw InvalidPts();
 
-        await journal.AckAsync(userId, sessionFamilyId, pts, ct);
+        await db.InTransactionAsync(async ct =>
+        {
+            // Before the ack itself: the range starts where the devices had got to before.
+            foreach (var move in await journal.DeliverUpToAsync(userId, pts, ct))
+            {
+                var authors = await messages.GetAuthorsNewlyReachedAsync(
+                    move.ChatId, userId, move.FromSeq, move.ToSeq, ReceiptKind.Delivered, ct);
+                if (authors.Count > 0)
+                    await events.MessagesDeliveredAsync(
+                        new ReceiptDto { ChatId = move.ChatId, UserId = userId, Seq = move.ToSeq }, authors, ct);
+            }
+
+            await journal.AckAsync(userId, sessionFamilyId, pts, ct);
+            return true;
+        }, ct: ct);
     }
 
     private static BadRequestException InvalidPts() => new("pts is out of range", "INVALID_PTS");

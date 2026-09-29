@@ -14,6 +14,10 @@ public class ChatListResult
     public string? CompanionUsername { get; set; }
     public int UnreadCount { get; set; }
     public int UnreadMentionCount { get; set; }
+    public long LastReadSeq { get; set; }
+    public long OutboxReadSeq { get; set; }
+    public long OutboxDeliveredSeq { get; set; }
+    public bool HasOthers { get; set; }
     public DateTime CreatedAt { get; set; }
 
     // Last message fields (nullable — chat may have no messages)
@@ -23,5 +27,6 @@ public class ChatListResult
     public string? LastMessageText { get; set; }
     public DateTime? LastMessageCreatedAt { get; set; }
     public string? LastMessageSenderName { get; set; }
+    public bool LastMessageIsOwn { get; set; }
 }
 

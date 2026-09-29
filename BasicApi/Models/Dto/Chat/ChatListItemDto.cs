@@ -19,5 +19,20 @@ public class ChatListItemDto
     /// <summary>Unread messages that mention the user.</summary>
     public int UnreadMentionCount { get; set; }
 
+    /// <summary>Seq of the last message the user has read.</summary>
+    public long LastReadSeq { get; set; }
+
+    /// <summary>
+    /// The user's own messages up to this seq have been read by another member; 0 — none.
+    /// Grows with <c>MessagesRead</c>.
+    /// </summary>
+    public long OutboxReadSeq { get; set; }
+
+    /// <summary>
+    /// The user's own messages up to this seq have reached another member's device; 0 — none.
+    /// Grows with <c>MessagesDelivered</c> and <c>MessagesRead</c>.
+    /// </summary>
+    public long OutboxDeliveredSeq { get; set; }
+
     public DateTime LastActivityAt { get; set; }
 }
