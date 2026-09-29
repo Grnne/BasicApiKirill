@@ -107,16 +107,19 @@ public static class ServiceExtensions
         services.AddScoped<IUpdateJournal, UpdateJournalRepository>();
         services.AddScoped<IReactionRepository, ReactionRepository>();
         services.AddScoped<IDraftRepository, DraftRepository>();
+        services.AddScoped<IGroupRepository, GroupRepository>();
 
         // Domain services: controllers and the hub are only adapters over them.
         services.AddScoped<IMembershipService, MembershipService>();
         services.Configure<MessageOptions>(configuration.GetSection(MessageOptions.Section));
+        services.Configure<GroupOptions>(configuration.GetSection(GroupOptions.Section));
         services.AddScoped<IChatPolicy, ChatPolicy>();
         services.AddScoped<IChatService, ChatService>();
         services.AddScoped<IMessageService, MessageService>();
         services.AddScoped<IReactionService, ReactionService>();
         services.AddScoped<IReadStateService, ReadStateService>();
         services.AddScoped<IDraftService, DraftService>();
+        services.AddScoped<IGroupService, GroupService>();
         services.AddScoped<IPresenceService, PresenceService>();
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<ISyncService, SyncService>();

@@ -32,6 +32,13 @@ public interface IPresenceService
     /// </summary>
     Task IntroduceAsync(Guid userA, Guid userB, CancellationToken ct = default);
 
+    /// <summary>
+    /// The same for a group: the new members learn who of the group is online, and the members
+    /// already there learn who of the new ones is.
+    /// </summary>
+    Task IntroduceAsync(
+        IReadOnlyCollection<Guid> newMembers, IReadOnlyCollection<Guid> existingMembers, CancellationToken ct = default);
+
     /// <summary>Which contacts are online now (offline ones are not listed).</summary>
     Task<UserStatusResponseDto> GetContactsOnlineAsync(Guid userId, CancellationToken ct = default);
 
@@ -114,6 +121,21 @@ public sealed class PresenceService(
             await events.UserOnlineChangedAsync(userA, true, [userB], ct);
         if (online.Contains(userB))
             await events.UserOnlineChangedAsync(userB, true, [userA], ct);
+    }
+
+    public async Task IntroduceAsync(
+        IReadOnlyCollection<Guid> newMembers, IReadOnlyCollection<Guid> existingMembers, CancellationToken ct = default)
+    {
+        var everyone = newMembers.Concat(existingMembers).ToHashSet();
+        var fresh = newMembers.ToHashSet();
+
+        // One event per online member, not per pair: a group of hundreds stays cheap.
+        foreach (var userId in await status.GetOnlineUserIdsAsync(everyone))
+        {
+            var recipients = (fresh.Contains(userId) ? everyone : fresh).Where(id => id != userId).ToList();
+            if (recipients.Count > 0)
+                await events.UserOnlineChangedAsync(userId, true, recipients, ct);
+        }
     }
 
     public async Task<UserStatusResponseDto> GetContactsOnlineAsync(Guid userId, CancellationToken ct = default)

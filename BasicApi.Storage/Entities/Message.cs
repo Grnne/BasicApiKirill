@@ -19,9 +19,15 @@ public class Message
     public Guid? ForwardFromUserId { get; set; }
     public Guid? ForwardFromChatId { get; set; }
     public Guid? ForwardFromMessageId { get; set; }
+
+    /// <summary>What a system message is about, as JSON; null for text messages.</summary>
+    public string? ContentJson { get; set; }
 }
 
 public static class MessageTypes
 {
     public const string Text = "text";
+
+    /// <summary>A record of what happened in a group ("members added" and the like), written by the server.</summary>
+    public const string System = "system";
 }

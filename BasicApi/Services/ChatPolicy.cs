@@ -1,5 +1,6 @@
 using BasicApi.Middleware.Exceptions;
 using BasicApi.Storage.Dto;
+using BasicApi.Storage.Entities;
 using Microsoft.Extensions.Options;
 
 namespace BasicApi.Services;
@@ -74,9 +75,12 @@ public sealed class ChatPolicy(
         MemberOnlyAsync(userId, chatId, ct);
 
     public Task<PolicyDecision> CanEditMessageAsync(Guid userId, MessageWithSender message, CancellationToken ct = default) =>
-        Task.FromResult(message.IsForward && message.SenderId == userId
-            // Someone else's words: the one who forwarded them may not change them.
-            ? PolicyDecision.Deny(MessageNotEditableCode, "A forwarded message cannot be edited")
+        Task.FromResult(
+            message.Type != MessageTypes.Text && message.SenderId == userId
+                ? PolicyDecision.Deny(MessageNotEditableCode, "A system message cannot be edited")
+            : message.IsForward && message.SenderId == userId
+                // Someone else's words: the one who forwarded them may not change them.
+                ? PolicyDecision.Deny(MessageNotEditableCode, "A forwarded message cannot be edited")
             : AuthorWithin(userId, message, _messages.EditWindowHours,
                 EditWindowExpiredCode, "The time to edit this message has passed"));
 

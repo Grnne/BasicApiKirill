@@ -19,7 +19,10 @@ public class ChatRepository(IDbSession db) : IChatRepository
                 id AS Id,
                 title AS Title,
                 type AS Type,
-                created_at AS CreatedAt
+                created_at AS CreatedAt,
+                created_by AS CreatedBy,
+                updated_at AS UpdatedAt,
+                settings::text AS SettingsJson
             FROM chats
             WHERE id = @chatId";
 
@@ -108,7 +111,8 @@ public class ChatRepository(IDbSession db) : IChatRepository
             SELECT
                 u.id AS UserId,
                 u.display_name AS DisplayName,
-                u.username AS Username
+                u.username AS Username,
+                cm.role AS Role
             FROM chat_members cm
             INNER JOIN users u ON cm.user_id = u.id
             WHERE cm.chat_id = @chatId";

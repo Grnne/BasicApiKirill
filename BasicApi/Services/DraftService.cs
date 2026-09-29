@@ -67,7 +67,7 @@ public sealed class DraftService(
         }
 
         if (replyToMessageId is { } replyId &&
-            await messages.GetAsync(chatId, replyId, ct) is not { DeletedAt: null })
+            await messages.GetAsync(chatId, replyId, ct) is not { DeletedAt: null, Type: MessageTypes.Text })
         {
             throw new BadRequestException("The message to reply to is not in this chat", "REPLY_TARGET_NOT_FOUND");
         }

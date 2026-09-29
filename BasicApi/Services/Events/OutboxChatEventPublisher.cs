@@ -76,6 +76,9 @@ public sealed class OutboxChatEventPublisher(
             return true;
         }, ct: ct);
 
+    public Task ChatCreatedAsync(IReadOnlyCollection<Guid> recipientIds, ChatListItemDto item, CancellationToken ct = default) =>
+        ToAllAsync(UpdateTypes.ChatCreated, item, recipientIds, ct);
+
     public Task UserOnlineChangedAsync(
         Guid userId, bool isOnline, IReadOnlyCollection<Guid> recipientIds, CancellationToken ct = default) =>
         live.UserOnlineChangedAsync(userId, isOnline, recipientIds, ct);

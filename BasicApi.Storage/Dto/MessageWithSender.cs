@@ -43,6 +43,9 @@ public class MessageWithSender
     public Guid? ForwardFromChatId { get; set; }
     public Guid? ForwardFromMessageId { get; set; }
 
+    /// <summary>What a system message is about, as JSON; null for text messages.</summary>
+    public string? ContentJson { get; set; }
+
     /// <summary>A copy of another message (its links may be cleared if the original is gone).</summary>
     public bool IsForward => ForwardFromUserId is not null || ForwardFromChatId is not null || ForwardFromMessageId is not null;
 }

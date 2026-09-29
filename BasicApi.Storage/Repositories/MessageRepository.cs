@@ -31,7 +31,8 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
         m.forward_from_user_id AS ForwardFromUserId,
         fu.display_name AS ForwardFromUserName,
         m.forward_from_chat_id AS ForwardFromChatId,
-        m.forward_from_message_id AS ForwardFromMessageId";
+        m.forward_from_message_id AS ForwardFromMessageId,
+        m.content::text AS ContentJson";
 
     /// <summary>Sender, the answered message with its author, the original author of a forward.</summary>
     private const string Joins = @"
@@ -85,10 +86,10 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
                 ), m AS (
                     INSERT INTO messages (id, chat_id, sender_id, text, created_at, type, seq, client_message_id,
                                           reply_to_message_id, forward_from_user_id, forward_from_chat_id,
-                                          forward_from_message_id, entities)
+                                          forward_from_message_id, entities, content)
                     SELECT @Id, @ChatId, @SenderId, @Text, @CreatedAt, @Type, next.last_seq, @ClientMessageId,
                            @ReplyToMessageId, @ForwardFromUserId, @ForwardFromChatId, @ForwardFromMessageId,
-                           @EntitiesJson::jsonb
+                           @EntitiesJson::jsonb, @ContentJson::jsonb
                     FROM next
                     RETURNING *
                 )
@@ -111,7 +112,8 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
                     message.ForwardFromUserId,
                     message.ForwardFromChatId,
                     message.ForwardFromMessageId,
-                    message.EntitiesJson
+                    message.EntitiesJson,
+                    message.ContentJson
                 }, ct);
             }
             catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation &&
@@ -303,7 +305,8 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
     public async Task<(CursorResult<MessageWithSender> Result, int TotalCount)> SearchMessagesCursorAsync(
         Guid chatId, Guid viewerId, string query, long? beforeSeq, int limit, CancellationToken ct = default)
     {
-        const string match = "m.search_vector @@ to_tsquery('russian', @prefixQuery)";
+        // System messages are the server's words about the group, not what members wrote.
+        const string match = "m.search_vector @@ to_tsquery('russian', @prefixQuery) AND m.type <> 'system'";
         var prefixQuery = ToPrefixQuery(query);
 
         var sql = $@"

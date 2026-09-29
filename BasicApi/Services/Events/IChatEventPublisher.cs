@@ -47,6 +47,9 @@ public interface IChatEventPublisher
     /// </summary>
     Task ChatCreatedAsync(Guid recipientId, ChatListItemDto item, bool live = true, CancellationToken ct = default);
 
+    /// <summary><c>ChatCreated</c> with the same card to several users (new members of a group).</summary>
+    Task ChatCreatedAsync(IReadOnlyCollection<Guid> recipientIds, ChatListItemDto item, CancellationToken ct = default);
+
     /// <summary><c>UserOnlineChanged</c> is an ephemeral event, not written to the journal.</summary>
     Task UserOnlineChangedAsync(
         Guid userId, bool isOnline, IReadOnlyCollection<Guid> recipientIds, CancellationToken ct = default);

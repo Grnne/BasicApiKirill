@@ -176,9 +176,10 @@ public sealed class MessageService(
             return AlreadySent(sent, chatId);
         }
 
-        // A reply to a message of another chat would leak its text into this one.
+        // A reply to a message of another chat would leak its text into this one. System messages
+        // are the server's record of the group, not something said: nobody answers them.
         if (replyToMessageId is { } replyId &&
-            await messageRepository.GetAsync(chatId, replyId, ct) is not { DeletedAt: null })
+            await messageRepository.GetAsync(chatId, replyId, ct) is not { DeletedAt: null, Type: MessageTypes.Text })
         {
             throw new BadRequestException("The message to reply to is not in this chat", "REPLY_TARGET_NOT_FOUND");
         }
@@ -245,9 +246,10 @@ public sealed class MessageService(
         await policy.DemandReadAsync(userId, fromChatId, ct);
         await policy.DemandPostAsync(userId, chatId, ct);
 
-        // What the user does not see (deleted, hidden, another chat) cannot be forwarded.
+        // What the user does not see (deleted, hidden, another chat) cannot be forwarded, nor can
+        // the record of what happened in a group.
         var sources = await messageRepository.GetVisibleAsync(fromChatId, userId, messageIds, ct);
-        if (sources.Count != messageIds.Count)
+        if (sources.Count != messageIds.Count || sources.Any(s => s.Type != MessageTypes.Text))
             throw MessageNotFound();
 
         var clientIds = clientMessageIds is null
@@ -435,45 +437,7 @@ public sealed class MessageService(
 
     private static NotFoundException MessageNotFound() => new("Message not found in this chat", "MESSAGE_NOT_FOUND");
 
-    private static MessageDto Map(MessageWithSender m) => new()
-    {
-        Id = m.Id,
-        ChatId = m.ChatId,
-        SenderId = m.SenderId,
-        SenderName = m.SenderName,
-        Text = m.Text,
-        CreatedAt = m.CreatedAt,
-        IsRead = false, // for the viewer: MapForViewerAsync
-        Seq = m.Seq,
-        ClientMessageId = m.ClientMessageId,
-        Type = m.Type,
-        EditedAt = m.EditedAt,
-        Entities = MessageEntities.Deserialize(m.EntitiesJson),
-        Reactions = ReactionService.Summary(m.ReactionsJson),
-        MyReaction = m.MyReaction,
-        ReplyTo = m.ReplyToMessageId is { } replyId
-            ? new MessageReplyDto
-            {
-                MessageId = replyId,
-                SenderId = m.ReplyToSenderId ?? Guid.Empty,
-                SenderName = m.ReplyToSenderName ?? "Unknown",
-                Text = m.ReplyToDeleted ? string.Empty : Preview(m.ReplyToText),
-                Deleted = m.ReplyToDeleted
-            }
-            : null,
-        ForwardFrom = m.IsForward
-            ? new MessageForwardDto
-            {
-                SenderId = m.ForwardFromUserId ?? Guid.Empty,
-                SenderName = m.ForwardFromUserName ?? "Unknown"
-            }
-            : null
-    };
-
-    private static string Preview(string? text) =>
-        text is null ? string.Empty
-        : text.Length > SignalRChatEventPublisher.PreviewLength ? text[..SignalRChatEventPublisher.PreviewLength] + "…"
-        : text;
+    private static MessageDto Map(MessageWithSender m) => MessageMapper.Map(m);
 
     /// <summary>
     /// A cursor to the next (older) page - from the last message of the page

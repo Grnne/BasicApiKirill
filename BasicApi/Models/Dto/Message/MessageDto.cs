@@ -28,7 +28,7 @@ public class MessageDto
     /// <summary>Id supplied by the sender when sending via REST; null — not supplied.</summary>
     public Guid? ClientMessageId { get; set; }
 
-    /// <summary>Kind of message: <c>text</c> for now.</summary>
+    /// <summary>Kind of message: <c>text</c> or <c>system</c> (see <see cref="Action"/>); more kinds will come — show an unknown one as a stub.</summary>
     public string Type { get; set; } = "text";
 
     /// <summary>When the text was last edited; null — never edited.</summary>
@@ -51,6 +51,26 @@ public class MessageDto
 
     /// <summary>For a forwarded message — its original author; null — not a forward.</summary>
     public MessageForwardDto? ForwardFrom { get; set; }
+
+    /// <summary>
+    /// For a system message (<see cref="Type"/> <c>system</c>) — what happened; the sender is who did
+    /// it, and <see cref="Text"/> says the same in words for clients that do not know the action.
+    /// Null for other messages.
+    /// </summary>
+    public MessageActionDto? Action { get; set; }
+}
+
+/// <summary>What a system message records.</summary>
+public class MessageActionDto
+{
+    /// <summary><c>group_created</c>, <c>title_changed</c>, <c>members_added</c>, <c>member_removed</c>, <c>member_left</c>.</summary>
+    public string Type { get; set; } = string.Empty;
+
+    /// <summary>Whom it concerns: the added or removed members, the one who left.</summary>
+    public List<Guid> UserIds { get; set; } = [];
+
+    /// <summary>The group's title — for <c>group_created</c> and <c>title_changed</c>.</summary>
+    public string? Title { get; set; }
 }
 
 /// <summary>Preview of the answered message.</summary>

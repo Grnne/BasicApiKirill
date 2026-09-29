@@ -53,7 +53,8 @@ public sealed class ChatService(
             {
                 UserId = p.UserId,
                 DisplayName = p.DisplayName,
-                Username = p.Username
+                Username = p.Username,
+                Role = p.Role
             })]
         };
     }

@@ -41,8 +41,17 @@ public sealed class TestData(IDbConnectionFactory connectionFactory)
         return id;
     }
 
-    public Task<Guid> GroupChatAsync(string title, Guid[] members, DateTime? createdAt = null) =>
-        ChatAsync("group", title, members, createdAt);
+    /// <summary>A group; the first member is its owner.</summary>
+    public async Task<Guid> GroupChatAsync(string title, Guid[] members, DateTime? createdAt = null)
+    {
+        var id = await ChatAsync("group", title, members, createdAt);
+        using var connection = connectionFactory.CreateConnection();
+        await connection.ExecuteAsync(
+            "UPDATE chat_members SET role = 'owner' WHERE chat_id = @id AND user_id = @owner",
+            new { id, owner = members[0] });
+        await connection.ExecuteAsync("UPDATE chats SET created_by = @owner WHERE id = @id", new { id, owner = members[0] });
+        return id;
+    }
 
     private async Task<Guid> ChatAsync(string type, string? title, Guid[] members, DateTime? createdAt)
     {

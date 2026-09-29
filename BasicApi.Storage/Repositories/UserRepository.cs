@@ -65,6 +65,14 @@ public class UserRepository(IDbSession db) : IUserRepository
         return await db.QueryFirstOrDefaultAsync<Guid?>(sql, new { username }, ct);
     }
 
+    public Task<IReadOnlyList<User>> GetByIdsAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default) =>
+        db.QueryAsync<User>(@"
+            SELECT id AS Id, username AS Username, email AS Email, display_name AS DisplayName,
+                   created_at AS CreatedAt, last_login_at AS LastLoginAt, is_active AS IsActive
+            FROM users
+            WHERE id = ANY(@ids)",
+            new { ids = ids.Distinct().ToArray() }, ct);
+
     public async Task<User?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
         const string sql = @"

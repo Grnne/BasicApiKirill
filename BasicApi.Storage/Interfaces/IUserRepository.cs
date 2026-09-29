@@ -26,6 +26,9 @@ public interface IUserRepository
     /// </summary>
     Task<User?> GetByIdAsync(Guid id, CancellationToken ct = default);
 
+    /// <summary>The users with these ids; missing ones are simply absent.</summary>
+    Task<IReadOnlyList<User>> GetByIdsAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default);
+
     /// <summary>
     /// Searches users by display name or username using ILIKE (case-insensitive).
     /// Excludes the current user from results.
