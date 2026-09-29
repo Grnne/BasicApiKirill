@@ -1,4 +1,5 @@
-﻿using BasicApi.Storage.Dto;
+﻿using System.Text.RegularExpressions;
+using BasicApi.Storage.Dto;
 using BasicApi.Storage.Entities;
 using BasicApi.Storage.Exceptions;
 using BasicApi.Storage.Interfaces;
@@ -6,7 +7,7 @@ using Npgsql;
 
 namespace BasicApi.Storage.Repositories;
 
-public class MessageRepository(IDbSession db) : IMessageRepository
+public partial class MessageRepository(IDbSession db) : IMessageRepository
 {
     private const string SelectColumns = @"
         m.id AS Id,
@@ -132,12 +133,14 @@ public class MessageRepository(IDbSession db) : IMessageRepository
 
     /// <summary>
     /// Full-text search within a chat, newest first by seq, with the total number of
-    /// matches (same on every page). plainto_tsquery keeps user input safe.
+    /// matches (same on every page). The query config must match the one of
+    /// messages.search_vector ('russian').
     /// </summary>
     public async Task<(CursorResult<MessageWithSender> Result, int TotalCount)> SearchMessagesCursorAsync(
         Guid chatId, string query, long? beforeSeq, int limit, CancellationToken ct = default)
     {
-        const string match = "to_tsvector('english', m.text) @@ plainto_tsquery('english', @query)";
+        const string match = "m.search_vector @@ to_tsquery('russian', @prefixQuery)";
+        var prefixQuery = ToPrefixQuery(query);
 
         var sql = $@"
             SELECT {SelectColumns}
@@ -150,17 +153,29 @@ public class MessageRepository(IDbSession db) : IMessageRepository
             ORDER BY m.seq DESC
             LIMIT @fetchSize";
 
-        var rows = await db.QueryAsync<MessageWithSender>(sql, new { chatId, query, beforeSeq, fetchSize = limit + 1 }, ct);
+        var rows = await db.QueryAsync<MessageWithSender>(sql, new { chatId, prefixQuery, beforeSeq, fetchSize = limit + 1 }, ct);
 
         // Всего совпадений — на каждой странице: клиент показывает «N результатов»
         // независимо от того, какую страницу загрузил.
         var totalCount = await db.ExecuteScalarAsync<int>($@"
             SELECT COUNT(*) FROM messages m
             WHERE m.chat_id = @chatId AND m.is_deleted = false AND {match}",
-            new { chatId, query }, ct);
+            new { chatId, prefixQuery }, ct);
 
         return (Page(rows, limit), totalCount);
     }
+
+    /// <summary>
+    /// Слова запроса — как начала слов: «запуск» находит и «запускаем», и «до запуска»
+    /// (русский стеммер сводит их к разным основам), а запрос работает по мере набора.
+    /// Из ввода берутся только буквы и цифры, поэтому операторы tsquery в него не пройдут.
+    /// Служебные слова («и», «в», «the») словарь отбрасывает сам.
+    /// </summary>
+    internal static string ToPrefixQuery(string query) =>
+        string.Join(" & ", WordPattern().Matches(query).Select(m => m.Value + ":*"));
+
+    [GeneratedRegex(@"[\p{L}\p{N}]+")]
+    private static partial Regex WordPattern();
 
     private static CursorResult<MessageWithSender> Page(IReadOnlyList<MessageWithSender> rows, int limit) =>
         rows.Count > limit

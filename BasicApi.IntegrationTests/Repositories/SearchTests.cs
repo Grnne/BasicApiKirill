@@ -69,4 +69,65 @@ public class SearchTests(PostgresFixture db) : DbTest(db)
         Assert.Equal([first], page2.Items.Select(m => m.Id));
         Assert.False(page2.HasMore);
     }
+
+    [Theory]
+    [InlineData("запуск")]
+    [InlineData("Запуск")]
+    [InlineData("запу")] // по мере набора
+    public async Task SearchMessages_MatchesRussianWordForms(string query)
+    {
+        // С английским словарём русские слова совпадали только в точности:
+        // «запуск» не находил «запускаем» и «до запуска».
+        var repository = new MessageRepository(NewSession());
+        var alice = await Data.UserAsync("alice");
+        var bob = await Data.UserAsync("bob");
+        var chat = await Data.PrivateChatAsync(alice, bob);
+
+        var launch = await Data.MessageAsync(chat, alice, "Завтра запускаем релиз", TestData.T0);
+        var before = await Data.MessageAsync(chat, bob, "Проверю всё до запуска", TestData.T0.AddMinutes(1));
+        await Data.MessageAsync(chat, bob, "Обед в час", TestData.T0.AddMinutes(2));
+
+        var (page, total) = await repository.SearchMessagesCursorAsync(chat, query, beforeSeq: null, limit: 10);
+
+        Assert.Equal(2, total);
+        Assert.Equal([before, launch], page.Items.Select(m => m.Id));
+    }
+
+    [Fact]
+    public async Task SearchMessages_QueryOperatorsAreNotInterpreted()
+    {
+        // Ввод пользователя — только слова: символы tsquery не ломают запрос и не дают 500.
+        var repository = new MessageRepository(NewSession());
+        var alice = await Data.UserAsync("alice");
+        var bob = await Data.UserAsync("bob");
+        var chat = await Data.PrivateChatAsync(alice, bob);
+        var hit = await Data.MessageAsync(chat, alice, "release notes", TestData.T0);
+
+        foreach (var query in new[] { "release & | ! notes", "release:*", "'release'", "(notes", "!!" })
+        {
+            var (page, _) = await repository.SearchMessagesCursorAsync(chat, query, null, 10);
+            if (query != "!!")
+                Assert.Equal([hit], page.Items.Select(m => m.Id));
+            else
+                Assert.Empty(page.Items);
+        }
+    }
+
+    [Fact]
+    public async Task SearchMessages_MixedLanguages_AndStopWordsOnly()
+    {
+        var repository = new MessageRepository(NewSession());
+        var alice = await Data.UserAsync("alice");
+        var bob = await Data.UserAsync("bob");
+        var chat = await Data.PrivateChatAsync(alice, bob);
+        var mixed = await Data.MessageAsync(chat, alice, "Деплоим новый build сегодня", TestData.T0);
+
+        Assert.Equal([mixed], (await repository.SearchMessagesCursorAsync(chat, "builds", null, 10)).Result.Items.Select(m => m.Id));
+        Assert.Equal([mixed], (await repository.SearchMessagesCursorAsync(chat, "новые", null, 10)).Result.Items.Select(m => m.Id));
+
+        // Только стоп-слова — пустой запрос, а не ошибка.
+        var (none, total) = await repository.SearchMessagesCursorAsync(chat, "и в на", null, 10);
+        Assert.Empty(none.Items);
+        Assert.Equal(0, total);
+    }
 }
