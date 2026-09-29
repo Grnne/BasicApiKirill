@@ -34,6 +34,9 @@ docker-compose down
 | SignalR endpoint | `/hubs/chat` | WebSocket endpoint для подключения к чату |
 | Изменения контрактов | [docs/api-contract-changes.md](docs/api-contract-changes.md) | Что поменялось для клиентов (breaking changes) |
 | Пропускная способность | [docs/capacity-and-limits.md](docs/capacity-and-limits.md) | Сколько выдержит сервер, что упрётся первым |
+| Ревью и архитектура бэкенда | [docs/backend-roadmap.md](docs/backend-roadmap.md) | Ревью, позиционирование, ключевые решения |
+| План 1: рефакторинг | [docs/plan-1-refactoring.md](docs/plan-1-refactoring.md) | Фундамент, дыры, ядро архитектуры, стабилизация |
+| План 2: функционал | [docs/plan-2-features.md](docs/plan-2-features.md) | Базовый набор функций мессенджера |
 
 ## SignalR Hub (`/hubs/chat`)
 
