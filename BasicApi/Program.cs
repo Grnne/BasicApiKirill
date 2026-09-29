@@ -11,6 +11,18 @@ namespace BasicApi;
 
 public class Program
 {
+    /// <summary>
+    /// CSP заголовком, а не только &lt;meta&gt; в index.html: frame-ancestors в meta
+    /// не работает, а заголовок покрывает и страницы, которые отдаёт сам сервер.
+    /// connect-src 'self' — даже при XSS скрипт не отправит токен на чужой хост
+    /// (same-origin ws/wss 'self' тоже покрывает). 'unsafe-inline' только для
+    /// стилей: Vue вставляет их тегом &lt;style&gt;; для скриптов послаблений нет.
+    /// </summary>
+    public const string ContentSecurityPolicy =
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
+        "img-src 'self' data:; font-src 'self'; connect-src 'self'; " +
+        "frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'";
+
     public static void Main(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
@@ -54,10 +66,12 @@ public class Program
             }
         // Заголовки безопасности для всех ответов. Дёшево и закрывает
         // несколько типовых атак: подмену типа файла, вставку страницы
-        // в чужой iframe и утечку адреса через Referer.
+        // в чужой iframe, утечку адреса через Referer и — через CSP —
+        // большую часть последствий XSS.
         app.Use(async (context, next) =>
         {
             var headers = context.Response.Headers;
+            headers.ContentSecurityPolicy = ContentSecurityPolicy;
             headers["X-Content-Type-Options"] = "nosniff";
             headers["X-Frame-Options"] = "DENY";
             headers["Referrer-Policy"] = "no-referrer";
