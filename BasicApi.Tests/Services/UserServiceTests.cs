@@ -1,26 +1,20 @@
-using BasicApi.Features.Users;
 using BasicApi.Middleware.Exceptions;
 using BasicApi.Services;
 using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
-using Microsoft.AspNetCore.Mvc;
 using Moq;
 
-namespace BasicApi.Tests.Features;
+namespace BasicApi.Tests.Services;
 
-public class UsersHandlerTests
+public class UserServiceTests
 {
     private readonly Mock<IUserRepository> _userRepoMock;
-    private readonly Mock<IChatRepository> _chatRepoMock;
-    private readonly Mock<IUserStatusService> _statusServiceMock;
-    private readonly UsersHandler _handler;
+    private readonly UserService _service;
 
-    public UsersHandlerTests()
+    public UserServiceTests()
     {
         _userRepoMock = new Mock<IUserRepository>();
-        _chatRepoMock = new Mock<IChatRepository>();
-        _statusServiceMock = new Mock<IUserStatusService>();
-        _handler = new UsersHandler(_userRepoMock.Object, _chatRepoMock.Object, _statusServiceMock.Object);
+        _service = new UserService(_userRepoMock.Object);
     }
 
     [Fact]
@@ -34,11 +28,10 @@ public class UsersHandlerTests
             .ReturnsAsync(userId);
 
         // Act
-        var result = await _handler.GetUserIdAsync("testuser");
+        var result = await _service.GetUserIdAsync("testuser");
 
         // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var dto = Assert.IsType<BasicApi.Models.Dto.Users.UserIdResponseDto>(okResult.Value);
+        var dto = result;
         Assert.Equal(userId, dto.UserId);
     }
 
@@ -52,7 +45,7 @@ public class UsersHandlerTests
 
         // Act & Assert
         var ex = await Assert.ThrowsAsync<NotFoundException>(() =>
-            _handler.GetUserIdAsync("unknown"));
+            _service.GetUserIdAsync("unknown"));
 
         Assert.Contains("User not found", ex.Message);
     }
@@ -90,11 +83,10 @@ public class UsersHandlerTests
             .ReturnsAsync(2);
 
         // Act
-        var result = await _handler.SearchUsersAsync(userId, query, 20);
+        var result = await _service.SearchUsersAsync(userId, query, 20);
 
         // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var dto = Assert.IsType<BasicApi.Models.Dto.Users.SearchUsersResponseDto>(okResult.Value);
+        var dto = result;
         Assert.Equal(2, dto.Items.Count);
         Assert.Equal(users[0].Id, dto.Items[0].UserId);
         Assert.Equal(users[0].Username, dto.Items[0].Username);
@@ -122,11 +114,10 @@ public class UsersHandlerTests
             .ReturnsAsync(0);
 
         // Act
-        var result = await _handler.SearchUsersAsync(userId, query, 20);
+        var result = await _service.SearchUsersAsync(userId, query, 20);
 
         // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var dto = Assert.IsType<BasicApi.Models.Dto.Users.SearchUsersResponseDto>(okResult.Value);
+        var dto = result;
         Assert.Empty(dto.Items);
         Assert.Equal(query, dto.Query);
         Assert.Equal(0, dto.TotalCount);
@@ -140,7 +131,7 @@ public class UsersHandlerTests
 
         // Act & Assert
         var ex = await Assert.ThrowsAsync<BadRequestException>(() =>
-            _handler.SearchUsersAsync(userId, "", 20));
+            _service.SearchUsersAsync(userId, "", 20));
 
         Assert.Contains("empty", ex.Message);
     }
@@ -153,7 +144,7 @@ public class UsersHandlerTests
 
         // Act & Assert
         var ex = await Assert.ThrowsAsync<BadRequestException>(() =>
-            _handler.SearchUsersAsync(userId, "   ", 20));
+            _service.SearchUsersAsync(userId, "   ", 20));
 
         Assert.Contains("empty", ex.Message);
     }
@@ -178,11 +169,10 @@ public class UsersHandlerTests
             .ReturnsAsync(1);
 
         // Act
-        var result = await _handler.SearchUsersAsync(userId, query, 5);
+        var result = await _service.SearchUsersAsync(userId, query, 5);
 
         // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var dto = Assert.IsType<BasicApi.Models.Dto.Users.SearchUsersResponseDto>(okResult.Value);
+        var dto = result;
         Assert.Single(dto.Items);
         Assert.Equal(1, dto.TotalCount);
 

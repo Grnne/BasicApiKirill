@@ -2,23 +2,24 @@ using BasicApi.Middleware.Exceptions;
 using BasicApi.Models.Dto.Chat;
 using BasicApi.Models.Dto.Message;
 using BasicApi.Services;
+using BasicApi.Services.Events;
 using BasicApi.Storage.Dto;
 using BasicApi.Storage.Interfaces;
 using Moq;
 
 namespace BasicApi.Tests.Services;
 
-public class ChatServiceCursorTests
+public class MessageServicePageTests
 {
     private readonly Mock<IChatRepository> _chatRepoMock;
     private readonly Mock<IMessageRepository> _msgRepoMock;
-    private readonly ChatService _service;
+    private readonly MessageService _service;
 
-    public ChatServiceCursorTests()
+    public MessageServicePageTests()
     {
         _chatRepoMock = new Mock<IChatRepository>();
         _msgRepoMock = new Mock<IMessageRepository>();
-        _service = new ChatService(_chatRepoMock.Object, _msgRepoMock.Object);
+        _service = new MessageService(_msgRepoMock.Object, new MembershipService(_chatRepoMock.Object), Mock.Of<IChatEventPublisher>());
     }
 
     private static MessageWithSender ToMessageWithSender(Storage.Entities.Message msg, string senderName)
@@ -34,22 +35,22 @@ public class ChatServiceCursorTests
         };
 
     [Fact]
-        public async Task GetChatMessagesCursorAsync_WhenNotMember_ThrowsForbiddenAccess()
+        public async Task GetPageAsync_WhenNotMember_ThrowsForbiddenAccess()
     {
         // Arrange
         _chatRepoMock
-            .Setup(r => r.IsMemberAsync(It.IsAny<Guid>(), It.IsAny<Guid>()))
+            .Setup(r => r.IsMemberAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
 
         // Act & Assert
         var ex = await Assert.ThrowsAsync<ForbiddenException>(() =>
-            _service.GetChatMessagesCursorAsync(Guid.NewGuid(), Guid.NewGuid(), null, 20));
+            _service.GetPageAsync(Guid.NewGuid(), Guid.NewGuid(), null, 20));
 
         Assert.Contains("not a member", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public async Task GetChatMessagesCursorAsync_WhenMember_ReturnsMappedMessages()
+    public async Task GetPageAsync_WhenMember_ReturnsMappedMessages()
     {
         // Arrange
         var chatId = Guid.NewGuid();
@@ -64,11 +65,11 @@ public class ChatServiceCursorTests
         };
 
         _chatRepoMock
-            .Setup(r => r.IsMemberAsync(chatId, userId))
+            .Setup(r => r.IsMemberAsync(chatId, userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
         _msgRepoMock
-            .Setup(r => r.GetMessagesWithSenderCursorAsync(chatId, null, 20))
+            .Setup(r => r.GetMessagesWithSenderCursorAsync(chatId, null, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new CursorResult<MessageWithSender>
             {
                 Items = messages,
@@ -76,7 +77,7 @@ public class ChatServiceCursorTests
             });
 
         // Act
-        var result = await _service.GetChatMessagesCursorAsync(chatId, userId, null, 20);
+        var result = await _service.GetPageAsync(chatId, userId, null, 20);
 
         // Assert
         Assert.Equal(2, result.Items.Count);
@@ -86,7 +87,7 @@ public class ChatServiceCursorTests
     }
 
     [Fact]
-    public async Task GetChatMessagesCursorAsync_WhenHasMore_SetsHasMoreTrueAndGeneratesCursor()
+    public async Task GetPageAsync_WhenHasMore_SetsHasMoreTrueAndGeneratesCursor()
     {
         // Arrange
         var chatId = Guid.NewGuid();
@@ -105,11 +106,11 @@ public class ChatServiceCursorTests
             "User");
 
         _chatRepoMock
-            .Setup(r => r.IsMemberAsync(chatId, userId))
+            .Setup(r => r.IsMemberAsync(chatId, userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
         _msgRepoMock
-            .Setup(r => r.GetMessagesWithSenderCursorAsync(chatId, null, 2))
+            .Setup(r => r.GetMessagesWithSenderCursorAsync(chatId, null, 2, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new CursorResult<MessageWithSender>
             {
                 Items = messages,
@@ -117,7 +118,7 @@ public class ChatServiceCursorTests
             });
 
         // Act
-        var result = await _service.GetChatMessagesCursorAsync(chatId, userId, null, 2);
+        var result = await _service.GetPageAsync(chatId, userId, null, 2);
 
         // Assert
         Assert.True(result.HasMore);
@@ -126,7 +127,7 @@ public class ChatServiceCursorTests
     }
 
     [Fact]
-    public async Task GetChatMessagesCursorAsync_WhenNoMorePages_SetsHasMoreFalseAndNoCursor()
+    public async Task GetPageAsync_WhenNoMorePages_SetsHasMoreFalseAndNoCursor()
     {
         // Arrange
         var chatId = Guid.NewGuid();
@@ -140,11 +141,11 @@ public class ChatServiceCursorTests
         };
 
         _chatRepoMock
-            .Setup(r => r.IsMemberAsync(chatId, userId))
+            .Setup(r => r.IsMemberAsync(chatId, userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
         _msgRepoMock
-            .Setup(r => r.GetMessagesWithSenderCursorAsync(chatId, null, 20))
+            .Setup(r => r.GetMessagesWithSenderCursorAsync(chatId, null, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new CursorResult<MessageWithSender>
             {
                 Items = messages,
@@ -152,7 +153,7 @@ public class ChatServiceCursorTests
             });
 
         // Act
-        var result = await _service.GetChatMessagesCursorAsync(chatId, userId, null, 20);
+        var result = await _service.GetPageAsync(chatId, userId, null, 20);
 
         // Assert — следующей страницы нет, значит и курсора на неё нет
         Assert.False(result.HasMore);
@@ -160,7 +161,7 @@ public class ChatServiceCursorTests
     }
 
     [Fact]
-    public async Task GetChatMessagesCursorAsync_WithValidCursor_PassesCursorToRepository()
+    public async Task GetPageAsync_WithValidCursor_PassesCursorToRepository()
     {
         // Arrange
         var chatId = Guid.NewGuid();
@@ -176,11 +177,11 @@ public class ChatServiceCursorTests
         };
 
         _chatRepoMock
-            .Setup(r => r.IsMemberAsync(chatId, userId))
+            .Setup(r => r.IsMemberAsync(chatId, userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
         _msgRepoMock
-            .Setup(r => r.GetMessagesWithSenderCursorAsync(chatId, cursor, 20))
+            .Setup(r => r.GetMessagesWithSenderCursorAsync(chatId, cursor, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new CursorResult<MessageWithSender>
             {
                 Items = messages,
@@ -188,51 +189,51 @@ public class ChatServiceCursorTests
             });
 
         // Act
-        var result = await _service.GetChatMessagesCursorAsync(chatId, userId, cursor, 20);
+        var result = await _service.GetPageAsync(chatId, userId, cursor, 20);
 
         // Assert
         Assert.Single(result.Items);
         Assert.Equal("Older msg", result.Items[0].Text);
 
                 _msgRepoMock.Verify(
-            r => r.GetMessagesWithSenderCursorAsync(chatId, cursor, 20),
+            r => r.GetMessagesWithSenderCursorAsync(chatId, cursor, 20, It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
     // ========== Search Chat Messages ==========
 
     [Fact]
-    public async Task SearchChatMessagesCursorAsync_WhenNotMember_ThrowsForbiddenAccess()
+    public async Task SearchAsync_WhenNotMember_ThrowsForbiddenAccess()
     {
         // Arrange
         _chatRepoMock
-            .Setup(r => r.IsMemberAsync(It.IsAny<Guid>(), It.IsAny<Guid>()))
+            .Setup(r => r.IsMemberAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
 
         // Act & Assert
         var ex = await Assert.ThrowsAsync<ForbiddenException>(() =>
-            _service.SearchChatMessagesCursorAsync(Guid.NewGuid(), Guid.NewGuid(), "hello", null, 20));
+            _service.SearchAsync(Guid.NewGuid(), Guid.NewGuid(), "hello", null, 20));
 
         Assert.Contains("not a member", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public async Task SearchChatMessagesCursorAsync_WhenQueryTooShort_ThrowsBadRequest()
+    public async Task SearchAsync_WhenQueryTooShort_ThrowsBadRequest()
     {
         // Arrange
         _chatRepoMock
-            .Setup(r => r.IsMemberAsync(It.IsAny<Guid>(), It.IsAny<Guid>()))
+            .Setup(r => r.IsMemberAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
         // Act & Assert
         var ex = await Assert.ThrowsAsync<BadRequestException>(() =>
-            _service.SearchChatMessagesCursorAsync(Guid.NewGuid(), Guid.NewGuid(), "a", null, 20));
+            _service.SearchAsync(Guid.NewGuid(), Guid.NewGuid(), "a", null, 20));
 
         Assert.Contains("Query", ex.Message);
     }
 
     [Fact]
-    public async Task SearchChatMessagesCursorAsync_WhenMember_ReturnsMappedSearchResults()
+    public async Task SearchAsync_WhenMember_ReturnsMappedSearchResults()
     {
         // Arrange
         var chatId = Guid.NewGuid();
@@ -248,11 +249,11 @@ public class ChatServiceCursorTests
         };
 
         _chatRepoMock
-            .Setup(r => r.IsMemberAsync(chatId, userId))
+            .Setup(r => r.IsMemberAsync(chatId, userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
                 _msgRepoMock
-            .Setup(r => r.SearchMessagesCursorAsync(chatId, query, null, 20))
+            .Setup(r => r.SearchMessagesCursorAsync(chatId, query, null, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync((new CursorResult<MessageWithSender>
             {
                 Items = messages,
@@ -260,7 +261,7 @@ public class ChatServiceCursorTests
             }, 2));
 
         // Act
-        var result = await _service.SearchChatMessagesCursorAsync(chatId, userId, query, null, 20);
+        var result = await _service.SearchAsync(chatId, userId, query, null, 20);
 
         // Assert
         Assert.Equal(2, result.Items.Count);
@@ -272,7 +273,7 @@ public class ChatServiceCursorTests
     }
 
     [Fact]
-    public async Task SearchChatMessagesCursorAsync_WhenNoResults_ReturnsEmptyList()
+    public async Task SearchAsync_WhenNoResults_ReturnsEmptyList()
     {
         // Arrange
         var chatId = Guid.NewGuid();
@@ -280,11 +281,11 @@ public class ChatServiceCursorTests
         var query = "nonexistent";
 
         _chatRepoMock
-            .Setup(r => r.IsMemberAsync(chatId, userId))
+            .Setup(r => r.IsMemberAsync(chatId, userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
                 _msgRepoMock
-            .Setup(r => r.SearchMessagesCursorAsync(chatId, query, null, 20))
+            .Setup(r => r.SearchMessagesCursorAsync(chatId, query, null, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync((new CursorResult<MessageWithSender>
             {
                 Items = [],
@@ -292,7 +293,7 @@ public class ChatServiceCursorTests
             }, 0));
 
         // Act
-        var result = await _service.SearchChatMessagesCursorAsync(chatId, userId, query, null, 20);
+        var result = await _service.SearchAsync(chatId, userId, query, null, 20);
 
         // Assert
         Assert.Empty(result.Items);
@@ -303,7 +304,7 @@ public class ChatServiceCursorTests
     }
 
     [Fact]
-    public async Task SearchChatMessagesCursorAsync_WithCursor_PassesCursorToRepository()
+    public async Task SearchAsync_WithCursor_PassesCursorToRepository()
     {
         // Arrange
         var chatId = Guid.NewGuid();
@@ -318,11 +319,11 @@ public class ChatServiceCursorTests
         };
 
         _chatRepoMock
-            .Setup(r => r.IsMemberAsync(chatId, userId))
+            .Setup(r => r.IsMemberAsync(chatId, userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
         _msgRepoMock
-            .Setup(r => r.SearchMessagesCursorAsync(chatId, query, cursor, 20))
+            .Setup(r => r.SearchMessagesCursorAsync(chatId, query, cursor, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync((new CursorResult<MessageWithSender>
             {
                 Items = messages,
@@ -330,12 +331,12 @@ public class ChatServiceCursorTests
             }, 1));
 
         // Act
-        var result = await _service.SearchChatMessagesCursorAsync(chatId, userId, query, cursor, 20);
+        var result = await _service.SearchAsync(chatId, userId, query, cursor, 20);
 
         // Assert
         Assert.Single(result.Items);
         _msgRepoMock.Verify(
-            r => r.SearchMessagesCursorAsync(chatId, query, cursor, 20),
+            r => r.SearchMessagesCursorAsync(chatId, query, cursor, 20, It.IsAny<CancellationToken>()),
             Times.Once);
     }
 }

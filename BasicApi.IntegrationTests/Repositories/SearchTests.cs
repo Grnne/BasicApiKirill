@@ -9,7 +9,7 @@ public class SearchTests(PostgresFixture db) : DbTest(db)
     [Fact]
     public async Task SearchChats_FindsPrivateByCompanionAndGroupByTitle_CaseInsensitive()
     {
-        var repository = new ChatRepository(Db.ConnectionFactory);
+        var repository = new ChatRepository(NewSession());
         var alice = await Data.UserAsync("alice");
         var bob = await Data.UserAsync("bob_builder", "Bob Builder");
         var carol = await Data.UserAsync("carol", "Carol");
@@ -33,7 +33,7 @@ public class SearchTests(PostgresFixture db) : DbTest(db)
     [Fact]
     public async Task SearchChats_DoesNotSeeChatsOfOtherUsers()
     {
-        var repository = new ChatRepository(Db.ConnectionFactory);
+        var repository = new ChatRepository(NewSession());
         var alice = await Data.UserAsync("alice");
         var bob = await Data.UserAsync("bob");
         await Data.GroupChatAsync("Secret club", [bob]);
@@ -45,7 +45,7 @@ public class SearchTests(PostgresFixture db) : DbTest(db)
     [Fact]
     public async Task SearchMessages_MatchesWordForms_AndPaginates()
     {
-        var repository = new MessageRepository(Db.ConnectionFactory);
+        var repository = new MessageRepository(NewSession());
         var alice = await Data.UserAsync("alice");
         var bob = await Data.UserAsync("bob");
         var chat = await Data.PrivateChatAsync(alice, bob);

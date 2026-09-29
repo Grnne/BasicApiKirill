@@ -6,7 +6,7 @@ namespace BasicApi.Storage.Dto;
 /// Represents a cursor for cursor-based pagination.
 /// Encodes a (CreatedAt, Id) tuple as a URL-safe Base64 string.
 /// </summary>
-public readonly struct CursorDto : IComparable<CursorDto>
+public readonly struct CursorDto
 {
     public DateTime CreatedAt { get; }
     public Guid Id { get; }
@@ -80,12 +80,6 @@ public readonly struct CursorDto : IComparable<CursorDto>
         {
             return false;
         }
-    }
-
-    public readonly int CompareTo(CursorDto other)
-    {
-        var cmp = CreatedAt.CompareTo(other.CreatedAt);
-        return cmp != 0 ? cmp : Id.CompareTo(other.Id);
     }
 
     public override readonly string ToString() => Encode();

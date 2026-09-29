@@ -1,47 +1,46 @@
 ﻿using BasicApi.Middleware.Exceptions;
 using BasicApi.Models.Dto.Chat;
-using BasicApi.Models.Dto.Message;
+using BasicApi.Services.Events;
 using BasicApi.Storage.Interfaces;
+
 namespace BasicApi.Services;
 
-public class ChatService(IChatRepository chatRepository, IMessageRepository messageRepository) : IChatService
+public sealed class ChatService(
+    IChatRepository chatRepository,
+    IUserRepository userRepository,
+    IMembershipService membership,
+    IPresenceService presence,
+    IChatEventPublisher events) : IChatService
 {
-    public async Task<List<ChatListItemDto>> GetUserChatsAsync(Guid userId)
+    public async Task<List<ChatListItemDto>> GetUserChatsAsync(Guid userId, CancellationToken ct = default)
     {
-        // Single batched query replaces the previous N+1 pattern
-        var rows = await chatRepository.GetUserChatsBatchedAsync(userId);
-
+        var rows = await chatRepository.GetUserChatsBatchedAsync(userId, ct);
         return [.. rows.Select(ChatListItemMapper.Map)];
     }
 
-    public async Task<ChatListItemDto> GetChatListItemAsync(Guid chatId, Guid userId)
+    public async Task<ChatListItemDto> GetChatListItemAsync(Guid chatId, Guid userId, CancellationToken ct = default)
     {
         // Same 404/403 semantics as GetChatDetailsAsync — the projection query
         // itself cannot tell "chat missing" from "not a member".
-        _ = await chatRepository.GetByIdAsync(chatId)
-            ?? throw new NotFoundException("Chat not found", "CHAT_NOT_FOUND");
+        _ = await chatRepository.GetByIdAsync(chatId, ct)
+            ?? throw ChatNotFound();
 
-        var isMember = await chatRepository.IsMemberAsync(chatId, userId);
-        if (!isMember)
-            throw new ForbiddenException("User is not a member of this chat", "NOT_A_MEMBER");
+        await membership.EnsureMemberAsync(chatId, userId, ct);
 
-        var row = await chatRepository.GetChatListItemAsync(chatId, userId)
-            ?? throw new NotFoundException("Chat not found", "CHAT_NOT_FOUND");
+        var row = await chatRepository.GetChatListItemAsync(chatId, userId, ct)
+            ?? throw ChatNotFound();
 
         return ChatListItemMapper.Map(row);
     }
 
-        public async Task<ChatDetailDto> GetChatDetailsAsync(Guid chatId, Guid userId)
+    public async Task<ChatDetailDto> GetChatDetailsAsync(Guid chatId, Guid userId, CancellationToken ct = default)
     {
-        var chat = await chatRepository.GetByIdAsync(chatId)
-            ?? throw new NotFoundException("Chat not found", "CHAT_NOT_FOUND");
+        var chat = await chatRepository.GetByIdAsync(chatId, ct)
+            ?? throw ChatNotFound();
 
-        // Authorization check — caller must be a member
-        var isMember = await chatRepository.IsMemberAsync(chatId, userId);
-        if (!isMember)
-            throw new ForbiddenException("User is not a member of this chat", "NOT_A_MEMBER");
+        await membership.EnsureMemberAsync(chatId, userId, ct);
 
-        var participants = await chatRepository.GetChatParticipantsAsync(chatId);
+        var participants = await chatRepository.GetChatParticipantsAsync(chatId, ct);
 
         return new ChatDetailDto
         {
@@ -57,102 +56,48 @@ public class ChatService(IChatRepository chatRepository, IMessageRepository mess
         };
     }
 
-    public async Task<CursorPaginatedResponse<MessageDto>> GetChatMessagesCursorAsync(
-        Guid chatId, Guid userId, string? cursor, int limit)
+    public async Task<PrivateChatResult> GetOrCreatePrivateChatAsync(
+        Guid userId, Guid otherUserId, CancellationToken ct = default)
     {
-        EnsureValidCursor(cursor);
+        if (userId == otherUserId)
+            throw new BadRequestException("Cannot create chat with yourself", "SELF_CHAT");
 
-        // Authorization check — caller must be a member
-        var isMember = await chatRepository.IsMemberAsync(chatId, userId);
-        if (!isMember)
-            throw new ForbiddenException("User is not a member of this chat", "NOT_A_MEMBER");
+        // Без этой проверки несуществующий собеседник ронял вставку на внешнем ключе (500).
+        // Деактивированный — тоже 404: писать ему некому.
+        var other = await userRepository.GetByIdAsync(otherUserId, ct);
+        if (other is null || !other.IsActive)
+            throw new NotFoundException("User not found", "USER_NOT_FOUND");
 
-        // Fetch page from storage (cursor-based) with sender names via JOIN
-        var result = await messageRepository.GetMessagesWithSenderCursorAsync(chatId, cursor, limit);
+        var (chatId, created) = await chatRepository.GetOrCreatePrivateChatAsync(userId, otherUserId, ct);
 
-        // Map entities to DTOs
-        var messages = result.Items.Select(m => new MessageDto
+        if (created)
         {
-            Id = m.Id,
-            ChatId = chatId,
-            SenderId = m.SenderId,
-            SenderName = m.SenderName,
-            Text = m.Text,
-            CreatedAt = m.CreatedAt,
-            IsRead = false // TODO: resolve actual read status
-        }).ToList();
-        return new CursorPaginatedResponse<MessageDto>
-        {
-            Items = [.. messages.OrderBy(m => m.CreatedAt)],
-            NextCursor = NextCursor(messages, result.HasMore),
-            HasMore = result.HasMore
-        };
+            // Чат уже создан — сообщаем о нём, даже если клиент ушёл.
+            // Карточка для второго участника своя: собеседник в ней — создатель чата.
+            var recipientRow = await chatRepository.GetChatListItemAsync(chatId, otherUserId, CancellationToken.None);
+            if (recipientRow is not null)
+                await events.ChatCreatedAsync(otherUserId, ChatListItemMapper.Map(recipientRow), CancellationToken.None);
+
+            await presence.IntroduceAsync(userId, otherUserId, CancellationToken.None);
+        }
+
+        var row = await chatRepository.GetChatListItemAsync(chatId, userId, ct)
+            ?? throw ChatNotFound();
+
+        return new PrivateChatResult(ChatListItemMapper.Map(row), created);
     }
 
-    public async Task<SearchMessagesResponseDto> SearchChatMessagesCursorAsync(
-        Guid chatId, Guid userId, string query, string? cursor, int limit)
-    {
-        // Validate query
-        if (string.IsNullOrWhiteSpace(query) || query.Length < 2)
-            throw new BadRequestException("Query must be at least 2 characters long", "INVALID_QUERY");
-
-        EnsureValidCursor(cursor);
-
-        // Authorization check — caller must be a member
-        var isMember = await chatRepository.IsMemberAsync(chatId, userId);
-        if (!isMember)
-            throw new ForbiddenException("User is not a member of this chat", "NOT_A_MEMBER");
-
-                // Fetch page from storage (cursor-based) with full-text search + sender names
-        var (result, totalCount) = await messageRepository.SearchMessagesCursorAsync(chatId, query, cursor, limit);
-
-        // Map entities to DTOs
-        var messages = result.Items.Select(m => new MessageDto
-        {
-            Id = m.Id,
-            ChatId = chatId,
-            SenderId = m.SenderId,
-            SenderName = m.SenderName,
-            Text = m.Text,
-            CreatedAt = m.CreatedAt,
-            IsRead = false // TODO: resolve actual read status
-        }).ToList();
-
-        return new SearchMessagesResponseDto
-        {
-            Items = [.. messages.OrderBy(m => m.CreatedAt)],
-            NextCursor = NextCursor(messages, result.HasMore),
-            HasMore = result.HasMore,
-            Query = query,
-            TotalCount = totalCount
-        };
-    }
-
-    /// <summary>
-    /// Курсор на следующую (более старую) страницу — от последнего сообщения страницы
-    /// (страница пришла от новых к старым). Нет следующей страницы — нет и курсора.
-    /// </summary>
-    private static string? NextCursor(List<MessageDto> newestFirst, bool hasMore) =>
-        hasMore && newestFirst.Count > 0
-            ? new Storage.Dto.CursorDto(newestFirst[^1].CreatedAt, newestFirst[^1].Id).Encode()
-            : null;
-
-    private static void EnsureValidCursor(string? cursor)
-    {
-        if (!string.IsNullOrEmpty(cursor) && !Storage.Dto.CursorDto.TryDecode(cursor, out _))
-            throw new BadRequestException("Cursor is malformed", "INVALID_CURSOR");
-    }
-
-    public async Task<SearchChatsResponseDto> SearchChatsAsync(Guid userId, string query, string? type, int limit)
+    public async Task<SearchChatsResponseDto> SearchChatsAsync(
+        Guid userId, string query, string? type, int limit, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(query))
             throw new BadRequestException("Query cannot be empty", "INVALID_QUERY");
 
         var typeFilter = type?.ToLowerInvariant();
 
-        // Single unified query — branching by type is now inside the repository
-        var rowsTask = chatRepository.SearchChatsBatchedAsync(userId, query, typeFilter, limit);
-        var countTask = chatRepository.CountChatsByQueryAsync(userId, query, typeFilter);
+        // Вне транзакции каждый запрос берёт своё соединение — можно параллельно.
+        var rowsTask = chatRepository.SearchChatsBatchedAsync(userId, query, typeFilter, limit, ct);
+        var countTask = chatRepository.CountChatsByQueryAsync(userId, query, typeFilter, ct);
 
         await Task.WhenAll(rowsTask, countTask);
 
@@ -163,5 +108,6 @@ public class ChatService(IChatRepository chatRepository, IMessageRepository mess
             TotalCount = countTask.Result
         };
     }
-}
 
+    private static NotFoundException ChatNotFound() => new("Chat not found", "CHAT_NOT_FOUND");
+}

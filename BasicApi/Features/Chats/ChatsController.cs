@@ -1,6 +1,7 @@
 ﻿using BasicApi.Extensions;
 using BasicApi.Models.Dto.Chat;
 using BasicApi.Models.Dto.Message;
+using BasicApi.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -11,7 +12,7 @@ namespace BasicApi.Features.Chats;
 [Route("api/chats")]
 [Produces("application/json")]
 [Tags("Chats")]
-public class ChatsController(ChatsHandler handlers) : ControllerBase
+public class ChatsController(IChatService chats, IMessageService messages) : ControllerBase
 {
     /// <summary>
     /// Get all chats for the current user
@@ -19,8 +20,8 @@ public class ChatsController(ChatsHandler handlers) : ControllerBase
     [HttpGet]
     [ProducesResponseType(typeof(IEnumerable<ChatListItemDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> GetUserChats()
-        => await handlers.GetUserChatsAsync(User.GetUserId());
+    public async Task<IActionResult> GetUserChats(CancellationToken ct)
+        => Ok(await chats.GetUserChatsAsync(User.GetUserId(), ct));
 
     /// <summary>
     /// Create a private chat with another user.
@@ -40,8 +41,11 @@ public class ChatsController(ChatsHandler handlers) : ControllerBase
     [ProducesResponseType(typeof(ChatListItemDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> CreatePrivateChat(Guid userId)
-        => await handlers.CreatePrivateChatAsync(User.GetUserId(), userId);
+    public async Task<IActionResult> CreatePrivateChat(Guid userId, CancellationToken ct)
+    {
+        var result = await chats.GetOrCreatePrivateChatAsync(User.GetUserId(), userId, ct);
+        return result.Created ? Created(string.Empty, result.Chat) : Ok(result.Chat);
+    }
 
     /// <summary>
     /// Get chat details
@@ -51,8 +55,8 @@ public class ChatsController(ChatsHandler handlers) : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetChat(Guid chatId)
-        => await handlers.GetChatAsync(chatId, User.GetUserId());
+    public async Task<IActionResult> GetChat(Guid chatId, CancellationToken ct)
+        => Ok(await chats.GetChatDetailsAsync(chatId, User.GetUserId(), ct));
 
     /// <summary>
     /// Get a single chat in chat-list shape.
@@ -69,13 +73,14 @@ public class ChatsController(ChatsHandler handlers) : ControllerBase
     /// Use <c>GET /api/chats/{chatId}</c> instead when you need the participant list.
     /// </remarks>
     /// <param name="chatId">Chat ID</param>
+    /// <param name="ct">Request cancellation.</param>
     [HttpGet("{chatId}/item")]
     [ProducesResponseType(typeof(ChatListItemDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetChatItem(Guid chatId)
-        => await handlers.GetChatListItemAsync(chatId, User.GetUserId());
+    public async Task<IActionResult> GetChatItem(Guid chatId, CancellationToken ct)
+        => Ok(await chats.GetChatListItemAsync(chatId, User.GetUserId(), ct));
 
     /// <summary>
     /// Get messages with cursor-based pagination.
@@ -93,6 +98,7 @@ public class ChatsController(ChatsHandler handlers) : ControllerBase
     /// <param name="chatId">Chat ID</param>
     /// <param name="cursor">Cursor from previous response (optional). Omit for the first page.</param>
     /// <param name="limit">Number of messages per page (default 20, max 100).</param>
+    /// <param name="ct">Request cancellation.</param>
     [HttpGet("{chatId}/messages/cursor")]
     [ProducesResponseType(typeof(CursorPaginatedResponse<MessageDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
@@ -100,8 +106,9 @@ public class ChatsController(ChatsHandler handlers) : ControllerBase
     public async Task<IActionResult> GetMessagesCursor(
         Guid chatId,
         [FromQuery] string? cursor,
-        [FromQuery] int limit = 20)
-        => await handlers.GetMessagesCursorAsync(chatId, User.GetUserId(), cursor, Math.Clamp(limit, 1, 100));
+        [FromQuery] int limit = 20,
+        CancellationToken ct = default)
+        => Ok(await messages.GetPageAsync(chatId, User.GetUserId(), cursor, Math.Clamp(limit, 1, 100), ct));
 
     /// <summary>
     /// Get messages around a specific date.
@@ -116,6 +123,7 @@ public class ChatsController(ChatsHandler handlers) : ControllerBase
     /// <param name="chatId">Chat ID</param>
     /// <param name="date">Target date (ISO 8601). Finds messages at or before this date.</param>
     /// <param name="limit">Number of messages per page (default 20, max 100).</param>
+    /// <param name="ct">Request cancellation.</param>
     [HttpGet("{chatId}/messages/at")]
     [ProducesResponseType(typeof(CursorPaginatedResponse<MessageDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
@@ -123,8 +131,9 @@ public class ChatsController(ChatsHandler handlers) : ControllerBase
     public async Task<IActionResult> GetMessagesAt(
         Guid chatId,
         [FromQuery] DateTime date,
-        [FromQuery] int limit = 20)
-        => await handlers.GetMessagesAtAsync(chatId, User.GetUserId(), date, Math.Clamp(limit, 1, 100));
+        [FromQuery] int limit = 20,
+        CancellationToken ct = default)
+        => Ok(await messages.GetPageAtAsync(chatId, User.GetUserId(), date, Math.Clamp(limit, 1, 100), ct));
 
         /// <summary>
     /// Mark messages as read
@@ -132,8 +141,11 @@ public class ChatsController(ChatsHandler handlers) : ControllerBase
     [HttpPost("{chatId}/read")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> MarkRead(Guid chatId, [FromBody] MarkMessageReadDto dto)
-        => await handlers.MarkReadAsync(chatId, User.GetUserId(), dto.LastMessageId);
+    public async Task<IActionResult> MarkRead(Guid chatId, [FromBody] MarkMessageReadDto dto, CancellationToken ct)
+    {
+        await messages.MarkReadAsync(chatId, User.GetUserId(), dto.LastMessageId, ct);
+        return Ok();
+    }
 
     /// <summary>
     /// Full-text search for messages within a chat.
@@ -154,6 +166,7 @@ public class ChatsController(ChatsHandler handlers) : ControllerBase
     /// <param name="q">Search query (minimum 2 characters).</param>
     /// <param name="cursor">Cursor from previous response (optional).</param>
     /// <param name="limit">Number of results per page (default 20, max 100).</param>
+    /// <param name="ct">Request cancellation.</param>
     [HttpGet("{chatId}/messages/search")]
     [ProducesResponseType(typeof(SearchMessagesResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -163,8 +176,9 @@ public class ChatsController(ChatsHandler handlers) : ControllerBase
         Guid chatId,
         [FromQuery] string q,
         [FromQuery] string? cursor,
-        [FromQuery] int limit = 20)
-        => await handlers.SearchMessagesAsync(chatId, User.GetUserId(), q, cursor, Math.Clamp(limit, 1, 100));
+        [FromQuery] int limit = 20,
+        CancellationToken ct = default)
+        => Ok(await messages.SearchAsync(chatId, User.GetUserId(), q, cursor, Math.Clamp(limit, 1, 100), ct));
 
     /// <summary>
     /// Search user's chats by query.
@@ -187,6 +201,7 @@ public class ChatsController(ChatsHandler handlers) : ControllerBase
     /// <param name="q">Search query.</param>
     /// <param name="type">Optional type filter: "group", "private", or empty for both.</param>
     /// <param name="limit">Max results (default 20, max 100).</param>
+    /// <param name="ct">Request cancellation.</param>
     [HttpGet("search")]
     [ProducesResponseType(typeof(SearchChatsResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -194,6 +209,7 @@ public class ChatsController(ChatsHandler handlers) : ControllerBase
     public async Task<IActionResult> SearchChats(
         [FromQuery] string q,
         [FromQuery] string? type,
-        [FromQuery] int limit = 20)
-        => await handlers.SearchChatsAsync(User.GetUserId(), q, type, Math.Clamp(limit, 1, 100));
+        [FromQuery] int limit = 20,
+        CancellationToken ct = default)
+        => Ok(await chats.SearchChatsAsync(User.GetUserId(), q, type, Math.Clamp(limit, 1, 100), ct));
 }

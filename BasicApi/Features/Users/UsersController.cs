@@ -1,5 +1,6 @@
 ﻿using BasicApi.Models.Dto.Users;
 using BasicApi.Extensions;
+using BasicApi.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -10,7 +11,7 @@ namespace BasicApi.Features.Users;
 [Produces("application/json")]
 [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
 [Tags("Users")]
-public class UsersController(UsersHandler handlers) : ControllerBase
+public class UsersController(IUserService users, IPresenceService presence) : ControllerBase
 {
     /// <summary>
     /// Get a user's ID by username.
@@ -23,8 +24,8 @@ public class UsersController(UsersHandler handlers) : ControllerBase
     [HttpGet("GetUserId/{username}")]
     [ProducesResponseType(typeof(UserIdResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetUserId(string username)
-        => await handlers.GetUserIdAsync(username);
+    public async Task<IActionResult> GetUserId(string username, CancellationToken ct)
+        => Ok(await users.GetUserIdAsync(username, ct));
 
     /// <summary>
     /// Search users by display name or username (Telegram-style ILIKE search).
@@ -38,14 +39,16 @@ public class UsersController(UsersHandler handlers) : ControllerBase
     /// </remarks>
     /// <param name="q">Search query (minimum 1 character).</param>
     /// <param name="limit">Max results (default 20, max 100).</param>
+    /// <param name="ct">Request cancellation.</param>
     [Authorize]
     [HttpGet("search")]
     [ProducesResponseType(typeof(SearchUsersResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> SearchUsers(
         [FromQuery] string q,
-        [FromQuery] int limit = 20)
-        => await handlers.SearchUsersAsync(User.GetUserId(), q, Math.Clamp(limit, 1, 100));
+        [FromQuery] int limit = 20,
+        CancellationToken ct = default)
+        => Ok(await users.SearchUsersAsync(User.GetUserId(), q, Math.Clamp(limit, 1, 100), ct));
 
     /// <summary>
     /// Get a user's public profile by ID.
@@ -60,12 +63,13 @@ public class UsersController(UsersHandler handlers) : ControllerBase
     ///   GET /api/users/3fa85f64-5717-4562-b3fc-2c963f66afa6
     /// </remarks>
     /// <param name="userId">User ID.</param>
+    /// <param name="ct">Request cancellation.</param>
     [Authorize]
     [HttpGet("{userId:guid}")]
     [ProducesResponseType(typeof(UserProfileResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetUserProfile(Guid userId)
-        => await handlers.GetUserProfileAsync(userId);
+    public async Task<IActionResult> GetUserProfile(Guid userId, CancellationToken ct)
+        => Ok(await users.GetUserProfileAsync(userId, ct));
 
     /// <summary>
     /// Get the current user's own profile, resolved from the JWT.
@@ -89,8 +93,8 @@ public class UsersController(UsersHandler handlers) : ControllerBase
     [HttpGet("me")]
     [ProducesResponseType(typeof(OwnProfileResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetOwnProfile()
-        => await handlers.GetOwnProfileAsync(User.GetUserId());
+    public async Task<IActionResult> GetOwnProfile(CancellationToken ct)
+        => Ok(await users.GetOwnProfileAsync(User.GetUserId(), ct));
 
     /// <summary>
     /// Get online status of all chat members for the current user.
@@ -104,8 +108,8 @@ public class UsersController(UsersHandler handlers) : ControllerBase
     [Authorize]
     [HttpGet("status")]
     [ProducesResponseType(typeof(UserStatusResponseDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetOnlineStatus()
-        => await handlers.GetOnlineStatusAsync(User.GetUserId());
+    public async Task<IActionResult> GetOnlineStatus(CancellationToken ct)
+        => Ok(await presence.GetContactsOnlineAsync(User.GetUserId(), ct));
 
     /// <summary>
     /// Get the online status of a single user.
@@ -125,12 +129,13 @@ public class UsersController(UsersHandler handlers) : ControllerBase
     ///   GET /api/users/3fa85f64-5717-4562-b3fc-2c963f66afa6/status
     /// </remarks>
     /// <param name="userId">User ID.</param>
+    /// <param name="ct">Request cancellation.</param>
     [Authorize]
     [HttpGet("{userId:guid}/status")]
     [ProducesResponseType(typeof(UserStatusDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetUserStatus(Guid userId)
-        => await handlers.GetUserStatusAsync(User.GetUserId(), userId);
+    public async Task<IActionResult> GetUserStatus(Guid userId, CancellationToken ct)
+        => Ok(await presence.GetUserStatusAsync(User.GetUserId(), userId, ct));
 
     /// <summary>
     /// Get the online status of an explicit set of users.
@@ -152,8 +157,8 @@ public class UsersController(UsersHandler handlers) : ControllerBase
     [HttpPost("status")]
     [ProducesResponseType(typeof(UserStatusResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> GetUsersStatus([FromBody] UserStatusBatchRequestDto dto)
-        => await handlers.GetUsersStatusAsync(User.GetUserId(), dto.UserIds);
+    public async Task<IActionResult> GetUsersStatus([FromBody] UserStatusBatchRequestDto dto, CancellationToken ct)
+        => Ok(await presence.GetUsersStatusAsync(User.GetUserId(), dto.UserIds, ct));
 
     /// <summary>
     /// Get typing status across all user's chats.
@@ -166,6 +171,6 @@ public class UsersController(UsersHandler handlers) : ControllerBase
     [Authorize]
     [HttpGet("typing")]
     [ProducesResponseType(typeof(TypingStatusResponseDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetTypingStatus()
-        => await handlers.GetTypingStatusAsync(User.GetUserId());
+    public async Task<IActionResult> GetTypingStatus(CancellationToken ct)
+        => Ok(await presence.GetTypingAsync(User.GetUserId(), ct));
 }

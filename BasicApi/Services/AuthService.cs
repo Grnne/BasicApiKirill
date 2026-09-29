@@ -6,11 +6,11 @@ using BasicApi.Services;
 using BasicApi.Storage.Entities;
 using BasicApi.Storage.Exceptions;
 using BasicApi.Storage.Interfaces;
-using Microsoft.AspNetCore.Mvc;
 
-namespace BasicApi.Features.Auth;
+namespace BasicApi.Services;
 
-public class AuthHandler(
+/// <summary>Вход, регистрация, обновление и отзыв сессий.</summary>
+public sealed class AuthService(
     IUserRepository userRepository,
     IJwtService jwtService,
     ISessionService sessionService,
@@ -25,7 +25,7 @@ public class AuthHandler(
     /// </summary>
     private static readonly string DummyPasswordHash = BCrypt.Net.BCrypt.HashPassword(Guid.NewGuid().ToString());
 
-    public async Task<IActionResult> LoginAsync(
+    public async Task<AuthResponseDto> LoginAsync(
         LoginRequestDto request, string? userAgent = null, string? ip = null, CancellationToken ct = default)
     {
         var user = await userRepository.GetByUsernameOrEmailAsync(request.UsernameOrEmail, ct);
@@ -44,11 +44,10 @@ public class AuthHandler(
 
         await userRepository.UpdateLastLoginAsync(user.Id, DateTime.UtcNow, ct);
 
-        var response = await sessionService.IssueForUserAsync(user, userAgent, ip, ct);
-        return new OkObjectResult(response);
+        return await sessionService.IssueForUserAsync(user, userAgent, ip, ct);
     }
 
-    public async Task<IActionResult> RegisterAsync(
+    public async Task<AuthResponseDto> RegisterAsync(
         RegisterRequestDto request, string? userAgent = null, string? ip = null, CancellationToken ct = default)
     {
         // Пробелы по краям — случайность ввода, в логин и почту они не попадают.
@@ -96,33 +95,28 @@ public class AuthHandler(
             throw new ConflictException("Username or email already exists", "USER_ALREADY_EXISTS");
         }
 
-        var response = await sessionService.IssueForUserAsync(user, userAgent, ip, ct);
-        return new CreatedResult(string.Empty, response);
+        return await sessionService.IssueForUserAsync(user, userAgent, ip, ct);
     }
 
     /// <summary>
     /// Exchanges a refresh token for a fresh access/refresh pair.
     /// </summary>
-    public async Task<IActionResult> RefreshAsync(
-        string refreshToken, string? userAgent = null, string? ip = null, CancellationToken ct = default)
-    {
-        var response = await sessionService.RefreshAsync(refreshToken, userAgent, ip, ct);
-        return new OkObjectResult(response);
-    }
+    public Task<AuthResponseDto> RefreshAsync(
+        string refreshToken, string? userAgent = null, string? ip = null, CancellationToken ct = default) =>
+        sessionService.RefreshAsync(refreshToken, userAgent, ip, ct);
 
     /// <summary>
     /// Ends the session behind the supplied refresh token.
     /// Idempotent: an unknown or already-revoked token still returns 200, so the
     /// endpoint cannot be used to probe which tokens exist.
     /// </summary>
-    public async Task<IActionResult> LogoutAsync(string? refreshToken, CancellationToken ct = default)
+    public async Task LogoutAsync(string? refreshToken, CancellationToken ct = default)
     {
         // Соединения хаба этого входа тоже закрываем: иначе «вышедшее» устройство
         // продолжало бы получать сообщения, пока держит соединение.
         var familyId = await sessionService.RevokeAsync(refreshToken, ct);
         if (familyId is not null)
             hubConnections.AbortSessionFamily(familyId.Value);
-        return new OkResult();
     }
 
     /// <summary>
@@ -131,26 +125,25 @@ public class AuthHandler(
     /// no new one can be obtained; open hub connections are closed right away and cannot
     /// be reopened with the old token.
     /// </summary>
-    public async Task<IActionResult> LogoutAllAsync(Guid userId, CancellationToken ct = default)
+    public async Task LogoutAllAsync(Guid userId, CancellationToken ct = default)
     {
         await sessionService.RevokeAllForUserAsync(userId, ct);
         hubConnections.AbortUser(userId);
-        return new OkResult();
     }
 
     /// <summary>
     /// Validates whether the given JWT access token is still valid.
     /// Returns userId, username and isValid flag.
     /// </summary>
-    public Task<IActionResult> ValidateTokenAsync(string token)
+    public ValidateTokenResponseDto ValidateToken(string token)
     {
         var isValid = jwtService.TryValidateToken(token, out var userId, out var username);
 
-        return Task.FromResult<IActionResult>(new OkObjectResult(new ValidateTokenResponseDto
+        return new ValidateTokenResponseDto
         {
             UserId = userId,
             Username = username,
             IsValid = isValid
-        }));
+        };
     }
 }

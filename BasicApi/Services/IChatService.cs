@@ -1,12 +1,11 @@
 ﻿using BasicApi.Models.Dto.Chat;
-using BasicApi.Models.Dto.Message;
 
 namespace BasicApi.Services;
 
 public interface IChatService
 {
-    Task<List<ChatListItemDto>> GetUserChatsAsync(Guid userId);
-    Task<ChatDetailDto> GetChatDetailsAsync(Guid chatId, Guid userId);
+    Task<List<ChatListItemDto>> GetUserChatsAsync(Guid userId, CancellationToken ct = default);
+    Task<ChatDetailDto> GetChatDetailsAsync(Guid chatId, Guid userId, CancellationToken ct = default);
 
     /// <summary>
     /// Returns one chat in the same shape as an entry of <see cref="GetUserChatsAsync"/>,
@@ -15,25 +14,15 @@ public interface IChatService
     /// Throws NotFoundException when the chat does not exist and
     /// ForbiddenException when the caller is not a member.
     /// </summary>
-    Task<ChatListItemDto> GetChatListItemAsync(Guid chatId, Guid userId);
-
-        /// <summary>
-    /// Returns messages with cursor-based pagination.
-    /// </summary>
-    Task<CursorPaginatedResponse<MessageDto>> GetChatMessagesCursorAsync(
-        Guid chatId, Guid userId, string? cursor, int limit);
+    Task<ChatListItemDto> GetChatListItemAsync(Guid chatId, Guid userId, CancellationToken ct = default);
 
     /// <summary>
-    /// Full-text search for messages within a chat.
-    /// Supports cursor-based pagination with (created_at, id) composite cursor.
+    /// Returns the private chat with another user, creating it if needed.
+    /// A new chat is announced to the other user (<c>ChatCreated</c>, built from their
+    /// point of view) and both learn each other's presence.
+    /// Errors: 400 <c>SELF_CHAT</c>, 404 <c>USER_NOT_FOUND</c> (missing or deactivated).
     /// </summary>
-    /// <param name="chatId">Chat to search in.</param>
-    /// <param name="userId">Current user ID (for authorization).</param>
-    /// <param name="query">Search query (min 2 characters).</param>
-    /// <param name="cursor">Cursor from previous page (optional).</param>
-        /// <param name="limit">Max results per page.</param>
-    Task<SearchMessagesResponseDto> SearchChatMessagesCursorAsync(
-        Guid chatId, Guid userId, string query, string? cursor, int limit);
+    Task<PrivateChatResult> GetOrCreatePrivateChatAsync(Guid userId, Guid otherUserId, CancellationToken ct = default);
 
     /// <summary>
     /// Searches user's chats by query.
@@ -45,5 +34,11 @@ public interface IChatService
     /// <param name="query">Search query (min 1 character).</param>
     /// <param name="type">Optional filter: "group" or "private". Null/empty searches both.</param>
     /// <param name="limit">Max results.</param>
-    Task<SearchChatsResponseDto> SearchChatsAsync(Guid userId, string query, string? type, int limit);
+    /// <param name="ct">Cancellation.</param>
+    Task<SearchChatsResponseDto> SearchChatsAsync(
+        Guid userId, string query, string? type, int limit, CancellationToken ct = default);
 }
+
+/// <param name="Chat">The chat as seen by the caller.</param>
+/// <param name="Created">True when the chat did not exist before this call.</param>
+public sealed record PrivateChatResult(ChatListItemDto Chat, bool Created);

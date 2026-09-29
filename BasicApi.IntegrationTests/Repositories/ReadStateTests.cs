@@ -10,8 +10,8 @@ namespace BasicApi.IntegrationTests.Repositories;
 
 public class ReadStateTests(PostgresFixture db) : DbTest(db)
 {
-    private ChatRepository Chats => new(Db.ConnectionFactory);
-    private MessageRepository Messages => new(Db.ConnectionFactory);
+    private ChatRepository Chats => new(NewSession());
+    private MessageRepository Messages => new(NewSession());
 
     private async Task<int> UnreadAsync(Guid chatId, Guid userId) =>
         (await Chats.GetChatListItemAsync(chatId, userId))!.UnreadCount;

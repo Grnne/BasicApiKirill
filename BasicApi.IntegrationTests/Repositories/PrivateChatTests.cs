@@ -7,7 +7,7 @@ namespace BasicApi.IntegrationTests.Repositories;
 
 public class PrivateChatTests(PostgresFixture db) : DbTest(db)
 {
-    private ChatRepository Repository => new(Db.ConnectionFactory);
+    private ChatRepository Repository => new(NewSession());
 
     [Fact]
     public async Task GetOrCreate_SecondCall_ReturnsSameChat_RegardlessOfOrder()

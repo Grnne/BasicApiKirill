@@ -1,29 +1,28 @@
-using BasicApi.Features.Users;
 using BasicApi.Middleware.Exceptions;
 using BasicApi.Models.Dto.Users;
 using BasicApi.Services;
+using BasicApi.Services.Events;
 using BasicApi.Storage.Interfaces;
-using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 
-namespace BasicApi.Tests.Features;
+namespace BasicApi.Tests.Services;
 
-public class UsersHandlerStatusTests
+public class PresenceServiceStatusTests
 {
-    private readonly Mock<IUserRepository> _userRepoMock;
     private readonly Mock<IChatRepository> _chatRepoMock;
     private readonly Mock<IUserStatusService> _statusServiceMock;
-    private readonly UsersHandler _handler;
+    private readonly PresenceService _service;
 
-    public UsersHandlerStatusTests()
+    public PresenceServiceStatusTests()
     {
-        _userRepoMock = new Mock<IUserRepository>();
         _chatRepoMock = new Mock<IChatRepository>();
         _statusServiceMock = new Mock<IUserStatusService>();
-        _handler = new UsersHandler(
-            _userRepoMock.Object,
-            _chatRepoMock.Object,
-            _statusServiceMock.Object);
+        _service = new PresenceService(
+            _statusServiceMock.Object,
+            new MembershipService(_chatRepoMock.Object),
+            Mock.Of<IChatEventPublisher>(),
+            NullLogger<PresenceService>.Instance);
     }
 
     // ========== GetOnlineStatusAsync Tests ==========
@@ -38,7 +37,7 @@ public class UsersHandlerStatusTests
         var memberC = Guid.NewGuid();
 
         _chatRepoMock
-            .Setup(r => r.GetAllChatMembersAsync(userId))
+            .Setup(r => r.GetAllChatMembersAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([memberA, memberB, memberC]);
 
         _statusServiceMock
@@ -46,11 +45,10 @@ public class UsersHandlerStatusTests
             .ReturnsAsync(new HashSet<Guid> { memberA, memberB });
 
         // Act
-        var result = await _handler.GetOnlineStatusAsync(userId);
+        var result = await _service.GetContactsOnlineAsync(userId);
 
         // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var dto = Assert.IsType<UserStatusResponseDto>(okResult.Value);
+        var dto = result;
         Assert.Equal(2, dto.Items.Count);
 
         var a = dto.Items.Single(x => x.UserId == memberA);
@@ -69,15 +67,14 @@ public class UsersHandlerStatusTests
         var userId = Guid.NewGuid();
 
         _chatRepoMock
-            .Setup(r => r.GetAllChatMembersAsync(userId))
+            .Setup(r => r.GetAllChatMembersAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
         // Act
-        var result = await _handler.GetOnlineStatusAsync(userId);
+        var result = await _service.GetContactsOnlineAsync(userId);
 
         // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var dto = Assert.IsType<UserStatusResponseDto>(okResult.Value);
+        var dto = result;
         Assert.Empty(dto.Items);
         _statusServiceMock.Verify(s => s.GetOnlineUserIdsAsync(It.IsAny<IReadOnlySet<Guid>>()), Times.Never);
     }
@@ -90,7 +87,7 @@ public class UsersHandlerStatusTests
         var memberA = Guid.NewGuid();
 
         _chatRepoMock
-            .Setup(r => r.GetAllChatMembersAsync(userId))
+            .Setup(r => r.GetAllChatMembersAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([memberA]);
 
         _statusServiceMock
@@ -98,11 +95,10 @@ public class UsersHandlerStatusTests
             .ReturnsAsync(new HashSet<Guid>());
 
         // Act
-        var result = await _handler.GetOnlineStatusAsync(userId);
+        var result = await _service.GetContactsOnlineAsync(userId);
 
         // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var dto = Assert.IsType<UserStatusResponseDto>(okResult.Value);
+        var dto = result;
         Assert.Empty(dto.Items);
     }
 
@@ -119,8 +115,8 @@ public class UsersHandlerStatusTests
         var typerB = Guid.NewGuid();
 
         _chatRepoMock
-            .Setup(r => r.GetUserChatsAsync(userId))
-            .ReturnsAsync([new BasicApi.Storage.Entities.Chat { Id = chatA }, new BasicApi.Storage.Entities.Chat { Id = chatB }]);
+            .Setup(r => r.GetUserChatIdsAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([chatA, chatB]);
 
         _statusServiceMock
             .Setup(s => s.GetTypingStatusAsync(It.Is<IReadOnlyCollection<Guid>>(ids =>
@@ -132,11 +128,10 @@ public class UsersHandlerStatusTests
             });
 
         // Act
-        var result = await _handler.GetTypingStatusAsync(userId);
+        var result = await _service.GetTypingAsync(userId);
 
         // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var dto = Assert.IsType<TypingStatusResponseDto>(okResult.Value);
+        var dto = result;
         Assert.Equal(2, dto.Items.Count);
 
         var a = dto.Items.Single(x => x.ChatId == chatA);
@@ -158,8 +153,8 @@ public class UsersHandlerStatusTests
         var typer = Guid.NewGuid();
 
         _chatRepoMock
-            .Setup(r => r.GetUserChatsAsync(userId))
-            .ReturnsAsync([new BasicApi.Storage.Entities.Chat { Id = userChat }]);
+            .Setup(r => r.GetUserChatIdsAsync(userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([userChat]);
 
         IReadOnlyCollection<Guid>? requested = null;
         _statusServiceMock
@@ -168,13 +163,12 @@ public class UsersHandlerStatusTests
             .ReturnsAsync(new Dictionary<Guid, HashSet<Guid>> { [userChat] = [typer] });
 
         // Act
-        var result = await _handler.GetTypingStatusAsync(userId);
+        var result = await _service.GetTypingAsync(userId);
 
         // Assert — сервис спрашивают только про чаты пользователя, чужие даже не читаются
         Assert.Equal([userChat], requested);
         Assert.DoesNotContain(otherChat, requested!);
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var dto = Assert.IsType<TypingStatusResponseDto>(okResult.Value);
+        var dto = result;
         Assert.Single(dto.Items);
         Assert.Equal(userChat, dto.Items[0].ChatId);
         Assert.Equal(typer, dto.Items[0].UserId);
@@ -191,11 +185,10 @@ public class UsersHandlerStatusTests
             .ReturnsAsync(new Dictionary<Guid, HashSet<Guid>>());
 
         // Act
-        var result = await _handler.GetTypingStatusAsync(userId);
+        var result = await _service.GetTypingAsync(userId);
 
         // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var dto = Assert.IsType<TypingStatusResponseDto>(okResult.Value);
+        var dto = result;
         Assert.Empty(dto.Items);
     }
 
@@ -209,7 +202,7 @@ public class UsersHandlerStatusTests
         var target = Guid.NewGuid();
 
         _chatRepoMock
-            .Setup(r => r.GetAllChatMembersAsync(userId))
+            .Setup(r => r.GetAllChatMembersAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([target]);
 
         _statusServiceMock
@@ -217,11 +210,10 @@ public class UsersHandlerStatusTests
             .ReturnsAsync(new HashSet<Guid> { target });
 
         // Act
-        var result = await _handler.GetUserStatusAsync(userId, target);
+        var result = await _service.GetUserStatusAsync(userId, target);
 
         // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var dto = Assert.IsType<UserStatusDto>(okResult.Value);
+        var dto = result;
         Assert.Equal(target, dto.UserId);
         Assert.True(dto.IsOnline);
     }
@@ -234,7 +226,7 @@ public class UsersHandlerStatusTests
         var target = Guid.NewGuid();
 
         _chatRepoMock
-            .Setup(r => r.GetAllChatMembersAsync(userId))
+            .Setup(r => r.GetAllChatMembersAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([target]);
 
         _statusServiceMock
@@ -242,11 +234,10 @@ public class UsersHandlerStatusTests
             .ReturnsAsync(new HashSet<Guid>());
 
         // Act
-        var result = await _handler.GetUserStatusAsync(userId, target);
+        var result = await _service.GetUserStatusAsync(userId, target);
 
         // Assert — оффлайн отдаётся явным false, а не отсутствием записи
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var dto = Assert.IsType<UserStatusDto>(okResult.Value);
+        var dto = result;
         Assert.Equal(target, dto.UserId);
         Assert.False(dto.IsOnline);
     }
@@ -258,7 +249,7 @@ public class UsersHandlerStatusTests
         var userId = Guid.NewGuid();
 
         _chatRepoMock
-            .Setup(r => r.GetAllChatMembersAsync(userId))
+            .Setup(r => r.GetAllChatMembersAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
         _statusServiceMock
@@ -266,11 +257,10 @@ public class UsersHandlerStatusTests
             .ReturnsAsync(new HashSet<Guid> { userId });
 
         // Act
-        var result = await _handler.GetUserStatusAsync(userId, userId);
+        var result = await _service.GetUserStatusAsync(userId, userId);
 
         // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var dto = Assert.IsType<UserStatusDto>(okResult.Value);
+        var dto = result;
         Assert.True(dto.IsOnline);
     }
 
@@ -282,12 +272,12 @@ public class UsersHandlerStatusTests
         var stranger = Guid.NewGuid();
 
         _chatRepoMock
-            .Setup(r => r.GetAllChatMembersAsync(userId))
+            .Setup(r => r.GetAllChatMembersAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([Guid.NewGuid()]);
 
         // Act & Assert — статус видно только по участникам общих чатов
         var ex = await Assert.ThrowsAsync<NotFoundException>(() =>
-            _handler.GetUserStatusAsync(userId, stranger));
+            _service.GetUserStatusAsync(userId, stranger));
 
         Assert.Equal("USER_NOT_FOUND", ex.ErrorCode);
         _statusServiceMock.Verify(s => s.GetOnlineUserIdsAsync(It.IsAny<IReadOnlySet<Guid>>()), Times.Never);
@@ -304,7 +294,7 @@ public class UsersHandlerStatusTests
         var offlineMember = Guid.NewGuid();
 
         _chatRepoMock
-            .Setup(r => r.GetAllChatMembersAsync(userId))
+            .Setup(r => r.GetAllChatMembersAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([onlineMember, offlineMember]);
 
         _statusServiceMock
@@ -312,11 +302,10 @@ public class UsersHandlerStatusTests
             .ReturnsAsync(new HashSet<Guid> { onlineMember });
 
         // Act
-        var result = await _handler.GetUsersStatusAsync(userId, [onlineMember, offlineMember]);
+        var result = await _service.GetUsersStatusAsync(userId, [onlineMember, offlineMember]);
 
         // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var dto = Assert.IsType<UserStatusResponseDto>(okResult.Value);
+        var dto = result;
         Assert.Equal(2, dto.Items.Count);
         Assert.True(dto.Items.Single(x => x.UserId == onlineMember).IsOnline);
         Assert.False(dto.Items.Single(x => x.UserId == offlineMember).IsOnline);
@@ -331,7 +320,7 @@ public class UsersHandlerStatusTests
         var stranger = Guid.NewGuid();
 
         _chatRepoMock
-            .Setup(r => r.GetAllChatMembersAsync(userId))
+            .Setup(r => r.GetAllChatMembersAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([member]);
 
         _statusServiceMock
@@ -339,11 +328,10 @@ public class UsersHandlerStatusTests
             .ReturnsAsync(new HashSet<Guid> { member });
 
         // Act
-        var result = await _handler.GetUsersStatusAsync(userId, [member, stranger]);
+        var result = await _service.GetUsersStatusAsync(userId, [member, stranger]);
 
         // Assert — чужие id молча выпадают из ответа
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var dto = Assert.IsType<UserStatusResponseDto>(okResult.Value);
+        var dto = result;
         Assert.Equal(member, Assert.Single(dto.Items).UserId);
     }
 
@@ -355,7 +343,7 @@ public class UsersHandlerStatusTests
         var member = Guid.NewGuid();
 
         _chatRepoMock
-            .Setup(r => r.GetAllChatMembersAsync(userId))
+            .Setup(r => r.GetAllChatMembersAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([member]);
 
         _statusServiceMock
@@ -363,11 +351,10 @@ public class UsersHandlerStatusTests
             .ReturnsAsync(new HashSet<Guid> { member });
 
         // Act
-        var result = await _handler.GetUsersStatusAsync(userId, [member, member, member]);
+        var result = await _service.GetUsersStatusAsync(userId, [member, member, member]);
 
         // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var dto = Assert.IsType<UserStatusResponseDto>(okResult.Value);
+        var dto = result;
         Assert.Single(dto.Items);
     }
 
@@ -376,7 +363,7 @@ public class UsersHandlerStatusTests
     {
         // Act & Assert
         var ex = await Assert.ThrowsAsync<BadRequestException>(() =>
-            _handler.GetUsersStatusAsync(Guid.NewGuid(), []));
+            _service.GetUsersStatusAsync(Guid.NewGuid(), []));
 
         Assert.Equal("INVALID_REQUEST", ex.ErrorCode);
     }
@@ -389,7 +376,7 @@ public class UsersHandlerStatusTests
 
         // Act & Assert
         var ex = await Assert.ThrowsAsync<BadRequestException>(() =>
-            _handler.GetUsersStatusAsync(Guid.NewGuid(), ids));
+            _service.GetUsersStatusAsync(Guid.NewGuid(), ids));
 
         Assert.Equal("TOO_MANY_IDS", ex.ErrorCode);
     }

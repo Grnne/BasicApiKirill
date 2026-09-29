@@ -1,21 +1,19 @@
-using BasicApi.Features.Auth;
 using BasicApi.Models.Dto.Auth;
 using BasicApi.Services;
 using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
-using Microsoft.AspNetCore.Mvc;
 using Moq;
 
-namespace BasicApi.Tests.Features;
+namespace BasicApi.Tests.Services;
 
-public class AuthHandlerLogoutValidateTests
+public class AuthServiceLogoutValidateTests
 {
     private readonly Mock<IUserRepository> _userRepoMock;
     private readonly Mock<IJwtService> _jwtServiceMock;
     private readonly Mock<ISessionService> _sessionServiceMock;
-    private readonly AuthHandler _handler;
+    private readonly AuthService _service;
 
-    public AuthHandlerLogoutValidateTests()
+    public AuthServiceLogoutValidateTests()
     {
         _userRepoMock = new Mock<IUserRepository>();
         _jwtServiceMock = new Mock<IJwtService>();
@@ -38,7 +36,7 @@ public class AuthHandlerLogoutValidateTests
                 RefreshTokenExpiresAt = DateTime.UtcNow.AddDays(30)
             });
 
-        _handler = new AuthHandler(_userRepoMock.Object, _jwtServiceMock.Object, _sessionServiceMock.Object,
+        _service = new AuthService(_userRepoMock.Object, _jwtServiceMock.Object, _sessionServiceMock.Object,
             new BasicApi.Hubs.HubConnectionRegistry());
     }
 
@@ -48,10 +46,9 @@ public class AuthHandlerLogoutValidateTests
     public async Task LogoutAsync_WithRefreshToken_RevokesThatSession()
     {
         // Act
-        var result = await _handler.LogoutAsync("refresh-token");
+        await _service.LogoutAsync("refresh-token");
 
         // Assert
-        Assert.IsType<OkResult>(result);
         _sessionServiceMock.Verify(
             s => s.RevokeAsync("refresh-token", It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -62,10 +59,9 @@ public class AuthHandlerLogoutValidateTests
         // Arrange — клиент может не прислать токен; отвечать ошибкой не за что,
         // но и гасить тогда нечего.
         // Act
-        var result = await _handler.LogoutAsync(null);
+        await _service.LogoutAsync(null);
 
         // Assert
-        Assert.IsType<OkResult>(result);
         _sessionServiceMock.Verify(
             s => s.RevokeAsync(null, It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -80,10 +76,9 @@ public class AuthHandlerLogoutValidateTests
             .ReturnsAsync((Guid?)null);
 
         // Act
-        var result = await _handler.LogoutAsync("never-issued");
+        await _service.LogoutAsync("never-issued");
 
         // Assert
-        Assert.IsType<OkResult>(result);
     }
 
     // ========== LogoutAllAsync Tests ==========
@@ -95,10 +90,9 @@ public class AuthHandlerLogoutValidateTests
         var userId = Guid.NewGuid();
 
         // Act
-        var result = await _handler.LogoutAllAsync(userId);
+        await _service.LogoutAllAsync(userId);
 
         // Assert
-        Assert.IsType<OkResult>(result);
         _sessionServiceMock.Verify(
             s => s.RevokeAllForUserAsync(userId, It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -122,11 +116,10 @@ public class AuthHandlerLogoutValidateTests
             .ReturnsAsync(expected);
 
         // Act
-        var result = await _handler.RefreshAsync("old-refresh");
+        var result = await _service.RefreshAsync("old-refresh");
 
         // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var dto = Assert.IsType<AuthResponseDto>(okResult.Value);
+        var dto = result;
         Assert.Equal("new-access", dto.Token);
         Assert.Equal("new-refresh", dto.RefreshToken);
     }
@@ -142,7 +135,7 @@ public class AuthHandlerLogoutValidateTests
 
         // Act & Assert
         var ex = await Assert.ThrowsAsync<BasicApi.Middleware.Exceptions.UnauthorizedException>(() =>
-            _handler.RefreshAsync("stolen"));
+            _service.RefreshAsync("stolen"));
 
         Assert.Equal("REFRESH_TOKEN_REUSED", ex.ErrorCode);
     }
@@ -150,7 +143,7 @@ public class AuthHandlerLogoutValidateTests
     // ========== ValidateTokenAsync Tests ==========
 
     [Fact]
-    public async Task ValidateTokenAsync_ValidToken_ReturnsOkWithUserInfo()
+    public void ValidateToken_ValidToken_ReturnsOkWithUserInfo()
     {
         // Arrange
         var userId = Guid.NewGuid();
@@ -161,18 +154,17 @@ public class AuthHandlerLogoutValidateTests
             .Returns(true);
 
         // Act
-        var result = await _handler.ValidateTokenAsync("some-valid-token");
+        var result = _service.ValidateToken("some-valid-token");
 
         // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var dto = Assert.IsType<BasicApi.Models.Dto.Auth.ValidateTokenResponseDto>(okResult.Value);
+        var dto = result;
         Assert.True(dto.IsValid);
         Assert.Equal(userId, dto.UserId);
         Assert.Equal(username, dto.Username);
     }
 
     [Fact]
-    public async Task ValidateTokenAsync_InvalidToken_ReturnsOkWithIsValidFalse()
+    public void ValidateToken_InvalidToken_ReturnsOkWithIsValidFalse()
     {
         // Arrange
         var userId = Guid.Empty;
@@ -183,11 +175,10 @@ public class AuthHandlerLogoutValidateTests
             .Returns(false);
 
         // Act
-        var result = await _handler.ValidateTokenAsync("invalid-token");
+        var result = _service.ValidateToken("invalid-token");
 
         // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var dto = Assert.IsType<BasicApi.Models.Dto.Auth.ValidateTokenResponseDto>(okResult.Value);
+        var dto = result;
         Assert.False(dto.IsValid);
     }
 }

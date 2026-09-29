@@ -1,10 +1,9 @@
 using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
-using Dapper;
 
 namespace BasicApi.Storage.Repositories;
 
-public class SessionRepository(IDbConnectionFactory connectionFactory) : ISessionRepository
+public class SessionRepository(IDbSession db) : ISessionRepository
 {
     private const string InsertSql = @"
         INSERT INTO sessions
@@ -16,8 +15,7 @@ public class SessionRepository(IDbConnectionFactory connectionFactory) : ISessio
 
     public async Task CreateAsync(Session session, CancellationToken ct = default)
     {
-        using var connection = connectionFactory.CreateConnection();
-        await connection.ExecuteAsync(new CommandDefinition(InsertSql, session, cancellationToken: ct));
+        await db.ExecuteAsync(InsertSql, session, ct);
     }
 
     public async Task<Session?> GetByRefreshTokenHashAsync(string refreshTokenHash, CancellationToken ct = default)
@@ -38,9 +36,7 @@ public class SessionRepository(IDbConnectionFactory connectionFactory) : ISessio
             WHERE refresh_token_hash = @refreshTokenHash
             LIMIT 1";
 
-        using var connection = connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<Session>(
-            new CommandDefinition(sql, new { refreshTokenHash }, cancellationToken: ct));
+        return await db.QueryFirstOrDefaultAsync<Session>(sql, new { refreshTokenHash }, ct);
     }
 
     public async Task<bool> TryRotateAsync(Guid sessionId, Session replacement, DateTime rotatedAt, CancellationToken ct = default)
@@ -54,35 +50,17 @@ public class SessionRepository(IDbConnectionFactory connectionFactory) : ISessio
                 replaced_by_session_id = @replacementId
             WHERE id = @sessionId AND revoked_at IS NULL";
 
-        using var connection = connectionFactory.CreateConnection();
-        connection.Open();
-        using var transaction = connection.BeginTransaction();
-
-        try
+        return await db.InTransactionAsync(async ct =>
         {
-            var affected = await connection.ExecuteAsync(new CommandDefinition(
-                markRotatedSql,
-                new { sessionId, replacementId = replacement.Id, rotatedAt },
-                transaction,
-                cancellationToken: ct));
+            var affected = await db.ExecuteAsync(
+                markRotatedSql, new { sessionId, replacementId = replacement.Id, rotatedAt }, ct);
 
             if (affected == 0)
-            {
-                transaction.Rollback();
                 return false;
-            }
 
-            await connection.ExecuteAsync(new CommandDefinition(
-                InsertSql, replacement, transaction, cancellationToken: ct));
-
-            transaction.Commit();
+            await db.ExecuteAsync(InsertSql, replacement, ct);
             return true;
-        }
-        catch
-        {
-            transaction.Rollback();
-            throw;
-        }
+        }, ct: ct);
     }
 
     public async Task<bool> HasLiveSessionInFamilyAsync(Guid familyId, CancellationToken ct = default)
@@ -93,9 +71,7 @@ public class SessionRepository(IDbConnectionFactory connectionFactory) : ISessio
                 WHERE family_id = @familyId AND revoked_at IS NULL
             )";
 
-        using var connection = connectionFactory.CreateConnection();
-        return await connection.ExecuteScalarAsync<bool>(
-            new CommandDefinition(sql, new { familyId }, cancellationToken: ct));
+        return await db.ExecuteScalarAsync<bool>(sql, new { familyId }, ct);
     }
 
     public async Task RevokeAsync(Guid sessionId, DateTime revokedAt, CancellationToken ct = default)
@@ -105,9 +81,7 @@ public class SessionRepository(IDbConnectionFactory connectionFactory) : ISessio
             SET revoked_at = @revokedAt
             WHERE id = @sessionId AND revoked_at IS NULL";
 
-        using var connection = connectionFactory.CreateConnection();
-        await connection.ExecuteAsync(new CommandDefinition(
-            sql, new { sessionId, revokedAt }, cancellationToken: ct));
+        await db.ExecuteAsync(sql, new { sessionId, revokedAt }, ct);
     }
 
     public async Task<int> RevokeFamilyAsync(Guid familyId, DateTime revokedAt, CancellationToken ct = default)
@@ -117,9 +91,7 @@ public class SessionRepository(IDbConnectionFactory connectionFactory) : ISessio
             SET revoked_at = @revokedAt
             WHERE family_id = @familyId AND revoked_at IS NULL";
 
-        using var connection = connectionFactory.CreateConnection();
-        return await connection.ExecuteAsync(new CommandDefinition(
-            sql, new { familyId, revokedAt }, cancellationToken: ct));
+        return await db.ExecuteAsync(sql, new { familyId, revokedAt }, ct);
     }
 
     public async Task<int> RevokeAllForUserAsync(Guid userId, DateTime revokedAt, CancellationToken ct = default)
@@ -129,8 +101,6 @@ public class SessionRepository(IDbConnectionFactory connectionFactory) : ISessio
             SET revoked_at = @revokedAt
             WHERE user_id = @userId AND revoked_at IS NULL";
 
-        using var connection = connectionFactory.CreateConnection();
-        return await connection.ExecuteAsync(new CommandDefinition(
-            sql, new { userId, revokedAt }, cancellationToken: ct));
+        return await db.ExecuteAsync(sql, new { userId, revokedAt }, ct);
     }
 }

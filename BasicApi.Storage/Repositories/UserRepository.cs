@@ -1,13 +1,11 @@
-using System.Data;
 using BasicApi.Storage.Entities;
 using BasicApi.Storage.Exceptions;
 using BasicApi.Storage.Interfaces;
-using Dapper;
 using Npgsql;
 
 namespace BasicApi.Storage.Repositories;
 
-public class UserRepository(IDbConnectionFactory connectionFactory) : IUserRepository
+public class UserRepository(IDbSession db) : IUserRepository
 {
     public async Task<User?> GetByUsernameOrEmailAsync(string usernameOrEmail, CancellationToken ct = default)
     {
@@ -26,8 +24,7 @@ public class UserRepository(IDbConnectionFactory connectionFactory) : IUserRepos
             WHERE username_normalized = lower(trim(@Value)) OR email_normalized = lower(trim(@Value))
             LIMIT 1";
 
-        using var connection = connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<User>(sql, new { Value = usernameOrEmail });
+        return await db.QueryFirstOrDefaultAsync<User>(sql, new { Value = usernameOrEmail }, ct);
     }
 
     public async Task<Guid> CreateAsync(User user, CancellationToken ct = default)
@@ -37,11 +34,9 @@ public class UserRepository(IDbConnectionFactory connectionFactory) : IUserRepos
             VALUES (@Id, @Username, @Email, @PasswordHash, @DisplayName, @CreatedAt, @LastLoginAt, @IsActive)
             RETURNING id";
 
-        using var connection = connectionFactory.CreateConnection();
         try
         {
-            return await connection.ExecuteScalarAsync<Guid>(
-                new CommandDefinition(sql, user, cancellationToken: ct));
+            return await db.ExecuteScalarAsync<Guid>(sql, user, ct);
         }
         catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation)
         {
@@ -56,9 +51,7 @@ public class UserRepository(IDbConnectionFactory connectionFactory) : IUserRepos
     {
         const string sql = "UPDATE users SET last_login_at = @lastLoginAt WHERE id = @userId";
 
-        using var connection = connectionFactory.CreateConnection();
-        await connection.ExecuteAsync(new CommandDefinition(
-            sql, new { userId, lastLoginAt }, cancellationToken: ct));
+        await db.ExecuteAsync(sql, new { userId, lastLoginAt }, ct);
     }
 
     public async Task<Guid?> GetIdByUsernameAsync(string username, CancellationToken ct = default)
@@ -69,9 +62,7 @@ public class UserRepository(IDbConnectionFactory connectionFactory) : IUserRepos
             FROM users
             WHERE username_normalized = lower(trim(@username)) AND is_active = true";
 
-        using var connection = connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<Guid?>(
-            new CommandDefinition(sql, new { username }, cancellationToken: ct));
+        return await db.QueryFirstOrDefaultAsync<Guid?>(sql, new { username }, ct);
     }
 
     public async Task<User?> GetByIdAsync(Guid id, CancellationToken ct = default)
@@ -90,8 +81,7 @@ public class UserRepository(IDbConnectionFactory connectionFactory) : IUserRepos
             WHERE id = @Id
             LIMIT 1";
 
-        using var connection = connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<User>(sql, new { Id = id });
+        return await db.QueryFirstOrDefaultAsync<User>(sql, new { Id = id }, ct);
     }
 
     public async Task<IEnumerable<User>> SearchByDisplayNameOrUsernameAsync(
@@ -114,13 +104,12 @@ public class UserRepository(IDbConnectionFactory connectionFactory) : IUserRepos
             ORDER BY display_name, username
             LIMIT @Limit";
 
-        using var connection = connectionFactory.CreateConnection();
-        return await connection.QueryAsync<User>(sql, new
+        return await db.QueryAsync<User>(sql, new
         {
             ExcludeUserId = excludeUserId,
             Pattern = $"%{query}%",
             Limit = limit
-        });
+        }, ct);
     }
 
     public async Task<int> CountBySearchQueryAsync(string query, Guid excludeUserId, CancellationToken ct = default)
@@ -132,11 +121,10 @@ public class UserRepository(IDbConnectionFactory connectionFactory) : IUserRepos
               AND id != @ExcludeUserId
               AND (display_name ILIKE @Pattern OR username ILIKE @Pattern)";
 
-        using var connection = connectionFactory.CreateConnection();
-        return await connection.ExecuteScalarAsync<int>(sql, new
+        return await db.ExecuteScalarAsync<int>(sql, new
         {
             ExcludeUserId = excludeUserId,
             Pattern = $"%{query}%"
-        });
+        }, ct);
     }
 }

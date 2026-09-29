@@ -141,6 +141,9 @@ public class SessionService(
     public Task RevokeAllForUserAsync(Guid userId, CancellationToken ct = default)
         => sessionRepository.RevokeAllForUserAsync(userId, DateTime.UtcNow, ct);
 
+    public Task<bool> IsSessionFamilyLiveAsync(Guid sessionFamilyId, CancellationToken ct = default)
+        => sessionRepository.HasLiveSessionInFamilyAsync(sessionFamilyId, ct);
+
     /// <summary>
     /// SHA-256 hex of the refresh token. Refresh tokens are 256 bits of CSPRNG output,
     /// so a plain hash is enough — unlike passwords there is nothing to brute-force.

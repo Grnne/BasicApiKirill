@@ -6,7 +6,7 @@ namespace BasicApi.IntegrationTests.Repositories;
 
 public class MessagePaginationTests(PostgresFixture db) : DbTest(db)
 {
-    private MessageRepository Repository => new(Db.ConnectionFactory);
+    private MessageRepository Repository => new(NewSession());
 
     [Fact]
     public async Task Pagination_WithIdenticalCreatedAt_ReturnsEveryMessageOnce()

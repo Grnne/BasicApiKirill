@@ -1,3 +1,4 @@
+using BasicApi.Storage;
 using BasicApi.Storage.Interfaces;
 using BasicApi.Storage.Migrations;
 using BasicApi.Storage.Services;
@@ -89,6 +90,9 @@ public abstract class DbTest(PostgresFixture db) : IAsyncLifetime
 {
     protected PostgresFixture Db { get; } = db;
     protected TestData Data { get; } = new(db.ConnectionFactory);
+
+    /// <summary>Своя сессия на каждый вызов — как отдельный запрос в API.</summary>
+    protected DbSession NewSession() => new(Db.ConnectionFactory);
 
     public virtual Task InitializeAsync() => Db.ResetAsync();
 

@@ -2,23 +2,22 @@
 using System.Security.Claims;
 using System.Threading.RateLimiting;
 using BasicApi.Extensions;
-using BasicApi.Models;
-using BasicApi.Models.Dto.Chat;
-using BasicApi.Models.Dto.Message;
 using BasicApi.Services;
-using BasicApi.Storage.Entities;
-using BasicApi.Storage.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 
 namespace BasicApi.Hubs;
 
+/// <summary>
+/// Адаптер SignalR: разбирает вызов, отдаёт его доменному сервису. Правила — в сервисах,
+/// перевод доменных ошибок в <see cref="HubException"/> с кодом — в <see cref="HubErrorFilter"/>.
+/// </summary>
 [Authorize]
 public class ChatHub(
-    IChatRepository chatRepository,
-    IMessageRepository messageRepository,
-    IUserStatusService userStatusService,
-    ISessionRepository sessionRepository,
+    IMessageService messages,
+    IPresenceService presence,
+    IMembershipService membership,
+    ISessionService sessions,
     HubConnectionRegistry connectionRegistry,
     ILogger<ChatHub> logger) : Hub
 {
@@ -44,91 +43,40 @@ public class ChatHub(
 
     public override async Task OnConnectedAsync()
     {
-        try
+        if (UserId is { } userId)
         {
-            var userId = GetUserId();
-            if (userId.HasValue)
+            // Сначала регистрируем, потом проверяем сессию: logout между этими
+            // шагами либо найдёт соединение в реестре, либо проверка увидит отзыв.
+            var sessionFamilyId = Context.User?.GetSessionFamilyId();
+            connectionRegistry.Add(Context, userId, sessionFamilyId);
+
+            if (sessionFamilyId is not null &&
+                !await sessions.IsSessionFamilyLiveAsync(sessionFamilyId.Value, Context.ConnectionAborted))
             {
-                // Сначала регистрируем, потом проверяем сессию: logout между этими
-                // шагами либо найдёт соединение в реестре, либо проверка увидит отзыв.
-                var sessionFamilyId = Context.User?.GetSessionFamilyId();
-                connectionRegistry.Add(Context, userId.Value, sessionFamilyId);
-
-                if (sessionFamilyId is not null &&
-                    !await sessionRepository.HasLiveSessionInFamilyAsync(sessionFamilyId.Value))
-                {
-                    // Access-токен ещё не истёк, но вход уже закрыт (logout, logout-all).
-                    logger.LogDebug("Rejected hub connection of revoked session: userId={UserId}", userId.Value);
-                    connectionRegistry.Remove(Context.ConnectionId);
-                    Context.Abort();
-                    return;
-                }
-
-                var isFirstConnection = await userStatusService.SetUserOnlineStatusAsync(userId.Value, Context.ConnectionId, true);
-
-                // Debug, а не Information: на каждое подключение строка в проде не нужна.
-                // IP и User-Agent не пишем — минимизация данных; они есть в sessions.
-                if (logger.IsEnabled(LogLevel.Debug))
-                {
-                    logger.LogDebug(
-                        "Connected: userId={UserId}, connectionId={ConnectionId}, connections={Count}",
-                        userId.Value, Context.ConnectionId,
-                        await userStatusService.GetConnectionCountAsync(userId.Value));
-                }
-
-                if (isFirstConnection)
-                    await NotifyPresenceAsync(userId.Value, isOnline: true);
+                // Access-токен ещё не истёк, но вход уже закрыт (logout, logout-all).
+                logger.LogDebug("Rejected hub connection of revoked session: userId={UserId}", userId);
+                connectionRegistry.Remove(Context.ConnectionId);
+                Context.Abort();
+                return;
             }
-            await base.OnConnectedAsync();
+
+            await presence.ConnectedAsync(userId, Context.ConnectionId, Context.ConnectionAborted);
         }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "OnConnectedAsync failed for connection {ConnectionId}", Context.ConnectionId);
-            throw;
-        }
+        await base.OnConnectedAsync();
     }
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
         try
         {
-            var userId = GetUserId();
-
             if (exception != null)
                 logger.LogWarning(exception, "OnDisconnectedAsync with exception for userId={UserId}, connectionId={ConnectionId}",
-                    userId, Context.ConnectionId);
+                    UserId, Context.ConnectionId);
 
-            if (userId.HasValue)
-            {
-                var wentOffline = await userStatusService.SetUserOnlineStatusAsync(userId.Value, Context.ConnectionId, false);
+            if (UserId is { } userId)
+                await presence.DisconnectedAsync(userId, Context.ConnectionId);
 
-                if (logger.IsEnabled(LogLevel.Debug))
-                {
-                    logger.LogDebug(
-                        "Disconnected: userId={UserId}, connectionId={ConnectionId}, connections={Count}",
-                        userId.Value, Context.ConnectionId,
-                        await userStatusService.GetConnectionCountAsync(userId.Value));
-                }
-
-                if (wentOffline)
-                {
-                    await NotifyPresenceAsync(userId.Value, isOnline: false);
-
-                    // Ушёл последним соединением посреди набора — «печатает» гасим сразу,
-                    // не дожидаясь TTL.
-                    foreach (var chatId in await userStatusService.ClearTypingAsync(userId.Value))
-                    {
-                        var participants = await chatRepository.GetChatParticipantsAsync(chatId);
-                        await NotifyTypingAsync(chatId, userId.Value, false, participants);
-                    }
-                }
-            }
             await base.OnDisconnectedAsync(exception);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "OnDisconnectedAsync failed for connection {ConnectionId}", Context.ConnectionId);
-            throw;
         }
         finally
         {
@@ -143,194 +91,51 @@ public class ChatHub(
 
     public async Task JoinChat(Guid chatId)
     {
-        try
-        {
-            var userId = GetUserId();
-            if (!userId.HasValue) return;
+        if (UserId is not { } userId) return;
 
-            if (!await chatRepository.IsMemberAsync(chatId, userId.Value))
-                throw HubErrors.Create(HubErrors.NotAMember, "User is not a member of this chat");
-
-            await Groups.AddToGroupAsync(Context.ConnectionId, chatId.ToString());
-        }
-        catch (Exception ex) when (ex is not HubException)
-        {
-            logger.LogError(ex, "JoinChat failed for chatId={ChatId}", chatId);
-            throw;
-        }
+        await membership.EnsureMemberAsync(chatId, userId, Context.ConnectionAborted);
+        await Groups.AddToGroupAsync(Context.ConnectionId, chatId.ToString());
     }
 
-    public async Task LeaveChat(Guid chatId)
-    {
-        try
-        {
-            var userId = GetUserId();
-            if (!userId.HasValue) return;
-
-            if (!await chatRepository.IsMemberAsync(chatId, userId.Value))
-                return;
-
-            await Groups.RemoveFromGroupAsync(Context.ConnectionId, chatId.ToString());
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "LeaveChat failed for chatId={ChatId}", chatId);
-            throw;
-        }
-    }
+    /// <summary>Выход из группы чата безвреден и без проверки членства.</summary>
+    public Task LeaveChat(Guid chatId) =>
+        UserId is null ? Task.CompletedTask : Groups.RemoveFromGroupAsync(Context.ConnectionId, chatId.ToString());
 
     public async Task SendMessage(Guid chatId, string text)
     {
-        try
-        {
-            if (!TryAcquireCallSlot())
-                throw HubErrors.Create(HubErrors.RateLimited, "Too many calls. Slow down.");
+        if (!TryAcquireCallSlot())
+            throw HubErrors.Create(HubErrors.RateLimited, "Too many calls. Slow down.");
 
-            var userId = GetUserId();
-            if (!userId.HasValue) return;
+        if (UserId is not { } userId) return;
 
-            // Текст проверяем до похода в базу: это бесплатно.
-            var textError = MessageText.Normalize(text, out text);
-            if (textError == MessageText.EmptyCode)
-                throw HubErrors.Create(textError, "Message text is empty");
-            if (textError == MessageText.TooLongCode)
-                throw HubErrors.Create(textError, $"Message text is longer than {MessageText.MaxLength} characters");
-
-            if (!await chatRepository.IsMemberAsync(chatId, userId.Value))
-                throw HubErrors.Create(HubErrors.NotAMember, "User is not a member of this chat");
-
-            var message = new Message
-            {
-                Id = Guid.NewGuid(),
-                ChatId = chatId,
-                SenderId = userId.Value,
-                Text = text,
-                CreatedAt = DateTime.UtcNow,
-                IsDeleted = false
-            };
-
-            await messageRepository.CreateAsync(message);
-
-            var senderName = await chatRepository.GetUserNameAsync(userId.Value);
-
-            var messageDto = new MessageDto
-            {
-                Id = message.Id,
-                ChatId = chatId,
-                SenderId = message.SenderId,
-                SenderName = senderName,
-                Text = message.Text,
-                CreatedAt = message.CreatedAt,
-                IsRead = false
-            };
-
-            await Clients.Group(chatId.ToString()).SendAsync("MessageCreated", messageDto);
-
-            var participants = await chatRepository.GetChatParticipantsAsync(chatId);
-            var listUpdateDto = new MessageDto
-            {
-                Id = message.Id,
-                ChatId = chatId,
-                SenderId = message.SenderId,
-                SenderName = senderName,
-                Text = text.Length > 100 ? text[..100] + "…" : text,
-                CreatedAt = message.CreatedAt,
-                IsRead = false
-            };
-
-            // Одним вызовом на всех участников, а не циклом по одному.
-            await Clients.Users([.. participants.Select(p => p.UserId.ToString())])
-                .SendAsync("ChatListUpdated", chatId, listUpdateDto);
-        }
-        catch (Exception ex) when (ex is not HubException)
-        {
-            logger.LogError(ex, "SendMessage failed for chatId={ChatId}", chatId);
-            throw;
-        }
+        await messages.SendAsync(chatId, userId, text, Context.ConnectionAborted);
     }
 
     public async Task Ping()
     {
-        var userId = GetUserId();
-        if (!userId.HasValue) return;
+        if (UserId is not { } userId) return;
 
-        var connectionCount = await userStatusService.GetConnectionCountAsync(userId.Value);
-        var isCurrentActive = await userStatusService.IsConnectionActiveAsync(userId.Value, Context.ConnectionId);
+        var info = await presence.GetConnectionInfoAsync(userId, Context.ConnectionId);
 
         await Clients.Caller.SendAsync("Pong", new
         {
             ConnectionId = Context.ConnectionId,
-            ConnectionCount = connectionCount,
-            IsCurrentActive = isCurrentActive,
-            UserId = userId.Value
+            ConnectionCount = info.ConnectionCount,
+            IsCurrentActive = info.IsCurrentActive,
+            UserId = userId
         });
     }
 
     public async Task Typing(Guid chatId, bool isTyping)
     {
-        try
-        {
-            if (!TryAcquireCallSlot())
-                return; // Typing — не критично, просто тихо игнорируем лишние вызовы.
+        if (!TryAcquireCallSlot())
+            return; // Typing — не критично, просто тихо игнорируем лишние вызовы.
 
-            var userId = GetUserId();
-            if (!userId.HasValue) return;
+        if (UserId is not { } userId) return;
 
-            // Участники нужны для рассылки; заодно по ним проверяем членство —
-            // без лишнего запроса IsMember.
-            var participants = await chatRepository.GetChatParticipantsAsync(chatId);
-            if (!participants.Any(p => p.UserId == userId.Value))
-                throw HubErrors.Create(HubErrors.NotAMember, "User is not a member of this chat");
-
-            await userStatusService.SetTypingAsync(chatId, userId.Value, isTyping);
-            await NotifyTypingAsync(chatId, userId.Value, isTyping, participants);
-        }
-        catch (Exception ex) when (ex is not HubException)
-        {
-            logger.LogError(ex, "Typing failed for chatId={ChatId}", chatId);
-            throw;
-        }
+        await presence.SetTypingAsync(chatId, userId, isTyping, Context.ConnectionAborted);
     }
 
-    /// <summary>UserOnlineChanged всем, с кем у пользователя есть общий чат, одним вызовом.</summary>
-    private async Task NotifyPresenceAsync(Guid userId, bool isOnline)
-    {
-        var members = await chatRepository.GetAllChatMembersAsync(userId);
-        if (members.Count > 0)
-            await Clients.Users([.. members.Select(m => m.ToString())])
-                .SendAsync("UserOnlineChanged", userId, isOnline);
-    }
-
-    /// <summary>TypingChanged всем участникам чата, кроме самого печатающего, одним вызовом.</summary>
-    private Task NotifyTypingAsync(
-        Guid chatId, Guid userId, bool isTyping, IEnumerable<BasicApi.Storage.Dto.ChatParticipantDto> participants)
-    {
-        var recipients = participants
-            .Where(p => p.UserId != userId)
-            .Select(p => p.UserId.ToString())
-            .ToList();
-
-        return recipients.Count == 0
-            ? Task.CompletedTask
-            : Clients.Users(recipients).SendAsync("TypingChanged", chatId, userId, isTyping);
-    }
-
-    /// <summary>
-    /// Уведомляет пользователя о новом чате через SignalR.
-    /// Вызывается из REST-хендлеров после создания чата.
-    /// Payload — готовый элемент списка чатов, собранный ДЛЯ ЭТОГО получателя:
-    /// собеседник в нём — второй участник, а не сам получатель.
-    /// </summary>
-    public static Task NotifyChatCreatedAsync(
-        IHubContext<ChatHub> hubContext,
-        Guid recipientId,
-        ChatListItemDto item)
-        => hubContext.Clients.User(recipientId.ToString()).SendAsync("ChatCreated", item);
-
-    private Guid? GetUserId()
-    {
-        var userIdClaim = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (Guid.TryParse(userIdClaim, out var userId)) return userId;
-        return null;
-    }
+    private Guid? UserId =>
+        Guid.TryParse(Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var userId) ? userId : null;
 }

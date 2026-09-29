@@ -1,27 +1,21 @@
-using BasicApi.Features.Users;
 using BasicApi.Middleware.Exceptions;
 using BasicApi.Models.Dto.Users;
 using BasicApi.Services;
 using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
-using Microsoft.AspNetCore.Mvc;
 using Moq;
 
-namespace BasicApi.Tests.Features;
+namespace BasicApi.Tests.Services;
 
-public class UsersHandlerProfileTests
+public class UserServiceProfileTests
 {
     private readonly Mock<IUserRepository> _userRepoMock;
-    private readonly Mock<IChatRepository> _chatRepoMock;
-    private readonly Mock<IUserStatusService> _statusServiceMock;
-    private readonly UsersHandler _handler;
+    private readonly UserService _service;
 
-    public UsersHandlerProfileTests()
+    public UserServiceProfileTests()
     {
         _userRepoMock = new Mock<IUserRepository>();
-        _chatRepoMock = new Mock<IChatRepository>();
-        _statusServiceMock = new Mock<IUserStatusService>();
-        _handler = new UsersHandler(_userRepoMock.Object, _chatRepoMock.Object, _statusServiceMock.Object);
+        _service = new UserService(_userRepoMock.Object);
     }
 
     private static User MakeUser(Guid id) => new()
@@ -49,11 +43,10 @@ public class UsersHandlerProfileTests
             .ReturnsAsync(user);
 
         // Act
-        var result = await _handler.GetOwnProfileAsync(userId);
+        var result = await _service.GetOwnProfileAsync(userId);
 
         // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var dto = Assert.IsType<OwnProfileResponseDto>(okResult.Value);
+        var dto = result;
         Assert.Equal(userId, dto.UserId);
         Assert.Equal("alice", dto.Username);
         Assert.Equal("Alice", dto.DisplayName);
@@ -71,11 +64,10 @@ public class UsersHandlerProfileTests
             .ReturnsAsync(MakeUser(userId));
 
         // Act
-        var result = await _handler.GetOwnProfileAsync(userId);
+        var result = await _service.GetOwnProfileAsync(userId);
 
         // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var dto = Assert.IsType<OwnProfileResponseDto>(okResult.Value);
+        var dto = result;
         Assert.Equal("alice@example.com", dto.Email);
     }
 
@@ -91,7 +83,7 @@ public class UsersHandlerProfileTests
 
         // Act & Assert
         var ex = await Assert.ThrowsAsync<NotFoundException>(() =>
-            _handler.GetOwnProfileAsync(userId));
+            _service.GetOwnProfileAsync(userId));
 
         Assert.Equal("USER_NOT_FOUND", ex.ErrorCode);
     }
@@ -110,11 +102,10 @@ public class UsersHandlerProfileTests
             .ReturnsAsync(user);
 
         // Act
-        var result = await _handler.GetUserProfileAsync(userId);
+        var result = await _service.GetUserProfileAsync(userId);
 
         // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var dto = Assert.IsType<UserProfileResponseDto>(okResult.Value);
+        var dto = result;
         Assert.Equal(userId, dto.UserId);
         Assert.Equal("alice", dto.Username);
         Assert.Equal("Alice", dto.DisplayName);
@@ -132,18 +123,14 @@ public class UsersHandlerProfileTests
             .ReturnsAsync(MakeUser(userId));
 
         // Act
-        var result = await _handler.GetUserProfileAsync(userId);
+        var result = await _service.GetUserProfileAsync(userId);
 
         // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var dto = Assert.IsType<UserProfileResponseDto>(okResult.Value);
+        var dto = result;
 
         Assert.DoesNotContain(
             dto.GetType().GetProperties(),
             p => p.Name is "Email" or "IsOnline" or "LastLoginAt" or "PasswordHash");
-
-        _statusServiceMock.Verify(
-            s => s.GetOnlineUserIdsAsync(It.IsAny<IReadOnlySet<Guid>>()), Times.Never);
     }
 
     [Fact]
@@ -158,7 +145,7 @@ public class UsersHandlerProfileTests
 
         // Act & Assert
         var ex = await Assert.ThrowsAsync<NotFoundException>(() =>
-            _handler.GetUserProfileAsync(userId));
+            _service.GetUserProfileAsync(userId));
 
         Assert.Equal("USER_NOT_FOUND", ex.ErrorCode);
     }

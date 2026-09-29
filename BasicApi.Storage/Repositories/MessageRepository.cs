@@ -1,18 +1,16 @@
-﻿using System.Data;
-using BasicApi.Storage.Dto;
+﻿using BasicApi.Storage.Dto;
 using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
-using Dapper;
 
 namespace BasicApi.Storage.Repositories;
 
-public class MessageRepository(IDbConnectionFactory connectionFactory) : IMessageRepository
+public class MessageRepository(IDbSession db) : IMessageRepository
 {
     /// <summary>
     /// Cursor-based pagination with sender name via JOIN — avoids N+1 lookups.
     /// </summary>
     public async Task<CursorResult<MessageWithSender>> GetMessagesWithSenderCursorAsync(
-        Guid chatId, string? cursor, int limit)
+        Guid chatId, string? cursor, int limit, CancellationToken ct = default)
     {
         DateTime? beforeTime = null;
         Guid? beforeId = null;
@@ -66,20 +64,19 @@ public class MessageRepository(IDbConnectionFactory connectionFactory) : IMessag
             parameters = new { chatId, fetchSize };
         }
 
-        using var connection = connectionFactory.CreateConnection();
-        var rows = (await connection.QueryAsync<MessageWithSender>(sql, parameters)).ToList();
+        var rows = await db.QueryAsync<MessageWithSender>(sql, parameters, ct);
 
         List<MessageWithSender> items;
         MessageWithSender? extra = null;
 
         if (rows.Count > limit)
         {
-            items = rows.Take(limit).ToList();
+            items = [.. rows.Take(limit)];
             extra = rows[limit];
         }
         else
         {
-            items = rows;
+            items = [.. rows];
         }
 
         return new CursorResult<MessageWithSender>
@@ -89,18 +86,26 @@ public class MessageRepository(IDbConnectionFactory connectionFactory) : IMessag
         };
     }
 
-    public async Task<Guid> CreateAsync(Message message)
+    public Task<MessageWithSender> CreateAsync(Message message, CancellationToken ct = default)
     {
+        // Имя отправителя — тем же запросом: оно нужно в событии о новом сообщении.
         const string sql = @"
-            INSERT INTO messages (id, chat_id, sender_id, text, created_at, is_deleted) 
-            VALUES (@Id, @ChatId, @SenderId, @Text, @CreatedAt, @IsDeleted)";
+            WITH inserted AS (
+                INSERT INTO messages (id, chat_id, sender_id, text, created_at, is_deleted)
+                VALUES (@Id, @ChatId, @SenderId, @Text, @CreatedAt, @IsDeleted)
+                RETURNING id, chat_id, sender_id, text, created_at, is_deleted
+            )
+            SELECT i.id AS Id, i.chat_id AS ChatId, i.sender_id AS SenderId, i.text AS Text,
+                   i.created_at AS CreatedAt, i.is_deleted AS IsDeleted,
+                   COALESCE(u.display_name, 'Unknown') AS SenderName
+            FROM inserted i
+            LEFT JOIN users u ON u.id = i.sender_id";
 
-                using var connection = connectionFactory.CreateConnection();
-        await connection.ExecuteAsync(sql, message);
-        return message.Id;
+        return db.QuerySingleAsync<MessageWithSender>(sql, message, ct);
     }
 
-    public async Task<ReadPointerUpdate> MarkReadAsync(Guid chatId, Guid userId, Guid messageId)
+    public async Task<ReadPointerUpdate> MarkReadAsync(
+        Guid chatId, Guid userId, Guid messageId, CancellationToken ct = default)
     {
         // Одним запросом: сообщение должно быть из этого чата, а указатель движется
         // только вперёд по (created_at, id) — два устройства, отчитавшиеся не по
@@ -121,9 +126,8 @@ public class MessageRepository(IDbConnectionFactory connectionFactory) : IMessag
             )
             SELECT (SELECT COUNT(*) FROM target) AS Found, (SELECT COUNT(*) FROM moved) AS Moved";
 
-        using var connection = connectionFactory.CreateConnection();
-        var (found, moved) = await connection.QuerySingleAsync<(long Found, long Moved)>(
-            sql, new { chatId, userId, messageId });
+        var (found, moved) = await db.QuerySingleAsync<(long Found, long Moved)>(
+            sql, new { chatId, userId, messageId }, ct);
 
         if (found == 0) return ReadPointerUpdate.MessageNotFound;
         return moved > 0 ? ReadPointerUpdate.Moved : ReadPointerUpdate.NotMoved;
@@ -134,7 +138,7 @@ public class MessageRepository(IDbConnectionFactory connectionFactory) : IMessag
     /// cursor by "jump to date": the page before it ends with the last message at or
     /// before the date, so that message is included.
     /// </summary>
-    public async Task<Message?> GetFirstMessageAfterDateAsync(Guid chatId, DateTime date)
+    public Task<Message?> GetFirstMessageAfterDateAsync(Guid chatId, DateTime date, CancellationToken ct = default)
     {
         // Колонки перечислены явно: SELECT * не мапит snake_case (created_at → CreatedAt),
         // из-за этого «переход к дате» строил курсор от 0001-01-01 и возвращал пустоту.
@@ -148,8 +152,7 @@ public class MessageRepository(IDbConnectionFactory connectionFactory) : IMessag
             ORDER BY created_at, id
             LIMIT 1";
 
-        using var connection = connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<Message>(sql, new { chatId, date });
+        return db.QueryFirstOrDefaultAsync<Message>(sql, new { chatId, date }, ct);
     }
 
         /// <summary>
@@ -160,7 +163,7 @@ public class MessageRepository(IDbConnectionFactory connectionFactory) : IMessag
     /// Also returns the total count of matching messages.
     /// </summary>
     public async Task<(CursorResult<MessageWithSender> Result, int TotalCount)> SearchMessagesCursorAsync(
-        Guid chatId, string query, string? cursor, int limit)
+        Guid chatId, string query, string? cursor, int limit, CancellationToken ct = default)
     {
         DateTime? beforeTime = null;
         Guid? beforeId = null;
@@ -216,10 +219,7 @@ public class MessageRepository(IDbConnectionFactory connectionFactory) : IMessag
             parameters = new { chatId, query, fetchSize };
         }
 
-        using var connection = connectionFactory.CreateConnection();
-
-        // Fetch the page
-        var rows = (await connection.QueryAsync<MessageWithSender>(sql, parameters)).ToList();
+        var rows = await db.QueryAsync<MessageWithSender>(sql, parameters, ct);
 
         // Всего совпадений — на каждой странице: клиент показывает «N результатов»
         // независимо от того, какую страницу загрузил (раньше на 2-й и далее был 0).
@@ -232,7 +232,7 @@ public class MessageRepository(IDbConnectionFactory connectionFactory) : IMessag
                   AND m.is_deleted = false
                   AND to_tsvector('english', m.text) @@ plainto_tsquery('english', @query)";
 
-            totalCount = await connection.ExecuteScalarAsync<int>(countSql, new { chatId, query });
+            totalCount = await db.ExecuteScalarAsync<int>(countSql, new { chatId, query }, ct);
         }
 
         List<MessageWithSender> items;
@@ -240,12 +240,12 @@ public class MessageRepository(IDbConnectionFactory connectionFactory) : IMessag
 
         if (rows.Count > limit)
         {
-            items = rows.Take(limit).ToList();
+            items = [.. rows.Take(limit)];
             extra = rows[limit];
         }
         else
         {
-            items = rows;
+            items = [.. rows];
         }
 
         return (new CursorResult<MessageWithSender>

@@ -1,22 +1,20 @@
-using BasicApi.Features.Auth;
 using BasicApi.Middleware.Exceptions;
 using BasicApi.Models.Dto.Auth;
 using BasicApi.Services;
 using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
-using Microsoft.AspNetCore.Mvc;
 using Moq;
 
-namespace BasicApi.Tests.Features;
+namespace BasicApi.Tests.Services;
 
-public class AuthHandlerTests
+public class AuthServiceTests
 {
     private readonly Mock<IUserRepository> _userRepoMock;
     private readonly Mock<IJwtService> _jwtServiceMock;
     private readonly Mock<ISessionService> _sessionServiceMock;
-    private readonly AuthHandler _handler;
+    private readonly AuthService _service;
 
-    public AuthHandlerTests()
+    public AuthServiceTests()
     {
         _userRepoMock = new Mock<IUserRepository>();
         _jwtServiceMock = new Mock<IJwtService>();
@@ -39,7 +37,7 @@ public class AuthHandlerTests
                 RefreshTokenExpiresAt = DateTime.UtcNow.AddDays(30)
             });
 
-        _handler = new AuthHandler(_userRepoMock.Object, _jwtServiceMock.Object, _sessionServiceMock.Object,
+        _service = new AuthService(_userRepoMock.Object, _jwtServiceMock.Object, _sessionServiceMock.Object,
             new BasicApi.Hubs.HubConnectionRegistry());
     }
 
@@ -68,15 +66,14 @@ public class AuthHandlerTests
         _jwtServiceMock.Setup(s => s.GetExpiryDate()).Returns(expiresAt);
 
         // Act
-        var result = await _handler.LoginAsync(new LoginRequestDto
+        var result = await _service.LoginAsync(new LoginRequestDto
         {
             UsernameOrEmail = "testuser",
             Password = password
         });
 
         // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var response = Assert.IsType<AuthResponseDto>(okResult.Value);
+        var response = result;
         Assert.Equal(user.Id, response.UserId);
         Assert.Equal(user.Username, response.Username);
         Assert.Equal(user.Email, response.Email);
@@ -102,7 +99,7 @@ public class AuthHandlerTests
 
         // Act & Assert
         var ex = await Assert.ThrowsAsync<UnauthorizedException>(() =>
-            _handler.LoginAsync(new LoginRequestDto
+            _service.LoginAsync(new LoginRequestDto
             {
                 UsernameOrEmail = "testuser",
                 Password = "wrong-password"
@@ -121,7 +118,7 @@ public class AuthHandlerTests
 
         // Act & Assert
         await Assert.ThrowsAsync<UnauthorizedException>(() =>
-            _handler.LoginAsync(new LoginRequestDto
+            _service.LoginAsync(new LoginRequestDto
             {
                 UsernameOrEmail = "unknown",
                 Password = "any"
@@ -152,7 +149,7 @@ public class AuthHandlerTests
         _jwtServiceMock.Setup(s => s.GetExpiryDate()).Returns(expiresAt);
 
         // Act
-        var result = await _handler.RegisterAsync(new RegisterRequestDto
+        var result = await _service.RegisterAsync(new RegisterRequestDto
         {
             Username = "newuser",
             Email = "new@example.com",
@@ -161,8 +158,7 @@ public class AuthHandlerTests
         });
 
         // Assert
-        var createdResult = Assert.IsType<CreatedResult>(result);
-        var response = Assert.IsType<AuthResponseDto>(createdResult.Value);
+        var response = result;
         Assert.Equal(userId, response.UserId);
         Assert.Equal("newuser", response.Username);
         Assert.Equal("new@example.com", response.Email);
@@ -181,7 +177,7 @@ public class AuthHandlerTests
 
         // Act & Assert
         var ex = await Assert.ThrowsAsync<ConflictException>(() =>
-            _handler.RegisterAsync(new RegisterRequestDto
+            _service.RegisterAsync(new RegisterRequestDto
             {
                 Username = "existing",
                 Email = "new@example.com",
@@ -205,7 +201,7 @@ public class AuthHandlerTests
 
         // Act & Assert
         var ex = await Assert.ThrowsAsync<ConflictException>(() =>
-            _handler.RegisterAsync(new RegisterRequestDto
+            _service.RegisterAsync(new RegisterRequestDto
             {
                 Username = "newuser",
                 Email = "existing@example.com",
@@ -232,7 +228,7 @@ public class AuthHandlerTests
         _jwtServiceMock.Setup(s => s.GetExpiryDate()).Returns(DateTime.UtcNow.AddHours(1));
 
         // Act
-        var result = await _handler.RegisterAsync(new RegisterRequestDto
+        var result = await _service.RegisterAsync(new RegisterRequestDto
         {
             Username = "user_no_display",
             Email = "user@example.com",
@@ -240,8 +236,7 @@ public class AuthHandlerTests
         });
 
         // Assert
-        var createdResult = Assert.IsType<CreatedResult>(result);
-        var response = Assert.IsType<AuthResponseDto>(createdResult.Value);
+        var response = result;
         Assert.Equal("user_no_display", response.DisplayName);
     }
 
@@ -267,15 +262,14 @@ public class AuthHandlerTests
             .ReturnsAsync(user);
 
         // Act
-        var result = await _handler.LoginAsync(new LoginRequestDto
+        var result = await _service.LoginAsync(new LoginRequestDto
         {
             UsernameOrEmail = "testuser",
             Password = password
         }, "android", "1.2.3.4");
 
         // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var response = Assert.IsType<AuthResponseDto>(okResult.Value);
+        var response = result;
         Assert.Equal("refresh-token", response.RefreshToken);
         Assert.True(response.RefreshTokenExpiresAt > DateTime.UtcNow);
 
@@ -303,7 +297,7 @@ public class AuthHandlerTests
 
         // Act & Assert
         var ex = await Assert.ThrowsAsync<UnauthorizedException>(() =>
-            _handler.LoginAsync(new LoginRequestDto { UsernameOrEmail = "banned", Password = password }));
+            _service.LoginAsync(new LoginRequestDto { UsernameOrEmail = "banned", Password = password }));
 
         Assert.Equal("USER_INACTIVE", ex.ErrorCode);
         _sessionServiceMock.Verify(
@@ -330,7 +324,7 @@ public class AuthHandlerTests
             .ReturnsAsync(user);
 
         // Act
-        await _handler.LoginAsync(new LoginRequestDto { UsernameOrEmail = "testuser", Password = password });
+        await _service.LoginAsync(new LoginRequestDto { UsernameOrEmail = "testuser", Password = password });
 
         // Assert
         _userRepoMock.Verify(
@@ -351,7 +345,7 @@ public class AuthHandlerTests
 
         // Act & Assert
         var ex = await Assert.ThrowsAsync<ConflictException>(() =>
-            _handler.RegisterAsync(new RegisterRequestDto
+            _service.RegisterAsync(new RegisterRequestDto
             {
                 Username = "racer",
                 Email = "racer@example.com",

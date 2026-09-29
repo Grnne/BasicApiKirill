@@ -1,5 +1,6 @@
 using BasicApi.Middleware.Exceptions;
 using BasicApi.Services;
+using BasicApi.Services.Events;
 using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
 using BasicApi.Storage.Dto;
@@ -10,14 +11,13 @@ namespace BasicApi.Tests.Services;
 public class ChatServiceChatDetailsTests
 {
     private readonly Mock<IChatRepository> _chatRepoMock;
-    private readonly Mock<IMessageRepository> _msgRepoMock;
     private readonly ChatService _service;
 
     public ChatServiceChatDetailsTests()
     {
         _chatRepoMock = new Mock<IChatRepository>();
-        _msgRepoMock = new Mock<IMessageRepository>();
-        _service = new ChatService(_chatRepoMock.Object, _msgRepoMock.Object);
+        _service = new ChatService(_chatRepoMock.Object, Mock.Of<IUserRepository>(), new MembershipService(_chatRepoMock.Object),
+            Mock.Of<IPresenceService>(), Mock.Of<IChatEventPublisher>());
     }
 
     [Fact]
@@ -42,9 +42,9 @@ public class ChatServiceChatDetailsTests
             new(Guid.NewGuid(), "Bob", "bob"),
         };
 
-        _chatRepoMock.Setup(r => r.GetByIdAsync(chatId)).ReturnsAsync(chat);
-        _chatRepoMock.Setup(r => r.IsMemberAsync(chatId, userId)).ReturnsAsync(true);
-        _chatRepoMock.Setup(r => r.GetChatParticipantsAsync(chatId)).ReturnsAsync(participants);
+        _chatRepoMock.Setup(r => r.GetByIdAsync(chatId, It.IsAny<CancellationToken>())).ReturnsAsync(chat);
+        _chatRepoMock.Setup(r => r.IsMemberAsync(chatId, userId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        _chatRepoMock.Setup(r => r.GetChatParticipantsAsync(chatId, It.IsAny<CancellationToken>())).ReturnsAsync(participants);
 
         // Act
         var result = await _service.GetChatDetailsAsync(chatId, userId);
@@ -64,7 +64,7 @@ public class ChatServiceChatDetailsTests
         // Arrange
         var chatId = Guid.NewGuid();
 
-        _chatRepoMock.Setup(r => r.GetByIdAsync(chatId)).ReturnsAsync((Chat?)null);
+        _chatRepoMock.Setup(r => r.GetByIdAsync(chatId, It.IsAny<CancellationToken>())).ReturnsAsync((Chat?)null);
 
         // Act & Assert
         await Assert.ThrowsAsync<NotFoundException>(() =>

@@ -5,7 +5,7 @@ namespace BasicApi.IntegrationTests.Repositories;
 
 public class ChatListTests(PostgresFixture db) : DbTest(db)
 {
-    private ChatRepository Repository => new(Db.ConnectionFactory);
+    private ChatRepository Repository => new(NewSession());
 
     [Fact]
     public async Task ChatList_ShowsCompanionAndLastMessage()

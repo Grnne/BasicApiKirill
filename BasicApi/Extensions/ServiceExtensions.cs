@@ -2,12 +2,11 @@ using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using System.Threading.RateLimiting;
-using BasicApi.Features.Auth;
-using BasicApi.Features.Chats;
-using BasicApi.Features.Users;
 using BasicApi.Hubs;
 using BasicApi.Middleware.Exceptions;
 using BasicApi.Services;
+using BasicApi.Services.Events;
+using BasicApi.Storage;
 using BasicApi.Storage.Interfaces;
 using BasicApi.Storage.Migrations;
 using BasicApi.Storage.Repositories;
@@ -18,6 +17,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 
@@ -73,6 +73,8 @@ public static class ServiceExtensions
                 services.AddApiRateLimiting(configuration);
                 services.AddSignalR(options =>
                 {
+                    // Доменные ошибки → HubException с кодом; остальное — в лог.
+                    options.AddFilter<HubErrorFilter>();
                     // Разрешаем параллельную обработку вызовов
                     options.MaximumParallelInvocationsPerClient = 2;
                     // Текст исключений клиенту — только при разработке: в проде он
@@ -90,18 +92,25 @@ public static class ServiceExtensions
 
                 services.AddSingleton<IDbConnectionFactory>(new NpgsqlConnectionFactory(connectionString));
 
+        // Одна сессия БД на запрос (вызов хаба): репозитории делят её транзакцию.
+        services.AddScoped<IDbSession, DbSession>();
         services.AddScoped<IChatRepository, ChatRepository>();
         services.AddScoped<IMessageRepository, MessageRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<ISessionRepository, SessionRepository>();
+
+        // Доменные сервисы: контроллеры и хаб — только адаптеры над ними.
+        services.AddScoped<IMembershipService, MembershipService>();
         services.AddScoped<IChatService, ChatService>();
+        services.AddScoped<IMessageService, MessageService>();
+        services.AddScoped<IPresenceService, PresenceService>();
+        services.AddScoped<IUserService, UserService>();
+        services.AddScoped<AuthService>();
         services.AddScoped<ISessionService, SessionService>();
+        services.AddScoped<IChatEventPublisher, SignalRChatEventPublisher>();
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IUserStatusService, UserStatusService>();
         services.AddSingleton<HubConnectionRegistry>();
-        services.AddScoped<AuthHandler>();
-        services.AddScoped<ChatsHandler>();
-        services.AddScoped<UsersHandler>();
 
         // JWT
         services.AddScoped<IJwtService, JwtService>();
