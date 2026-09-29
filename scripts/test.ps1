@@ -82,7 +82,8 @@ try {
     Step 'Vulnerable packages' {
         # Per project, not per solution: docker-compose.dcproj in the solution breaks the command.
         $found = @()
-        $projects = Get-ChildItem $root -Filter *.csproj -Recurse -Depth 1
+        $projects = Get-ChildItem $root -Filter *.csproj -Recurse -Depth 2 |
+            Where-Object FullName -notmatch '[\\/](bin|obj|node_modules)[\\/]'
         foreach ($csproj in $projects) {
             $json = dotnet list $csproj.FullName package --vulnerable --include-transitive --format json | Out-String
             if ($LASTEXITCODE -ne 0) { Write-Host $json; return }

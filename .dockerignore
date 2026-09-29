@@ -30,3 +30,5 @@ README.md
 !.git/refs/heads/**
 # Built frontend: it gets into the image from the client stage, not from the host
 BasicApi/wwwroot/client
+# Load test tool: not part of the image
+tools/
