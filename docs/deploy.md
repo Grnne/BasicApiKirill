@@ -56,7 +56,20 @@ curl -fsS "https://$DOMAIN/health/ready"   # Healthy (через Caddy и TLS)
 ```
 
 Миграции применяются при старте приложения. Если старт упал на миграции —
-сразу к шагу 5. Если старт упал с `Invalid configuration` — в `.env.prod`
+сразу к шагу 5.
+
+**Нормальные предупреждения при старте** — на них не реагировать:
+
+- `No XML encryptor configured. Key … may be persisted to storage in unencrypted form` —
+  ключи Data Protection живут в tmpfs контейнера и пересоздаются при рестарте; для
+  JWT-авторизации они не используются.
+- `Overriding HTTP_PORTS '8080' and HTTPS_PORTS ''. Binding to values defined by URLS instead`
+  — порт задан через `ASPNETCORE_URLS`, это и есть 8080.
+- `Cannot load library libgssapi_krb5.so.2` и следом `Error: libgssapi_krb5.so.2: cannot open
+  shared object file` — это Npgsql ищет Kerberos, который не используется; строка не из лога
+  приложения, хоть и начинается с `Error`.
+
+Всё остальное с `"LogLevel":"Error"` при старте — повод разбираться. Если старт упал с `Invalid configuration` — в `.env.prod`
 не задан или слабый секрет (например, `JWT_KEY`); приложение не стартует
 с ключом короче 32 байт или с заглушкой `CHANGE_ME`.
 
