@@ -17,6 +17,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BasicApi.Storage", "BasicAp
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BasicApi.Tests", "BasicApi.Tests\BasicApi.Tests.csproj", "{E2DE08E6-FA8E-47AD-9756-4B81AA254134}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BasicApi.IntegrationTests", "BasicApi.IntegrationTests\BasicApi.IntegrationTests.csproj", "{6C3927FD-2F92-4D32-9CDA-D02D7C84A095}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -71,6 +73,18 @@ Global
 		{E2DE08E6-FA8E-47AD-9756-4B81AA254134}.Release|x64.Build.0 = Release|Any CPU
 		{E2DE08E6-FA8E-47AD-9756-4B81AA254134}.Release|x86.ActiveCfg = Release|Any CPU
 		{E2DE08E6-FA8E-47AD-9756-4B81AA254134}.Release|x86.Build.0 = Release|Any CPU
+		{6C3927FD-2F92-4D32-9CDA-D02D7C84A095}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6C3927FD-2F92-4D32-9CDA-D02D7C84A095}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6C3927FD-2F92-4D32-9CDA-D02D7C84A095}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{6C3927FD-2F92-4D32-9CDA-D02D7C84A095}.Debug|x64.Build.0 = Debug|Any CPU
+		{6C3927FD-2F92-4D32-9CDA-D02D7C84A095}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{6C3927FD-2F92-4D32-9CDA-D02D7C84A095}.Debug|x86.Build.0 = Debug|Any CPU
+		{6C3927FD-2F92-4D32-9CDA-D02D7C84A095}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6C3927FD-2F92-4D32-9CDA-D02D7C84A095}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6C3927FD-2F92-4D32-9CDA-D02D7C84A095}.Release|x64.ActiveCfg = Release|Any CPU
+		{6C3927FD-2F92-4D32-9CDA-D02D7C84A095}.Release|x64.Build.0 = Release|Any CPU
+		{6C3927FD-2F92-4D32-9CDA-D02D7C84A095}.Release|x86.ActiveCfg = Release|Any CPU
+		{6C3927FD-2F92-4D32-9CDA-D02D7C84A095}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
