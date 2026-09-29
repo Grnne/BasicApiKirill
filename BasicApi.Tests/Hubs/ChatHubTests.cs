@@ -146,20 +146,15 @@ public class ChatHubTests
         // Act
         await _hub.OnConnectedAsync();
 
-        // Assert
-        Assert.Equal(2, _clientProxy.Invocations.Count);
-        Assert.All(_clientProxy.Invocations, inv =>
-        {
-            Assert.Equal("UserOnlineChanged", inv.Method);
-            Assert.Equal(2, inv.Args.Length);
-            Assert.Equal(_userId, inv.Args[0]);
-            Assert.True((bool)inv.Args[1]!);
-        });
+        // Assert — одна рассылка на всех участников, а не цикл по одному
+        var inv = Assert.Single(_clientProxy.Invocations);
+        Assert.Equal("UserOnlineChanged", inv.Method);
+        Assert.Equal(2, inv.Args.Length);
+        Assert.Equal(_userId, inv.Args[0]);
+        Assert.True((bool)inv.Args[1]!);
 
-        foreach (var memberId in memberIds)
-        {
-            _clientsMock.Verify(c => c.User(memberId.ToString()), Times.Once);
-        }
+        _clientsMock.Verify(c => c.Users(It.Is<IReadOnlyList<string>>(ids =>
+            ids.Count == 2 && memberIds.All(m => ids.Contains(m.ToString())))), Times.Once);
     }
 
     [Fact]
@@ -226,18 +221,13 @@ public class ChatHubTests
         await _hub.OnDisconnectedAsync(null);
 
         // Assert
-        Assert.Equal(2, _clientProxy.Invocations.Count);
-        Assert.All(_clientProxy.Invocations, inv =>
-        {
-            Assert.Equal("UserOnlineChanged", inv.Method);
-            Assert.Equal(_userId, inv.Args[0]);
-            Assert.False((bool)inv.Args[1]!);
-        });
+        var inv = Assert.Single(_clientProxy.Invocations);
+        Assert.Equal("UserOnlineChanged", inv.Method);
+        Assert.Equal(_userId, inv.Args[0]);
+        Assert.False((bool)inv.Args[1]!);
 
-        foreach (var memberId in memberIds)
-        {
-            _clientsMock.Verify(c => c.User(memberId.ToString()), Times.Once);
-        }
+        _clientsMock.Verify(c => c.Users(It.Is<IReadOnlyList<string>>(ids =>
+            ids.Count == 2 && memberIds.All(m => ids.Contains(m.ToString())))), Times.Once);
     }
 
     [Fact]
@@ -403,27 +393,23 @@ public class ChatHubTests
                 !m.IsDeleted)),
             Times.Once);
 
-        // Должно быть 3 ивента: MessageCreated в группу + ChatListUpdated себе + ChatListUpdated другому
-        Assert.Equal(3, _clientProxy.Invocations.Count);
+        // Два события: MessageCreated в группу + ChatListUpdated всем участникам одним вызовом
+        Assert.Equal(2, _clientProxy.Invocations.Count);
 
-        // Первый — MessageCreated в группу
+        // Первое — MessageCreated в группу
         Assert.Equal("MessageCreated", _clientProxy.Invocations[0].Method);
         var dto = Assert.IsType<BasicApi.Models.Dto.Message.MessageDto>(_clientProxy.Invocations[0].Args[0]);
         Assert.Equal(text, dto.Text);
         Assert.Equal(senderName, dto.SenderName);
         Assert.Equal(_userId, dto.SenderId);
 
-        // Второй — ChatListUpdated себе
+        // Второе — ChatListUpdated себе и собеседнику
         Assert.Equal("ChatListUpdated", _clientProxy.Invocations[1].Method);
         Assert.Equal(chatId, _clientProxy.Invocations[1].Args[0]);
-        var selfUpdate = Assert.IsType<BasicApi.Models.Dto.Message.MessageDto>(_clientProxy.Invocations[1].Args[1]);
-        Assert.Equal(text, selfUpdate.Text);
-
-        // Третий — ChatListUpdated другому участнику
-        Assert.Equal("ChatListUpdated", _clientProxy.Invocations[2].Method);
-        Assert.Equal(chatId, _clientProxy.Invocations[2].Args[0]);
-        var otherUpdate = Assert.IsType<BasicApi.Models.Dto.Message.MessageDto>(_clientProxy.Invocations[2].Args[1]);
-        Assert.Equal(text, otherUpdate.Text);
+        var update = Assert.IsType<BasicApi.Models.Dto.Message.MessageDto>(_clientProxy.Invocations[1].Args[1]);
+        Assert.Equal(text, update.Text);
+        _clientsMock.Verify(c => c.Users(It.Is<IReadOnlyList<string>>(ids =>
+            ids.Count == 2 && ids.Contains(_userId.ToString()) && ids.Contains(otherUserId.ToString()))), Times.Once);
     }
 
     [Fact]

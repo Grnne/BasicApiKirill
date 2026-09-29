@@ -77,11 +77,7 @@ public class ChatHub(
                 }
 
                 if (isFirstConnection)
-                {
-                    var members = await chatRepository.GetAllChatMembersAsync(userId.Value);
-                    foreach (var memberId in members)
-                        await Clients.User(memberId.ToString()).SendAsync("UserOnlineChanged", userId.Value, true);
-                }
+                    await NotifyPresenceAsync(userId.Value, isOnline: true);
             }
             await base.OnConnectedAsync();
         }
@@ -116,9 +112,7 @@ public class ChatHub(
 
                 if (wentOffline)
                 {
-                    var members = await chatRepository.GetAllChatMembersAsync(userId.Value);
-                    foreach (var memberId in members)
-                        await Clients.User(memberId.ToString()).SendAsync("UserOnlineChanged", userId.Value, false);
+                    await NotifyPresenceAsync(userId.Value, isOnline: false);
 
                     // Ушёл последним соединением посреди набора — «печатает» гасим сразу,
                     // не дожидаясь TTL.
@@ -244,9 +238,9 @@ public class ChatHub(
                 IsRead = false
             };
 
-            foreach (var participant in participants)
-                await Clients.User(participant.UserId.ToString())
-                    .SendAsync("ChatListUpdated", chatId, listUpdateDto);
+            // Одним вызовом на всех участников, а не циклом по одному.
+            await Clients.Users([.. participants.Select(p => p.UserId.ToString())])
+                .SendAsync("ChatListUpdated", chatId, listUpdateDto);
         }
         catch (Exception ex) when (ex is not HubException)
         {
@@ -296,6 +290,15 @@ public class ChatHub(
             logger.LogError(ex, "Typing failed for chatId={ChatId}", chatId);
             throw;
         }
+    }
+
+    /// <summary>UserOnlineChanged всем, с кем у пользователя есть общий чат, одним вызовом.</summary>
+    private async Task NotifyPresenceAsync(Guid userId, bool isOnline)
+    {
+        var members = await chatRepository.GetAllChatMembersAsync(userId);
+        if (members.Count > 0)
+            await Clients.Users([.. members.Select(m => m.ToString())])
+                .SendAsync("UserOnlineChanged", userId, isOnline);
     }
 
     /// <summary>TypingChanged всем участникам чата, кроме самого печатающего, одним вызовом.</summary>
