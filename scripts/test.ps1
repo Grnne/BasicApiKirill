@@ -50,7 +50,9 @@ function TestCounts([string]$dir) {
 function RunTests([string]$project, [string]$key) {
     $dir = Join-Path $results $key
     if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
+    # E2E идут отдельно (scripts/e2e.ps1) — им нужен развёрнутый стек.
     dotnet test (Join-Path $root "$project/$project.csproj") -c Release --no-build `
+        --filter "Category!=E2E" `
         --logger "trx" --logger "console;verbosity=minimal" --results-directory $dir
     $code = $LASTEXITCODE
     $summary[$key] = TestCounts $dir

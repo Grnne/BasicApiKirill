@@ -323,8 +323,11 @@ Authorization: Bearer {access}
 
 - `Typing(chatId, …)` от не-участника чата — ошибка `NOT_A_MEMBER` (раньше
   рассылалась всем участникам чужого чата).
-- **Ошибки методов хаба** приходят как `HubException` с кодом в начале текста:
-  `"NOT_A_MEMBER: User is not a member of this chat"`. Код — часть до двоеточия.
+- **Ошибки методов хаба** приходят как `HubException` с кодом. SignalR добавляет
+  к тексту свой префикс, поэтому клиент получает:
+  `"An unexpected error occurred invoking 'Typing' on the server. HubException: NOT_A_MEMBER: User is not a member of this chat"`.
+  Код — слово сразу после `HubException: `, например так:
+  `/HubException: ([A-Z_]+):/`.
 - «Печатает» живёт **6 секунд** без повторного `Typing(true)`: пока пользователь
   набирает текст, клиент повторяет вызов раз в 3–4 секунды. `GET /api/users/typing`
   не показывает протухшие записи.
@@ -334,7 +337,7 @@ Authorization: Bearer {access}
 ### 9.3. Отправка сообщения и вход в чат: ошибки вместо тишины
 
 Раньше `SendMessage` и `JoinChat` при нарушении правил просто ничего не делали.
-Теперь — `HubException` с кодом:
+Теперь — `HubException` с кодом (как его достать из текста — в 9.2):
 
 | Код | Когда |
 |---|---|

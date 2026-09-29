@@ -372,3 +372,6 @@ FodyWeavers.xsd
 
 # Собранный фронтенд (Vite -> BasicApi/wwwroot/client)
 BasicApi/wwwroot/client/
+
+# Локальный override прод-стека (docs/deploy.md, «Прод-стек локально»)
+docker-compose.local.yml

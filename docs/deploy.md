@@ -67,7 +67,12 @@ curl -fsS "https://$DOMAIN/health/ready"   # Healthy (через Caddy и TLS)
    отправка сообщения между двумя браузерами, получение в реальном времени,
    перезагрузка страницы. Полный чек-лист — в пункте 3.1
    [плана 1](plan-1-refactoring.md).
-3. Записать деплой в журнал на сервере:
+3. Сквозные тесты против прода (с машины разработчика; создают двух
+   пользователей `E2E_Alice_…`/`e2e_bob_…`):
+   ```powershell
+   ./scripts/e2e.ps1 -BaseUrl https://<DOMAIN>
+   ```
+4. Записать деплой в журнал на сервере:
    ```bash
    echo "$(date -Is) $(git rev-parse --short HEAD) backup=$BACKUP" >> ~/deploy.log
    ```
@@ -105,6 +110,34 @@ $COMPOSE up -d --no-build basicapi
    (`certificate obtained successfully`).
 4. Том `basicchat_caddy_data` хранит сертификаты — не удалять: при частых
    перевыпусках Let's Encrypt временно блокирует домен.
+
+## Прод-стек локально (перед деплоем)
+
+Тот же `docker-compose.prod.yml` (Caddy, закрытые сети, read-only контейнер),
+но с `DOMAIN=localhost`: Caddy выпускает для него сертификат своим локальным
+центром, без Let's Encrypt. Порт 80 на Windows часто занят системой, поэтому
+Caddy публикуется на 8081/8443 через override-файл:
+
+```yaml
+# docker-compose.local.yml (не коммитить вместе с секретами)
+services:
+  caddy:
+    ports: !override
+      - "8081:80"
+      - "8443:443"
+```
+
+`.env.local` — как `.env.prod.example`, с `DOMAIN=localhost` и любыми
+сгенерированными секретами. Затем:
+
+```powershell
+docker compose --env-file .env.local -f docker-compose.prod.yml -f docker-compose.local.yml up -d --build
+./scripts/e2e.ps1                      # по умолчанию https://localhost:8443
+docker compose --env-file .env.local -f docker-compose.prod.yml -f docker-compose.local.yml down -v
+```
+
+`down -v` удаляет и тома стека (база, сертификаты Caddy) — для локального
+прогона это то, что нужно; на сервере `-v` не использовать.
 
 ## Миграции с предусловиями
 
