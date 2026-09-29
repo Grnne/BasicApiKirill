@@ -73,6 +73,19 @@ public sealed class OutboxChatEventPublisher(
             return true;
         }, ct: ct);
 
+    public Task ChatUpdatedAsync(ChatUpdatedDto update, IReadOnlyCollection<Guid> memberIds, CancellationToken ct = default) =>
+        ToAllAsync(UpdateTypes.ChatUpdated, update, memberIds, ct);
+
+    public Task ChatDeletedAsync(ChatDeletedDto deleted, IReadOnlyCollection<Guid> memberIds, CancellationToken ct = default) =>
+        db.InTransactionAsync(async ct =>
+        {
+            await journal.AppendAsync(memberIds, UpdateTypes.ChatDeleted, Json(deleted), ct);
+            await EnqueueAsync(UpdateTypes.ChatDeleted, ct,
+                HubSend.LeaveGroup(memberIds, deleted.ChatId),
+                HubSend.Users(memberIds, UpdateTypes.ChatDeleted, deleted));
+            return true;
+        }, ct: ct);
+
     /// <summary>
     /// The same payload to the journal and to every connection of the recipients — not just the
     /// open chat: a client updates the chat list preview from it too.
@@ -129,5 +142,7 @@ public static class UpdateTypes
     public const string MemberUpdated = "MemberUpdated";
     public const string MemberAdded = "MemberAdded";
     public const string MemberRemoved = "MemberRemoved";
+    public const string ChatUpdated = "ChatUpdated";
+    public const string ChatDeleted = "ChatDeleted";
     public const string ChatCreated = "ChatCreated";
 }

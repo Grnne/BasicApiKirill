@@ -1123,6 +1123,32 @@ MessagesRead:      { "chatId": "…", "userId": "<кто прочитал>", "se
 
 Клиенту на `MemberRemoved` со своим `userId` — убрать чат из списка и закрыть, если открыт.
 
+### 14.4. Изменение и удаление группы
+
+**`PATCH /api/chats/{chatId}`** — меняются только указанные поля:
+
+```json
+{ "title": "Запуск v2",                              // нужно changeInfo
+  "memberPermissions": { "sendMessages": false } }   // владелец или админ с removeMembers
+```
+
+- `title` — системное сообщение «Название группы изменено на …» всем участникам.
+- `memberPermissions` — права участников по умолчанию; указанное меняется, остальное остаётся
+  (`{ "sendMessages": false }` — группа только для чтения участникам). Только `sendMessages`,
+  `sendMedia`, `addMembers`, `changeInfo`. Личные переопределения участников сильнее.
+- `200` — `{ "chatId", "title", "memberPermissions" }` как сейчас; участникам то же приходит
+  **`ChatUpdated`**. Без изменений — без события.
+- Ошибки: `400 NOT_A_GROUP`, `400 INVALID_TITLE`, `400 INVALID_PERMISSIONS`, `403 NOT_A_MEMBER`,
+  `403 PERMISSION_DENIED`, `429 RATE_LIMITED`.
+
+Клиенту на `ChatUpdated`: обновить название в списке и шапке, пересчитать свои права
+(`GET /api/chats/{chatId}` → `myPermissions`).
+
+**`DELETE /api/chats/{chatId}`** — удалить группу у всех. Только владелец. `204`.
+Все участники получают **`ChatDeleted`** `{ "chatId": "…" }`, их соединения перестают получать
+события группы; история удаляется. Ошибки: `400 NOT_A_GROUP`, `403 NOT_A_MEMBER`,
+`403 PERMISSION_DENIED`, `429 RATE_LIMITED`.
+
 ---
 
 ## Справочник кодов ошибок

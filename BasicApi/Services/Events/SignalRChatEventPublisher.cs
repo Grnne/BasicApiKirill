@@ -69,6 +69,15 @@ public sealed class SignalRChatEventPublisher(IHubContext<ChatHub> hub, HubConne
         await ToUsers(recipientIds, "MemberRemoved", removed, ct);
     }
 
+    public Task ChatUpdatedAsync(ChatUpdatedDto update, IReadOnlyCollection<Guid> memberIds, CancellationToken ct = default) =>
+        ToUsers(memberIds, "ChatUpdated", update, ct);
+
+    public async Task ChatDeletedAsync(ChatDeletedDto deleted, IReadOnlyCollection<Guid> memberIds, CancellationToken ct = default)
+    {
+        await connections.RemoveFromGroupAsync(hub.Groups, memberIds, deleted.ChatId.ToString(), ct);
+        await ToUsers(memberIds, "ChatDeleted", deleted, ct);
+    }
+
     public Task ChatCreatedAsync(Guid recipientId, ChatListItemDto item, bool live = true, CancellationToken ct = default) =>
         live ? hub.Clients.User(recipientId.ToString()).SendAsync("ChatCreated", item, ct) : Task.CompletedTask;
 

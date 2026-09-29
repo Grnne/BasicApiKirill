@@ -43,6 +43,58 @@ public class GroupsController(IGroupService groups) : ControllerBase
         Created(string.Empty, await groups.CreateAsync(User.GetUserId(), dto.Title, dto.MemberIds, ct));
 
     /// <summary>
+    /// Rename a group or change what its members may do by default.
+    /// </summary>
+    /// <remarks>
+    /// Only the given fields change. <c>title</c> — needs <c>changeInfo</c>; members get a system
+    /// message "title changed". <c>memberPermissions</c> — the owner or an admin with
+    /// <c>removeMembers</c>; only <c>sendMessages</c>, <c>sendMedia</c>, <c>addMembers</c>,
+    /// <c>changeInfo</c>, and a given field changes, an omitted one stays (<c>{ "sendMessages": false }</c>
+    /// makes the group read-only for members). Members' own overrides still win.
+    ///
+    /// The body is the group's title and default permissions now; members receive <c>ChatUpdated</c>
+    /// with the same. No change — no event.
+    ///
+    /// Errors: <c>400 NOT_A_GROUP</c>, <c>400 INVALID_TITLE</c>, <c>400 INVALID_PERMISSIONS</c>,
+    /// <c>403 NOT_A_MEMBER</c>, <c>403 PERMISSION_DENIED</c>, <c>429 RATE_LIMITED</c>.
+    /// </remarks>
+    /// <param name="chatId">Group ID</param>
+    /// <param name="dto">What to change</param>
+    /// <param name="ct">Request cancellation.</param>
+    [HttpPatch("{chatId}")]
+    [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
+    [ProducesResponseType(typeof(ChatUpdatedDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> UpdateGroup(Guid chatId, [FromBody] UpdateGroupDto dto, CancellationToken ct) =>
+        Ok(await groups.UpdateAsync(chatId, User.GetUserId(), dto.Title, dto.MemberPermissions, ct));
+
+    /// <summary>
+    /// Delete a group for everyone.
+    /// </summary>
+    /// <remarks>
+    /// The owner only. The group and its history are gone for all members; they receive
+    /// <c>ChatDeleted</c>, and their connections stop getting the group's events.
+    ///
+    /// Errors: <c>400 NOT_A_GROUP</c>, <c>403 NOT_A_MEMBER</c>, <c>403 PERMISSION_DENIED</c>,
+    /// <c>429 RATE_LIMITED</c>.
+    /// </remarks>
+    /// <param name="chatId">Group ID</param>
+    /// <param name="ct">Request cancellation.</param>
+    [HttpDelete("{chatId}")]
+    [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> DeleteGroup(Guid chatId, CancellationToken ct)
+    {
+        await groups.DeleteAsync(chatId, User.GetUserId(), ct);
+        return NoContent();
+    }
+
+    /// <summary>
     /// Members of a group with their roles and permissions.
     /// </summary>
     /// <remarks>

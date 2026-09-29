@@ -52,6 +52,12 @@ public interface IChatEventPublisher
     /// </summary>
     Task MemberRemovedAsync(MemberRemovedDto removed, IReadOnlyCollection<Guid> recipientIds, CancellationToken ct = default);
 
+    /// <summary><c>ChatUpdated</c> — the group's title or default permissions — to all members.</summary>
+    Task ChatUpdatedAsync(ChatUpdatedDto update, IReadOnlyCollection<Guid> memberIds, CancellationToken ct = default);
+
+    /// <summary><c>ChatDeleted</c> to all who were members; their connections stop getting the chat's events.</summary>
+    Task ChatDeletedAsync(ChatDeletedDto deleted, IReadOnlyCollection<Guid> memberIds, CancellationToken ct = default);
+
     /// <summary>
     /// A new chat for a user; the card is built for them. <paramref name="live"/> —
     /// whether to send <c>ChatCreated</c> right away: the chat creator does not get it, they got the card

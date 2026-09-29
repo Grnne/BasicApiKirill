@@ -69,6 +69,22 @@ public interface IGroupService
     /// the last one to leave deletes the group. Errors: 400 <c>NOT_A_GROUP</c>, 403 <c>NOT_A_MEMBER</c>.
     /// </summary>
     Task LeaveAsync(Guid chatId, Guid userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Changes the title (needs <c>changeInfo</c>; a system message) and what members may do by
+    /// default (the owner or an admin with <c>removeMembers</c>; only member permissions). Given
+    /// fields change, the rest stay. Members get <c>ChatUpdated</c>; no change — no event.
+    /// Errors: 400 <c>NOT_A_GROUP</c>/<c>INVALID_TITLE</c>/<c>INVALID_PERMISSIONS</c>,
+    /// 403 <c>NOT_A_MEMBER</c>/<c>PERMISSION_DENIED</c>.
+    /// </summary>
+    Task<ChatUpdatedDto> UpdateAsync(
+        Guid chatId, Guid userId, string? title, PermissionsPatchDto? memberPermissions, CancellationToken ct = default);
+
+    /// <summary>
+    /// Deletes the group with its history for everyone (the owner). Members get <c>ChatDeleted</c>.
+    /// Errors: 400 <c>NOT_A_GROUP</c>, 403 <c>NOT_A_MEMBER</c>/<c>PERMISSION_DENIED</c>.
+    /// </summary>
+    Task DeleteAsync(Guid chatId, Guid userId, CancellationToken ct = default);
 }
 
 public sealed class GroupService(
@@ -309,6 +325,70 @@ public sealed class GroupService(
             await AuditAsync(chatId, userId, "member_left", userId, null, now, ct);
             await events.MemberRemovedAsync(
                 new MemberRemovedDto { ChatId = chatId, UserId = userId }, [.. remaining, userId], ct);
+            return true;
+        }, ct: ct);
+    }
+
+    public async Task<ChatUpdatedDto> UpdateAsync(
+        Guid chatId, Guid userId, string? title, PermissionsPatchDto? memberPermissions, CancellationToken ct = default)
+    {
+        var name = title is null ? null : NormalizeTitle(title);
+        if (memberPermissions is not null && GroupRights.TouchesAdminPermissions(memberPermissions))
+            throw new BadRequestException("Members cannot get admin permissions by default", "INVALID_PERMISSIONS");
+        await DemandGroupAsync(chatId, userId, ct);
+
+        var now = Now();
+        return await db.InTransactionAsync(async ct =>
+        {
+            await groups.LockAsync(chatId, ct);
+            var chat = await chats.GetByIdAsync(chatId, ct) ?? throw new NotFoundException("Chat not found", "CHAT_NOT_FOUND");
+            var settings = GroupRights.ReadSettings(chat.SettingsJson);
+            var renamed = name is not null && name != chat.Title;
+            var merged = memberPermissions is null ? settings.MemberPermissions : GroupRights.Merge(settings.MemberPermissions, memberPermissions);
+            var regranted = GroupRights.WritePatch(merged) != GroupRights.WritePatch(settings.MemberPermissions);
+
+            if (renamed)
+                (await policy.CanManageAsync(userId, chatId, GroupAction.ChangeInfo, ct: ct)).Demand();
+            if (regranted)
+                (await policy.CanManageAsync(userId, chatId, GroupAction.ChangeMemberDefaults, ct: ct)).Demand();
+
+            settings.MemberPermissions = merged;
+            var current = new ChatUpdatedDto
+            {
+                ChatId = chatId,
+                Title = renamed ? name : chat.Title,
+                MemberPermissions = GroupRights.MemberPermissions(GroupRights.WriteSettings(settings))
+            };
+            if (!renamed && !regranted)
+                return current;
+
+            await groups.UpdateAsync(chatId, current.Title!, GroupRights.WriteSettings(settings), now, ct);
+            var memberIds = await chats.GetMemberIdsAsync(chatId, ct);
+            if (renamed)
+            {
+                await PostSystemMessageAsync(chatId, userId, SystemMessages.Renamed(name!), now, memberIds, ct);
+                await AuditAsync(chatId, userId, "title_changed", null, new { from = chat.Title, to = name }, now, ct);
+            }
+            if (regranted)
+                await AuditAsync(chatId, userId, "member_permissions_changed", null, new { memberPermissions = merged }, now, ct);
+
+            await events.ChatUpdatedAsync(current, memberIds, ct);
+            return current;
+        }, ct: ct);
+    }
+
+    public async Task DeleteAsync(Guid chatId, Guid userId, CancellationToken ct = default)
+    {
+        await DemandGroupAsync(chatId, userId, ct);
+
+        await db.InTransactionAsync(async ct =>
+        {
+            await groups.LockAsync(chatId, ct);
+            (await policy.CanManageAsync(userId, chatId, GroupAction.DeleteGroup, ct: ct)).Demand();
+
+            var memberIds = await chats.GetMemberIdsAsync(chatId, ct);
+            await groups.DeleteAsync(chatId, ct);
+            await events.ChatDeletedAsync(new ChatDeletedDto { ChatId = chatId }, memberIds, ct);
             return true;
         }, ct: ct);
     }
