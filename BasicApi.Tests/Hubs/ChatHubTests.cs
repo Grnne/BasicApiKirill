@@ -91,6 +91,10 @@ public class ChatHubTests
             .Setup(s => s.SetTypingAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<bool>()))
             .Returns(Task.CompletedTask);
 
+        _statusMock
+            .Setup(s => s.ClearTypingAsync(It.IsAny<Guid>()))
+            .ReturnsAsync([]);
+
         // Настраиваем контекст с authenticated user
         var claimsPrincipal = new ClaimsPrincipal(new ClaimsIdentity([
             new Claim(ClaimTypes.NameIdentifier, _userId.ToString())
@@ -108,6 +112,10 @@ public class ChatHubTests
 
         _clientsMock
             .Setup(c => c.Group(It.IsAny<string>()))
+            .Returns(_clientProxy);
+
+        _clientsMock
+            .Setup(c => c.Users(It.IsAny<IReadOnlyList<string>>()))
             .Returns(_clientProxy);
 
         _clientsMock
@@ -529,6 +537,48 @@ public class ChatHubTests
         Assert.Equal(chatId, inv.Args[0]);
         Assert.Equal(_userId, inv.Args[1]);
         Assert.True((bool)inv.Args[2]!);
+    }
+
+    [Fact]
+    public async Task Typing_ByNonMember_IsRejected_AndNotBroadcast()
+    {
+        // Раньше не-участник мог слать «печатает» в любой чат, зная его id.
+        var chatId = Guid.NewGuid();
+        _chatRepoMock
+            .Setup(r => r.GetChatParticipantsAsync(chatId))
+            .ReturnsAsync([
+                new BasicApi.Storage.Dto.ChatParticipantDto(Guid.NewGuid(), "A", "a"),
+                new BasicApi.Storage.Dto.ChatParticipantDto(Guid.NewGuid(), "B", "b")
+            ]);
+
+        var ex = await Assert.ThrowsAsync<HubException>(() => _hub.Typing(chatId, true));
+
+        Assert.StartsWith("NOT_A_MEMBER", ex.Message);
+        _statusMock.Verify(s => s.SetTypingAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<bool>()), Times.Never);
+        Assert.Empty(_clientProxy.Invocations);
+    }
+
+    [Fact]
+    public async Task OnDisconnected_LastConnection_ClearsTyping_AndTellsChatMembers()
+    {
+        var chatId = Guid.NewGuid();
+        var otherUserId = Guid.NewGuid();
+        _chatRepoMock.Setup(r => r.GetAllChatMembersAsync(_userId)).ReturnsAsync([]);
+        _chatRepoMock
+            .Setup(r => r.GetChatParticipantsAsync(chatId))
+            .ReturnsAsync([
+                new BasicApi.Storage.Dto.ChatParticipantDto(_userId, "Me", "me"),
+                new BasicApi.Storage.Dto.ChatParticipantDto(otherUserId, "Other", "other")
+            ]);
+        _statusMock.Setup(s => s.ClearTypingAsync(_userId)).ReturnsAsync([chatId]);
+        await _hub.OnConnectedAsync();
+
+        await _hub.OnDisconnectedAsync(null);
+
+        var inv = Assert.Single(_clientProxy.Invocations, i => i.Method == "TypingChanged");
+        Assert.Equal(chatId, inv.Args[0]);
+        Assert.Equal(_userId, inv.Args[1]);
+        Assert.False((bool)inv.Args[2]!);
     }
 
     [Fact]

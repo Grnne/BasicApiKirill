@@ -12,10 +12,10 @@ public interface IUserStatusService
     Task<IReadOnlySet<Guid>> GetOnlineUserIdsAsync(IReadOnlySet<Guid> userIds);
 
     /// <summary>
-    /// Returns a map of chatId → set of userIds currently typing in that chat,
-    /// for all chats the given user is a member of.
+    /// Returns a map of chatId → set of userIds currently typing, for the given chats only.
+    /// Chats with nobody typing are omitted. Entries older than the typing TTL are ignored.
     /// </summary>
-    Task<Dictionary<Guid, HashSet<Guid>>> GetTypingStatusAsync(Guid userId);
+    Task<Dictionary<Guid, HashSet<Guid>>> GetTypingStatusAsync(IReadOnlyCollection<Guid> chatIds);
 
     /// <summary>
     /// Marks a user as online or offline.
@@ -35,7 +35,14 @@ public interface IUserStatusService
     Task<bool> IsConnectionActiveAsync(Guid userId, string connectionId);
 
     /// <summary>
-    /// Updates typing state for a user in a chat.
+    /// Updates typing state for a user in a chat. "Typing" expires on its own after
+    /// the TTL unless refreshed, so a client that vanished mid-typing does not hang there.
     /// </summary>
     Task SetTypingAsync(Guid chatId, Guid userId, bool isTyping);
+
+    /// <summary>
+    /// Removes the user's typing state in every chat (the user went offline).
+    /// </summary>
+    /// <returns>Chats where the user was typing, so members can be told it stopped.</returns>
+    Task<IReadOnlyList<Guid>> ClearTypingAsync(Guid userId);
 }

@@ -123,7 +123,8 @@ public class UsersHandlerStatusTests
             .ReturnsAsync([new BasicApi.Storage.Entities.Chat { Id = chatA }, new BasicApi.Storage.Entities.Chat { Id = chatB }]);
 
         _statusServiceMock
-            .Setup(s => s.GetTypingStatusAsync(userId))
+            .Setup(s => s.GetTypingStatusAsync(It.Is<IReadOnlyCollection<Guid>>(ids =>
+                ids.Count == 2 && ids.Contains(chatA) && ids.Contains(chatB))))
             .ReturnsAsync(new Dictionary<Guid, HashSet<Guid>>
             {
                 [chatA] = [typerA],
@@ -160,18 +161,18 @@ public class UsersHandlerStatusTests
             .Setup(r => r.GetUserChatsAsync(userId))
             .ReturnsAsync([new BasicApi.Storage.Entities.Chat { Id = userChat }]);
 
+        IReadOnlyCollection<Guid>? requested = null;
         _statusServiceMock
-            .Setup(s => s.GetTypingStatusAsync(userId))
-            .ReturnsAsync(new Dictionary<Guid, HashSet<Guid>>
-            {
-                [userChat] = [typer],
-                [otherChat] = [Guid.NewGuid()] // user is NOT a member of otherChat
-            });
+            .Setup(s => s.GetTypingStatusAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
+            .Callback((IReadOnlyCollection<Guid> ids) => requested = ids)
+            .ReturnsAsync(new Dictionary<Guid, HashSet<Guid>> { [userChat] = [typer] });
 
         // Act
         var result = await _handler.GetTypingStatusAsync(userId);
 
-        // Assert
+        // Assert — сервис спрашивают только про чаты пользователя, чужие даже не читаются
+        Assert.Equal([userChat], requested);
+        Assert.DoesNotContain(otherChat, requested!);
         var okResult = Assert.IsType<OkObjectResult>(result);
         var dto = Assert.IsType<TypingStatusResponseDto>(okResult.Value);
         Assert.Single(dto.Items);
@@ -186,7 +187,7 @@ public class UsersHandlerStatusTests
         var userId = Guid.NewGuid();
 
         _statusServiceMock
-            .Setup(s => s.GetTypingStatusAsync(userId))
+            .Setup(s => s.GetTypingStatusAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
             .ReturnsAsync(new Dictionary<Guid, HashSet<Guid>>());
 
         // Act

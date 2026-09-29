@@ -118,6 +118,14 @@ public class ChatHub(
                     var members = await chatRepository.GetAllChatMembersAsync(userId.Value);
                     foreach (var memberId in members)
                         await Clients.User(memberId.ToString()).SendAsync("UserOnlineChanged", userId.Value, false);
+
+                    // Ушёл последним соединением посреди набора — «печатает» гасим сразу,
+                    // не дожидаясь TTL.
+                    foreach (var chatId in await userStatusService.ClearTypingAsync(userId.Value))
+                    {
+                        var participants = await chatRepository.GetChatParticipantsAsync(chatId);
+                        await NotifyTypingAsync(chatId, userId.Value, false, participants);
+                    }
                 }
             }
             await base.OnDisconnectedAsync(exception);
@@ -266,21 +274,34 @@ public class ChatHub(
             var userId = GetUserId();
             if (!userId.HasValue) return;
 
-            await userStatusService.SetTypingAsync(chatId, userId.Value, isTyping);
-
+            // Участники нужны для рассылки; заодно по ним проверяем членство —
+            // без лишнего запроса IsMember.
             var participants = await chatRepository.GetChatParticipantsAsync(chatId);
-            foreach (var participant in participants)
-            {
-                if (participant.UserId == userId) continue;
-                await Clients.User(participant.UserId.ToString())
-                    .SendAsync("TypingChanged", chatId, userId.Value, isTyping);
-            }
+            if (!participants.Any(p => p.UserId == userId.Value))
+                throw HubErrors.Create(HubErrors.NotAMember, "User is not a member of this chat");
+
+            await userStatusService.SetTypingAsync(chatId, userId.Value, isTyping);
+            await NotifyTypingAsync(chatId, userId.Value, isTyping, participants);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not HubException)
         {
             logger.LogError(ex, "Typing failed for chatId={ChatId}", chatId);
             throw;
         }
+    }
+
+    /// <summary>TypingChanged всем участникам чата, кроме самого печатающего, одним вызовом.</summary>
+    private Task NotifyTypingAsync(
+        Guid chatId, Guid userId, bool isTyping, IEnumerable<BasicApi.Storage.Dto.ChatParticipantDto> participants)
+    {
+        var recipients = participants
+            .Where(p => p.UserId != userId)
+            .Select(p => p.UserId.ToString())
+            .ToList();
+
+        return recipients.Count == 0
+            ? Task.CompletedTask
+            : Clients.Users(recipients).SendAsync("TypingChanged", chatId, userId, isTyping);
     }
 
     /// <summary>

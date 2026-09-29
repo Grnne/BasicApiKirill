@@ -7,15 +7,22 @@ namespace BasicApi.Services;
 /// Thread-safe via ConcurrentDictionary and immutable snapshots.
 /// NOTE: For horizontal scaling, replace with Redis or SignalR Redis backplane.
 /// </summary>
-public class UserStatusService : IUserStatusService
+public class UserStatusService(TimeProvider? timeProvider = null) : IUserStatusService
 {
+    /// <summary>
+    /// How long "typing" lives without a refresh. Clients repeat Typing(true) while the
+    /// user types; if they vanish without Typing(false), the state expires on its own.
+    /// </summary>
+    public static readonly TimeSpan TypingTtl = TimeSpan.FromSeconds(6);
+
+    private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
+
     // Map: userId → { connectionId → byte }
     // ConcurrentDictionary<string, byte> is used as a thread-safe set of connection IDs
     private readonly ConcurrentDictionary<Guid, ConcurrentDictionary<string, byte>> _onlineUsers = new();
 
-    // Map: chatId (string) → { userId → byte }
-    // ConcurrentDictionary<Guid, byte> is used as a thread-safe set of userIds typing in that chat
-    private readonly ConcurrentDictionary<string, ConcurrentDictionary<Guid, byte>> _typingByChat = new();
+    // Map: chatId → { userId → typing expires at }
+    private readonly ConcurrentDictionary<Guid, ConcurrentDictionary<Guid, DateTimeOffset>> _typingByChat = new();
 
     public Task<IReadOnlySet<Guid>> GetOnlineUserIdsAsync(IReadOnlySet<Guid> userIds)
     {
@@ -28,18 +35,28 @@ public class UserStatusService : IUserStatusService
         return Task.FromResult<IReadOnlySet<Guid>>(online);
     }
 
-    public Task<Dictionary<Guid, HashSet<Guid>>> GetTypingStatusAsync(Guid userId)
+    public Task<Dictionary<Guid, HashSet<Guid>>> GetTypingStatusAsync(IReadOnlyCollection<Guid> chatIds)
     {
-        // Returns a snapshot of all typing statuses.
-        // Filtering by user's chats is done in the handler layer.
+        // Только запрошенные чаты: вызывающий передаёт чаты пользователя, и чужие
+        // не читаются вовсе (раньше перебиралась вся карта, фильтр был снаружи).
+        var now = _time.GetUtcNow();
         var result = new Dictionary<Guid, HashSet<Guid>>();
-        foreach (var kvp in _typingByChat)
+        foreach (var chatId in chatIds)
         {
-            if (kvp.Value.Count > 0)
+            if (!_typingByChat.TryGetValue(chatId, out var users))
+                continue;
+
+            var typing = new HashSet<Guid>();
+            foreach (var (userId, expiresAt) in users)
             {
-                var chatId = Guid.Parse(kvp.Key);
-                result[chatId] = [.. kvp.Value.Keys];
+                if (expiresAt > now)
+                    typing.Add(userId);
+                else
+                    users.TryRemove(KeyValuePair.Create(userId, expiresAt)); // протухшее — чистим по пути
             }
+
+            if (typing.Count > 0)
+                result[chatId] = typing;
         }
         return Task.FromResult(result);
     }
@@ -89,23 +106,29 @@ public class UserStatusService : IUserStatusService
 
     public Task SetTypingAsync(Guid chatId, Guid userId, bool isTyping)
     {
-        var key = chatId.ToString();
         if (isTyping)
         {
-            var userSet = _typingByChat.GetOrAdd(key, _ => new ConcurrentDictionary<Guid, byte>());
-            userSet.TryAdd(userId, 0);
+            var users = _typingByChat.GetOrAdd(chatId, _ => new ConcurrentDictionary<Guid, DateTimeOffset>());
+            users[userId] = _time.GetUtcNow() + TypingTtl;
         }
-        else
+        else if (_typingByChat.TryGetValue(chatId, out var users))
         {
-            if (_typingByChat.TryGetValue(key, out var userSet))
-            {
-                userSet.TryRemove(userId, out _);
-                if (userSet.IsEmpty)
-                {
-                    _typingByChat.TryRemove(KeyValuePair.Create(key, userSet));
-                }
-            }
+            users.TryRemove(userId, out _);
         }
+        // Пустые словари чатов не удаляем: гонка удаления с параллельным Set потеряла бы
+        // запись, а память ограничена числом чатов, где кто-то когда-то печатал.
         return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<Guid>> ClearTypingAsync(Guid userId)
+    {
+        var now = _time.GetUtcNow();
+        var chats = new List<Guid>();
+        foreach (var (chatId, users) in _typingByChat)
+        {
+            if (users.TryRemove(userId, out var expiresAt) && expiresAt > now)
+                chats.Add(chatId);
+        }
+        return Task.FromResult<IReadOnlyList<Guid>>(chats);
     }
 }

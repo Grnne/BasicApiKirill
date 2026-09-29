@@ -188,17 +188,11 @@ public class UsersHandler(
     /// </summary>
     public async Task<IActionResult> GetTypingStatusAsync(Guid userId)
     {
-        var typingMap = await userStatusService.GetTypingStatusAsync(userId);
-
-        if (typingMap.Count == 0)
-            return new OkObjectResult(new TypingStatusResponseDto());
-
-        // Filter by user's chats to avoid leaking info about chats the user isn't in
+        // Спрашиваем только про чаты пользователя — чужие даже не читаются.
         var userChats = await chatRepository.GetUserChatsAsync(userId);
-        var userChatIds = userChats.Select(c => c.Id).ToHashSet();
+        var typingMap = await userStatusService.GetTypingStatusAsync([.. userChats.Select(c => c.Id)]);
 
         var items = typingMap
-            .Where(kvp => userChatIds.Contains(kvp.Key))
             .SelectMany(kvp => kvp.Value.Select(uid => new TypingStatusDto
             {
                 UserId = uid,

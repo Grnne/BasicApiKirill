@@ -96,6 +96,7 @@ public static class ServiceExtensions
         services.AddScoped<ISessionRepository, SessionRepository>();
         services.AddScoped<IChatService, ChatService>();
         services.AddScoped<ISessionService, SessionService>();
+        services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IUserStatusService, UserStatusService>();
         services.AddSingleton<HubConnectionRegistry>();
         services.AddScoped<AuthHandler>();
