@@ -19,8 +19,7 @@ public sealed class PostgresFixture : IAsyncLifetime
     // Та же мажорная версия, что в docker-compose.prod.yml.
     public const string Image = "postgres:17-alpine";
 
-    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder()
-        .WithImage(Image)
+    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder(Image)
         .Build();
 
     public string ConnectionString => _container.GetConnectionString();
