@@ -120,7 +120,9 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=64m
-      - /home/app/.aspnet/DataProtection-Keys
+      # Owned by the app user: a root-owned tmpfs made Data Protection log an Error
+      # on every restart (it could not write its key ring).
+      - /home/app/.aspnet/DataProtection-Keys:uid=1654,gid=1654,mode=0700
 
     security_opt:
       - no-new-privileges:true
@@ -195,11 +197,14 @@ services:
         max-size: "10m"
         max-file: "3"
 
+    # Caddy needs ~220-250 KB of memory per open WebSocket. With 128M, 1000 clients
+    # drove it into constant GC at its CPU limit (latency x4) and to the edge of an
+    # OOM kill; 512M is enough for ~2000 clients (docs/load-testing.md).
     deploy:
       resources:
         limits:
-          cpus: "0.5"
-          memory: 128M
+          cpus: "1.0"
+          memory: 512M
           pids: 100
 
     networks:
