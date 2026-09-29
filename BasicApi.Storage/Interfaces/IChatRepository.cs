@@ -1,4 +1,4 @@
-﻿using BasicApi.Storage.Dto;
+using BasicApi.Storage.Dto;
 using BasicApi.Storage.Entities;
 
 namespace BasicApi.Storage.Interfaces;
@@ -25,6 +25,12 @@ public interface IChatRepository
     /// </summary>
     Task<(Guid ChatId, bool Created)> GetOrCreatePrivateChatAsync(
         Guid userId, Guid otherUserId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the user's "Saved Messages" chat, creating it if there is none: one per user,
+    /// the user is its only member. Atomic like <see cref="GetOrCreatePrivateChatAsync"/>.
+    /// </summary>
+    Task<(Guid ChatId, bool Created)> GetOrCreateSavedChatAsync(Guid userId, CancellationToken ct = default);
 
     Task<bool> IsMemberAsync(Guid chatId, Guid userId, CancellationToken ct = default);
     /// <summary>Ids of the chat's members; empty when the chat does not exist.</summary>

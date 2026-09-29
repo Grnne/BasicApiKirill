@@ -1,4 +1,4 @@
-﻿using BasicApi.Middleware.Exceptions;
+using BasicApi.Middleware.Exceptions;
 using BasicApi.Models.Dto.Chat;
 using BasicApi.Services.Events;
 using BasicApi.Storage;
@@ -95,6 +95,19 @@ public sealed class ChatService(
 
         return result;
     }
+
+    public Task<PrivateChatResult> GetOrCreateSavedChatAsync(Guid userId, CancellationToken ct = default) =>
+        db.InTransactionAsync(async ct =>
+        {
+            var (chatId, created) = await chatRepository.GetOrCreateSavedChatAsync(userId, ct);
+            var item = ChatListItemMapper.Map(await chatRepository.GetChatListItemAsync(chatId, userId, ct)
+                ?? throw ChatNotFound());
+
+            if (created)
+                await events.ChatCreatedAsync(userId, item, live: false, ct);
+
+            return new PrivateChatResult(item, created);
+        }, ct: ct);
 
     public async Task<SearchChatsResponseDto> SearchChatsAsync(
         Guid userId, string query, string? type, int limit, CancellationToken ct = default)

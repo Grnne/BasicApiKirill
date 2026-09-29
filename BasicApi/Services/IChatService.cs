@@ -1,4 +1,4 @@
-﻿using BasicApi.Models.Dto.Chat;
+using BasicApi.Models.Dto.Chat;
 
 namespace BasicApi.Services;
 
@@ -23,6 +23,12 @@ public interface IChatService
     /// Errors: 400 <c>SELF_CHAT</c>, 404 <c>USER_NOT_FOUND</c> (missing or deactivated).
     /// </summary>
     Task<PrivateChatResult> GetOrCreatePrivateChatAsync(Guid userId, Guid otherUserId, CancellationToken ct = default);
+
+    /// <summary>
+    /// The user's "Saved Messages" chat (type <c>saved</c>), created on first access. The user's
+    /// other devices learn about a new one through sync, like about a chat they created.
+    /// </summary>
+    Task<PrivateChatResult> GetOrCreateSavedChatAsync(Guid userId, CancellationToken ct = default);
 
     /// <summary>
     /// Searches user's chats by query.

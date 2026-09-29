@@ -60,6 +60,33 @@ public class ChatRepository(IDbSession db) : IChatRepository
             return (existing, false);
         }, ct: ct);
 
+    public Task<(Guid ChatId, bool Created)> GetOrCreateSavedChatAsync(Guid userId, CancellationToken ct = default) =>
+        db.InTransactionAsync(async ct =>
+        {
+            // The same unique private_key as private chats, with its own prefix: one per user,
+            // and a concurrent first open waits for the other and finds its chat.
+            var chatId = Guid.NewGuid();
+            var now = DateTime.UtcNow;
+            var inserted = await db.QueryFirstOrDefaultAsync<Guid?>(@"
+                INSERT INTO chats (id, title, type, created_at, private_key)
+                VALUES (@chatId, NULL, 'saved', @now, 'saved:' || @userId::text)
+                ON CONFLICT (private_key) DO NOTHING
+                RETURNING id",
+                new { chatId, userId, now }, ct);
+
+            if (inserted is not null)
+            {
+                await db.ExecuteAsync(
+                    "INSERT INTO chat_members (chat_id, user_id, joined_at) VALUES (@chatId, @userId, @now)",
+                    new { chatId, userId, now }, ct);
+                return (chatId, true);
+            }
+
+            var existing = await db.QuerySingleAsync<Guid>(
+                "SELECT id FROM chats WHERE private_key = 'saved:' || @userId::text", new { userId }, ct);
+            return (existing, false);
+        }, ct: ct);
+
     public async Task<bool> IsMemberAsync(Guid chatId, Guid userId, CancellationToken ct = default)
     {
         const string sql = "SELECT EXISTS(SELECT 1 FROM chat_members WHERE chat_id = @chatId AND user_id = @userId)";

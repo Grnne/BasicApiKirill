@@ -50,6 +50,26 @@ public class ChatsController(
     }
 
     /// <summary>
+    /// Open "Saved Messages" — the caller's own chat with themselves.
+    /// </summary>
+    /// <remarks>
+    /// One per user, created on first call: <c>201</c> then, <c>200</c> afterwards, the same
+    /// <c>ChatListItemDto</c> as in <c>GET /api/chats</c> with <c>type: "saved"</c> and no
+    /// title or companion (the client names it). Everything works as in any chat: send,
+    /// forward into it, edit, delete, react. The caller's other devices learn about a new one
+    /// through <c>/api/sync</c> (<c>ChatCreated</c>).
+    /// </remarks>
+    [HttpPost("saved")]
+    [ProducesResponseType(typeof(ChatListItemDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ChatListItemDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> OpenSavedMessages(CancellationToken ct)
+    {
+        var result = await chats.GetOrCreateSavedChatAsync(User.GetUserId(), ct);
+        return result.Created ? Created(string.Empty, result.Chat) : Ok(result.Chat);
+    }
+
+    /// <summary>
     /// Get chat details
     /// </summary>
     [HttpGet("{chatId}")]
