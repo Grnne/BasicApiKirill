@@ -14,6 +14,9 @@ public class MessageWithSender
     public string Type { get; set; } = Entities.MessageTypes.Text;
     public DateTime? EditedAt { get; set; }
 
+    /// <summary>Formatting as JSON; null — plain text.</summary>
+    public string? EntitiesJson { get; set; }
+
     /// <summary>Deleted for everyone: a tombstone without text.</summary>
     public DateTime? DeletedAt { get; set; }
 

@@ -1,4 +1,4 @@
-﻿using BasicApi.Extensions;
+using BasicApi.Extensions;
 using BasicApi.Models.Dto.Chat;
 using BasicApi.Models.Dto.Message;
 using BasicApi.Services;
@@ -168,7 +168,8 @@ public class ChatsController(IChatService chats, IMessageService messages, IPres
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> SendMessage(Guid chatId, [FromBody] SendMessageDto dto, CancellationToken ct)
     {
-        var result = await messages.SendAsync(chatId, User.GetUserId(), dto.Text, dto.ClientMessageId, dto.ReplyToMessageId, ct);
+        var result = await messages.SendAsync(
+            chatId, User.GetUserId(), dto.Text, dto.ClientMessageId, dto.ReplyToMessageId, dto.Entities, ct);
         return result.Created ? Created(string.Empty, result.Message) : Ok(result.Message);
     }
 
@@ -238,7 +239,7 @@ public class ChatsController(IChatService chats, IMessageService messages, IPres
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> EditMessage(
         Guid chatId, Guid messageId, [FromBody] EditMessageDto dto, CancellationToken ct)
-        => Ok(await messages.EditAsync(chatId, User.GetUserId(), messageId, dto.Text, ct));
+        => Ok(await messages.EditAsync(chatId, User.GetUserId(), messageId, dto.Text, dto.Entities, ct));
 
     /// <summary>
     /// Delete a message for everyone or only for yourself.

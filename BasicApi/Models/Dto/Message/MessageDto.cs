@@ -22,6 +22,9 @@ public class MessageDto
     /// <summary>When the text was last edited; null — never edited.</summary>
     public DateTime? EditedAt { get; set; }
 
+    /// <summary>Formatting and mentions over <see cref="Text"/>; empty — plain text.</summary>
+    public List<MessageEntityDto> Entities { get; set; } = [];
+
     /// <summary>The message this one answers; null — not a reply.</summary>
     public MessageReplyDto? ReplyTo { get; set; }
 

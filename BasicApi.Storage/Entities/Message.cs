@@ -9,6 +9,9 @@ public class Message
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public string Type { get; set; } = MessageTypes.Text;
 
+    /// <summary>Formatting as JSON, already checked by the service; null — plain text.</summary>
+    public string? EntitiesJson { get; set; }
+
     /// <summary>The message this one answers; in the same chat.</summary>
     public Guid? ReplyToMessageId { get; set; }
 

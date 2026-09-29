@@ -119,6 +119,19 @@ public class ChatRepository(IDbSession db) : IChatRepository
                       SELECT 1 FROM hidden_messages h WHERE h.user_id = @userId AND h.message_id = m_unread.id)
             ) AS UnreadCount,
 
+            -- Unread mentions of the user: the same rules as for unread messages.
+            (
+                SELECT COUNT(*)
+                FROM message_mentions mm
+                INNER JOIN messages m_mention ON m_mention.id = mm.message_id
+                WHERE mm.user_id = @userId
+                  AND mm.chat_id = c.id
+                  AND mm.seq > cm.last_read_seq
+                  AND m_mention.deleted_at IS NULL
+                  AND NOT EXISTS (
+                      SELECT 1 FROM hidden_messages h WHERE h.user_id = @userId AND h.message_id = mm.message_id)
+            ) AS UnreadMentionCount,
+
             lm.id AS LastMessageId,
             lm.seq AS LastMessageSeq,
             lm.sender_id AS LastMessageSenderId,

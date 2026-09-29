@@ -18,6 +18,7 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
         m.type AS Type,
         m.edited_at AS EditedAt,
         m.deleted_at AS DeletedAt,
+        m.entities::text AS EntitiesJson,
         m.seq AS Seq,
         m.client_message_id AS ClientMessageId,
         COALESCE(u.display_name, 'Unknown') AS SenderName,
@@ -79,9 +80,10 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
                 ), m AS (
                     INSERT INTO messages (id, chat_id, sender_id, text, created_at, type, seq, client_message_id,
                                           reply_to_message_id, forward_from_user_id, forward_from_chat_id,
-                                          forward_from_message_id)
+                                          forward_from_message_id, entities)
                     SELECT @Id, @ChatId, @SenderId, @Text, @CreatedAt, @Type, next.last_seq, @ClientMessageId,
-                           @ReplyToMessageId, @ForwardFromUserId, @ForwardFromChatId, @ForwardFromMessageId
+                           @ReplyToMessageId, @ForwardFromUserId, @ForwardFromChatId, @ForwardFromMessageId,
+                           @EntitiesJson::jsonb
                     FROM next
                     RETURNING *
                 )
@@ -103,7 +105,8 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
                     message.ReplyToMessageId,
                     message.ForwardFromUserId,
                     message.ForwardFromChatId,
-                    message.ForwardFromMessageId
+                    message.ForwardFromMessageId,
+                    message.EntitiesJson
                 }, ct);
             }
             catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation &&
@@ -143,24 +146,40 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
             new { chatId, viewerId, messageIds = messageIds.ToArray() }, ct);
 
     public Task<MessageWithSender?> EditTextAsync(
-        Guid messageId, string text, DateTime editedAt, CancellationToken ct = default) =>
+        Guid messageId, string text, string? entitiesJson, DateTime editedAt, CancellationToken ct = default) =>
         // A message deleted in the meantime is not revived: the update finds nothing.
         db.QueryFirstOrDefaultAsync<MessageWithSender>($@"
             WITH m AS (
-                UPDATE messages SET text = @text, edited_at = @editedAt
+                UPDATE messages SET text = @text, entities = @entitiesJson::jsonb, edited_at = @editedAt
                 WHERE id = @messageId AND deleted_at IS NULL
                 RETURNING *
             )
             SELECT {SelectColumns}
             FROM m
             {Joins}",
-            new { messageId, text, editedAt }, ct);
+            new { messageId, text, entitiesJson, editedAt }, ct);
 
     public async Task<bool> DeleteForEveryoneAsync(Guid messageId, DateTime deletedAt, CancellationToken ct = default) =>
         await db.ExecuteAsync(@"
-            UPDATE messages SET deleted_at = @deletedAt, text = ''
+            UPDATE messages SET deleted_at = @deletedAt, text = '', entities = NULL
             WHERE id = @messageId AND deleted_at IS NULL",
             new { messageId, deletedAt }, ct) > 0;
+
+    // Two statements, not a CTE: a DELETE and an INSERT of the same key in one statement
+    // see the same snapshot, and the INSERT would still hit the old row.
+    public Task SetMentionsAsync(
+        Guid messageId, Guid chatId, long seq, IReadOnlyCollection<Guid> userIds, CancellationToken ct = default) =>
+        db.InTransactionAsync(async ct =>
+        {
+            await db.ExecuteAsync("DELETE FROM message_mentions WHERE message_id = @messageId", new { messageId }, ct);
+            if (userIds.Count > 0)
+                await db.ExecuteAsync(@"
+                    INSERT INTO message_mentions (message_id, user_id, chat_id, seq)
+                    SELECT @messageId, u, @chatId, @seq FROM unnest(@userIds) AS u
+                    ON CONFLICT DO NOTHING",
+                    new { messageId, chatId, seq, userIds = userIds.Distinct().ToArray() }, ct);
+            return true;
+        }, ct: ct);
 
     public async Task<bool> HideAsync(Guid userId, Guid messageId, CancellationToken ct = default) =>
         await db.ExecuteAsync(@"

@@ -15,5 +15,9 @@ public class ChatListItemDto
 
     public MessageDto? LastMessage { get; set; }
     public int UnreadCount { get; set; }
+
+    /// <summary>Unread messages that mention the user.</summary>
+    public int UnreadMentionCount { get; set; }
+
     public DateTime LastActivityAt { get; set; }
 }

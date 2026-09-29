@@ -49,8 +49,12 @@ public interface IMessageRepository
     Task<IReadOnlyList<MessageWithSender>> GetVisibleAsync(
         Guid chatId, Guid viewerId, IReadOnlyCollection<Guid> messageIds, CancellationToken ct = default);
 
-    /// <summary>Replaces the text and sets edited_at; null when the message is deleted.</summary>
-    Task<MessageWithSender?> EditTextAsync(Guid messageId, string text, DateTime editedAt, CancellationToken ct = default);
+    /// <summary>Replaces the text and its formatting, sets edited_at; null when the message is deleted.</summary>
+    Task<MessageWithSender?> EditTextAsync(
+        Guid messageId, string text, string? entitiesJson, DateTime editedAt, CancellationToken ct = default);
+
+    /// <summary>Replaces who is mentioned in the message; an empty list clears it.</summary>
+    Task SetMentionsAsync(Guid messageId, Guid chatId, long seq, IReadOnlyCollection<Guid> userIds, CancellationToken ct = default);
 
     /// <summary>Turns the message into a tombstone; false when it already is one.</summary>
     Task<bool> DeleteForEveryoneAsync(Guid messageId, DateTime deletedAt, CancellationToken ct = default);

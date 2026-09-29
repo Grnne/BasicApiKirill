@@ -20,6 +20,7 @@ public static class ChatListItemMapper
         CompanionName = r.CompanionName,
         CompanionUsername = r.CompanionUsername,
         UnreadCount = r.UnreadCount,
+        UnreadMentionCount = r.UnreadMentionCount,
         LastActivityAt = r.LastMessageCreatedAt ?? r.CreatedAt,
         LastMessage = r.LastMessageId is not null ? new MessageDto
         {

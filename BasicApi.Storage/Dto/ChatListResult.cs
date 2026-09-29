@@ -13,6 +13,7 @@ public class ChatListResult
     public string? CompanionName { get; set; }
     public string? CompanionUsername { get; set; }
     public int UnreadCount { get; set; }
+    public int UnreadMentionCount { get; set; }
     public DateTime CreatedAt { get; set; }
 
     // Last message fields (nullable — chat may have no messages)

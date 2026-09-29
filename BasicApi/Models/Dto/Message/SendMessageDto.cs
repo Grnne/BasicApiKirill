@@ -13,4 +13,7 @@ public class SendMessageDto
 
     /// <summary>The message being answered; it must be in the same chat and not deleted.</summary>
     public Guid? ReplyToMessageId { get; set; }
+
+    /// <summary>Formatting and mentions; offsets are over <see cref="Text"/> as sent, before trimming.</summary>
+    public List<MessageEntityDto>? Entities { get; set; }
 }

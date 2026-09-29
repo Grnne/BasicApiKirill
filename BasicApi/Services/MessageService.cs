@@ -31,13 +31,14 @@ public interface IMessageService
     /// Send: the text is trimmed at the edges and validated; an event goes to the members.
     /// With <paramref name="clientMessageId"/> sending is idempotent: a repeat returns the already
     /// created message (<c>Created = false</c>) and broadcasts nothing.
-    /// Errors: 400 <c>MESSAGE_EMPTY</c>/<c>MESSAGE_TOO_LONG</c>/<c>REPLY_TARGET_NOT_FOUND</c>,
-    /// 403 <c>NOT_A_MEMBER</c>,
+    /// Mentioned members get the message counted in their unread mentions.
+    /// Errors: 400 <c>MESSAGE_EMPTY</c>/<c>MESSAGE_TOO_LONG</c>/<c>REPLY_TARGET_NOT_FOUND</c>/
+    /// <c>INVALID_ENTITIES</c>, 403 <c>NOT_A_MEMBER</c>,
     /// 409 <c>CLIENT_MESSAGE_ID_CONFLICT</c> - this id is already taken by a message in another chat.
     /// </summary>
     Task<SendResult> SendAsync(
         Guid chatId, Guid senderId, string? text, Guid? clientMessageId = null, Guid? replyToMessageId = null,
-        CancellationToken ct = default);
+        IReadOnlyList<MessageEntityDto>? entities = null, CancellationToken ct = default);
 
     /// <summary>
     /// Copies messages of <paramref name="fromChatId"/> into <paramref name="chatId"/> in their
@@ -58,12 +59,15 @@ public interface IMessageService
     Task MarkReadAsync(Guid chatId, Guid userId, Guid messageId, CancellationToken ct = default);
 
     /// <summary>
-    /// Replaces the text; members get <c>MessageUpdated</c>. The same text is not an edit: the
-    /// message comes back unchanged and nothing is sent.
-    /// Errors: 400 <c>MESSAGE_EMPTY</c>/<c>MESSAGE_TOO_LONG</c>, 403 <c>NOT_A_MEMBER</c>/
-    /// <c>NOT_MESSAGE_AUTHOR</c>/<c>EDIT_WINDOW_EXPIRED</c>, 404 <c>MESSAGE_NOT_FOUND</c>.
+    /// Replaces the text and its formatting; members get <c>MessageUpdated</c>. The same text and
+    /// formatting is not an edit: the message comes back unchanged and nothing is sent.
+    /// Errors: 400 <c>MESSAGE_EMPTY</c>/<c>MESSAGE_TOO_LONG</c>/<c>INVALID_ENTITIES</c>,
+    /// 403 <c>NOT_A_MEMBER</c>/<c>NOT_MESSAGE_AUTHOR</c>/<c>EDIT_WINDOW_EXPIRED</c>/
+    /// <c>MESSAGE_NOT_EDITABLE</c>, 404 <c>MESSAGE_NOT_FOUND</c>.
     /// </summary>
-    Task<MessageDto> EditAsync(Guid chatId, Guid userId, Guid messageId, string? text, CancellationToken ct = default);
+    Task<MessageDto> EditAsync(
+        Guid chatId, Guid userId, Guid messageId, string? text, IReadOnlyList<MessageEntityDto>? entities = null,
+        CancellationToken ct = default);
 
     /// <summary>
     /// Deletes for everyone (a tombstone; all members get <c>MessageDeleted</c>) or only for the
@@ -161,10 +165,11 @@ public sealed class MessageService(
 
     public async Task<SendResult> SendAsync(
         Guid chatId, Guid senderId, string? text, Guid? clientMessageId = null, Guid? replyToMessageId = null,
-        CancellationToken ct = default)
+        IReadOnlyList<MessageEntityDto>? entities = null, CancellationToken ct = default)
     {
-        // Validate the text before going to the DB: it is free.
+        // Validate the text and its formatting before going to the DB: it is free.
         var normalized = NormalizeText(text);
+        var formatting = NormalizeEntities(entities, text!, normalized);
 
         await policy.DemandPostAsync(senderId, chatId, ct);
 
@@ -183,6 +188,7 @@ public sealed class MessageService(
         }
 
         var memberIds = await membership.GetMemberIdsAsync(chatId, ct);
+        var mentioned = MentionedMembers(formatting, memberIds, senderId);
 
         try
         {
@@ -196,8 +202,12 @@ public sealed class MessageService(
                     SenderId = senderId,
                     Text = normalized,
                     CreatedAt = DateTime.UtcNow,
-                    ReplyToMessageId = replyToMessageId
+                    ReplyToMessageId = replyToMessageId,
+                    EntitiesJson = MessageEntities.Serialize(formatting)
                 }, clientMessageId, ct));
+
+                if (mentioned.Count > 0)
+                    await messageRepository.SetMentionsAsync(created.Id, chatId, created.Seq, mentioned, ct);
 
                 await events.MessageCreatedAsync(created, memberIds, ct);
                 return created;
@@ -290,6 +300,8 @@ public sealed class MessageService(
                     ChatId = chatId,
                     SenderId = userId,
                     Text = source.Text,
+                    // Mentions stay as formatting but notify nobody: the forwarder did not mention anyone.
+                    EntitiesJson = source.EntitiesJson,
                     CreatedAt = DateTime.UtcNow,
                     ForwardFromUserId = source.IsForward ? source.ForwardFromUserId : source.SenderId,
                     ForwardFromChatId = source.IsForward ? source.ForwardFromChatId : source.ChatId,
@@ -317,22 +329,28 @@ public sealed class MessageService(
     }
 
     public async Task<MessageDto> EditAsync(
-        Guid chatId, Guid userId, Guid messageId, string? text, CancellationToken ct = default)
+        Guid chatId, Guid userId, Guid messageId, string? text, IReadOnlyList<MessageEntityDto>? entities = null,
+        CancellationToken ct = default)
     {
         var normalized = NormalizeText(text);
+        var formatting = NormalizeEntities(entities, text!, normalized);
         await policy.DemandPostAsync(userId, chatId, ct);
 
         var message = await FindAsync(chatId, messageId, ct);
         (await policy.CanEditMessageAsync(userId, message, ct)).Demand();
 
-        if (message.Text == normalized)
+        if (message.Text == normalized && MessageEntities.Deserialize(message.EntitiesJson).SequenceEqual(formatting))
             return Map(message);
 
         var memberIds = await membership.GetMemberIdsAsync(chatId, ct);
+        var mentioned = MentionedMembers(formatting, memberIds, userId);
         return await db.InTransactionAsync(async ct =>
         {
-            var edited = await messageRepository.EditTextAsync(messageId, normalized, DateTime.UtcNow, ct)
+            var edited = await messageRepository.EditTextAsync(
+                    messageId, normalized, MessageEntities.Serialize(formatting), DateTime.UtcNow, ct)
                 ?? throw MessageNotFound(); // deleted in the meantime
+            // A mention added by the edit counts only if the member has not read that far yet.
+            await messageRepository.SetMentionsAsync(messageId, chatId, edited.Seq, mentioned, ct);
             var dto = Map(edited);
             await events.MessageUpdatedAsync(dto, memberIds, ct);
             return dto;
@@ -394,6 +412,25 @@ public sealed class MessageService(
         return normalized;
     }
 
+    private static List<MessageEntityDto> NormalizeEntities(
+        IReadOnlyList<MessageEntityDto>? entities, string raw, string normalized) =>
+        MessageEntities.Normalize(entities, raw, normalized, out var result) is { } error
+            ? throw new BadRequestException(error, MessageEntities.InvalidCode)
+            : result;
+
+    /// <summary>
+    /// Who gets the mention counted: members of the chat except the author. Mentioning someone
+    /// outside the chat is an error — the server does not reveal non-members through a mention.
+    /// </summary>
+    private static IReadOnlyList<Guid> MentionedMembers(
+        List<MessageEntityDto> formatting, IReadOnlyCollection<Guid> memberIds, Guid authorId)
+    {
+        var mentioned = MessageEntities.MentionedUsers(formatting);
+        if (mentioned.Any(id => !memberIds.Contains(id)))
+            throw new BadRequestException("A mentioned user is not a member of this chat", MessageEntities.InvalidCode);
+        return [.. mentioned.Where(id => id != authorId)];
+    }
+
     private static NotFoundException MessageNotFound() => new("Message not found in this chat", "MESSAGE_NOT_FOUND");
 
     private static MessageDto Map(MessageWithSender m) => new()
@@ -409,6 +446,7 @@ public sealed class MessageService(
         ClientMessageId = m.ClientMessageId,
         Type = m.Type,
         EditedAt = m.EditedAt,
+        Entities = MessageEntities.Deserialize(m.EntitiesJson),
         ReplyTo = m.ReplyToMessageId is { } replyId
             ? new MessageReplyDto
             {

@@ -31,8 +31,8 @@ public class MessageEditDeleteTests
             .Setup(r => r.GetMemberIdsAsync(_chatId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([_author, _other]);
         _msgRepoMock
-            .Setup(r => r.EditTextAsync(_messageId, It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Guid _, string text, DateTime editedAt, CancellationToken _) =>
+            .Setup(r => r.EditTextAsync(_messageId, It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid _, string text, string? _, DateTime editedAt, CancellationToken _) =>
                 Stored(text: text, editedAt: editedAt));
     }
 
@@ -73,7 +73,7 @@ public class MessageEditDeleteTests
 
         Assert.Equal("fixed", edited.Text);
         Assert.NotNull(edited.EditedAt);
-        _msgRepoMock.Verify(r => r.EditTextAsync(_messageId, "fixed", It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
+        _msgRepoMock.Verify(r => r.EditTextAsync(_messageId, "fixed", null, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
         _eventsMock.Verify(e => e.MessageUpdatedAsync(edited,
             It.Is<IReadOnlyCollection<Guid>>(ids => ids.Count == 2 && ids.Contains(_author) && ids.Contains(_other)),
             It.IsAny<CancellationToken>()), Times.Once);
@@ -88,7 +88,7 @@ public class MessageEditDeleteTests
 
         Assert.Equal("same", result.Text);
         Assert.Null(result.EditedAt);
-        _msgRepoMock.Verify(r => r.EditTextAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
+        _msgRepoMock.Verify(r => r.EditTextAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
         _eventsMock.VerifyNoOtherCalls();
     }
 
