@@ -50,6 +50,38 @@ public readonly struct CursorDto : IComparable<CursorDto>
         return new CursorDto(new DateTime(ticks, DateTimeKind.Utc), new Guid(idBytes));
     }
 
+    /// <summary>
+    /// Decodes a cursor that came from a client. Unlike <see cref="Decode"/> it never
+    /// throws: a tampered or truncated cursor is a client error (400), not a 500.
+    /// </summary>
+    public static bool TryDecode(string? cursor, out CursorDto result)
+    {
+        result = default;
+        if (string.IsNullOrEmpty(cursor) || cursor.Length % 4 == 1)
+            return false;
+
+        try
+        {
+            var padded = cursor.Replace('-', '+').Replace('_', '/');
+            padded += (padded.Length % 4) switch { 2 => "==", 3 => "=", _ => "" };
+
+            var bytes = Convert.FromBase64String(padded);
+            if (bytes.Length != 32)
+                return false;
+
+            var ticks = BitConverter.ToInt64(bytes.AsSpan(0, 8));
+            if (ticks < DateTime.MinValue.Ticks || ticks > DateTime.MaxValue.Ticks)
+                return false;
+
+            result = new CursorDto(new DateTime(ticks, DateTimeKind.Utc), new Guid(bytes.AsSpan(16, 16)));
+            return true;
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+    }
+
     public readonly int CompareTo(CursorDto other)
     {
         var cmp = CreatedAt.CompareTo(other.CreatedAt);

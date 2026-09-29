@@ -1,3 +1,4 @@
+using System.Text;
 using BasicApi.Hubs;
 using BasicApi.Middleware.Exceptions;
 using BasicApi.Models.Dto.Auth;
@@ -15,12 +16,26 @@ public class AuthHandler(
     ISessionService sessionService,
     HubConnectionRegistry hubConnections)
 {
+    /// <summary>Предел bcrypt: всё, что дальше, им игнорируется.</summary>
+    public const int MaxPasswordBytes = 72;
+
+    /// <summary>
+    /// Хеш случайного пароля с той же стоимостью, что и у настоящих: на него проверяется
+    /// пароль несуществующего пользователя, чтобы время ответа не выдавало, есть ли логин.
+    /// </summary>
+    private static readonly string DummyPasswordHash = BCrypt.Net.BCrypt.HashPassword(Guid.NewGuid().ToString());
+
     public async Task<IActionResult> LoginAsync(
         LoginRequestDto request, string? userAgent = null, string? ip = null, CancellationToken ct = default)
     {
         var user = await userRepository.GetByUsernameOrEmailAsync(request.UsernameOrEmail, ct);
 
-        if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+        // Хеш проверяем всегда, даже если пользователя нет: иначе «нет такого» отвечало
+        // бы мгновенно, а «неверный пароль» — через ~100 мс bcrypt, и по времени ответа
+        // можно было бы перебирать существующие логины.
+        var passwordMatches = BCrypt.Net.BCrypt.Verify(request.Password, user?.PasswordHash ?? DummyPasswordHash);
+
+        if (user == null || !passwordMatches)
             throw new UnauthorizedException("Invalid username/email or password", "INVALID_CREDENTIALS");
 
         // Деактивированный аккаунт не должен входить, даже зная правильный пароль.
@@ -41,6 +56,12 @@ public class AuthHandler(
         // и вход — без учёта регистра (нормализованные колонки в базе).
         request.Username = request.Username.Trim();
         request.Email = request.Email.Trim();
+
+        // bcrypt учитывает только первые 72 байта: длиннее — и два разных пароля
+        // с общим началом совпали бы. Считаем байты UTF-8, а не символы.
+        if (Encoding.UTF8.GetByteCount(request.Password) > MaxPasswordBytes)
+            throw new BadRequestException(
+                $"Password must be at most {MaxPasswordBytes} bytes in UTF-8", "PASSWORD_TOO_LONG");
 
         var existingUser = await userRepository.GetByUsernameOrEmailAsync(request.Username, ct);
 

@@ -60,6 +60,8 @@ public class ChatService(IChatRepository chatRepository, IMessageRepository mess
     public async Task<CursorPaginatedResponse<MessageDto>> GetChatMessagesCursorAsync(
         Guid chatId, Guid userId, string? cursor, int limit)
     {
+        EnsureValidCursor(cursor);
+
         // Authorization check — caller must be a member
         var isMember = await chatRepository.IsMemberAsync(chatId, userId);
         if (!isMember)
@@ -79,18 +81,10 @@ public class ChatService(IChatRepository chatRepository, IMessageRepository mess
             CreatedAt = m.CreatedAt,
             IsRead = false // TODO: resolve actual read status
         }).ToList();
-        // Build next cursor from the last message in the page
-        string? nextCursor = null;
-        if (messages.Count > 0)
-        {
-            var last = messages[^1];
-            nextCursor = new Storage.Dto.CursorDto(last.CreatedAt, last.Id).Encode();
-        }
-
-                return new CursorPaginatedResponse<MessageDto>
+        return new CursorPaginatedResponse<MessageDto>
         {
             Items = [.. messages.OrderBy(m => m.CreatedAt)],
-            NextCursor = nextCursor,
+            NextCursor = NextCursor(messages, result.HasMore),
             HasMore = result.HasMore
         };
     }
@@ -101,6 +95,8 @@ public class ChatService(IChatRepository chatRepository, IMessageRepository mess
         // Validate query
         if (string.IsNullOrWhiteSpace(query) || query.Length < 2)
             throw new BadRequestException("Query must be at least 2 characters long", "INVALID_QUERY");
+
+        EnsureValidCursor(cursor);
 
         // Authorization check — caller must be a member
         var isMember = await chatRepository.IsMemberAsync(chatId, userId);
@@ -122,25 +118,32 @@ public class ChatService(IChatRepository chatRepository, IMessageRepository mess
             IsRead = false // TODO: resolve actual read status
         }).ToList();
 
-        // Build next cursor from the last message in the page
-        string? nextCursor = null;
-        if (messages.Count > 0)
-        {
-            var last = messages[^1];
-            nextCursor = new Storage.Dto.CursorDto(last.CreatedAt, last.Id).Encode();
-        }
-
-                return new SearchMessagesResponseDto
+        return new SearchMessagesResponseDto
         {
             Items = [.. messages.OrderBy(m => m.CreatedAt)],
-            NextCursor = nextCursor,
+            NextCursor = NextCursor(messages, result.HasMore),
             HasMore = result.HasMore,
             Query = query,
             TotalCount = totalCount
         };
     }
 
-        public async Task<SearchChatsResponseDto> SearchChatsAsync(Guid userId, string query, string? type, int limit)
+    /// <summary>
+    /// Курсор на следующую (более старую) страницу — от последнего сообщения страницы
+    /// (страница пришла от новых к старым). Нет следующей страницы — нет и курсора.
+    /// </summary>
+    private static string? NextCursor(List<MessageDto> newestFirst, bool hasMore) =>
+        hasMore && newestFirst.Count > 0
+            ? new Storage.Dto.CursorDto(newestFirst[^1].CreatedAt, newestFirst[^1].Id).Encode()
+            : null;
+
+    private static void EnsureValidCursor(string? cursor)
+    {
+        if (!string.IsNullOrEmpty(cursor) && !Storage.Dto.CursorDto.TryDecode(cursor, out _))
+            throw new BadRequestException("Cursor is malformed", "INVALID_CURSOR");
+    }
+
+    public async Task<SearchChatsResponseDto> SearchChatsAsync(Guid userId, string query, string? type, int limit)
     {
         if (string.IsNullOrWhiteSpace(query))
             throw new BadRequestException("Query cannot be empty", "INVALID_QUERY");

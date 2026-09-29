@@ -237,12 +237,13 @@ public class ChatsHandlerTests
         var chatId = Guid.NewGuid();
         var userId = Guid.NewGuid();
         var date = new DateTime(2024, 6, 15, 0, 0, 0, DateTimeKind.Utc);
-        var pivotId = Guid.NewGuid();
-        var pivotCreatedAt = new DateTime(2024, 6, 14, 0, 0, 0, DateTimeKind.Utc);
+        var nextId = Guid.NewGuid();
+        var nextCreatedAt = new DateTime(2024, 6, 16, 0, 0, 0, DateTimeKind.Utc);
 
+        _chatRepoMock.Setup(r => r.IsMemberAsync(chatId, userId)).ReturnsAsync(true);
         _msgRepoMock
-            .Setup(r => r.GetFirstMessageBeforeDateAsync(chatId, date))
-            .ReturnsAsync(new BasicApi.Storage.Entities.Message { Id = pivotId, CreatedAt = pivotCreatedAt });
+            .Setup(r => r.GetFirstMessageAfterDateAsync(chatId, date))
+            .ReturnsAsync(new BasicApi.Storage.Entities.Message { Id = nextId, CreatedAt = nextCreatedAt });
 
         var response = new CursorPaginatedResponse<MessageDto> { Items = [], NextCursor = null, HasMore = false };
         _chatServiceMock
@@ -252,7 +253,7 @@ public class ChatsHandlerTests
         // Act
         var result = await _handler.GetMessagesAtAsync(chatId, userId, date, 20);
 
-        // Assert — cursor был сформирован из pivot-сообщения
+        // Assert — курсор сформирован от первого сообщения после даты
         var okResult = Assert.IsType<OkObjectResult>(result);
         _chatServiceMock.Verify(
             s => s.GetChatMessagesCursorAsync(chatId, userId, It.Is<string?>(c => c != null), 20),

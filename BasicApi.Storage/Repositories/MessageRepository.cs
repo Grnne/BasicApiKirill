@@ -8,76 +8,6 @@ namespace BasicApi.Storage.Repositories;
 
 public class MessageRepository(IDbConnectionFactory connectionFactory) : IMessageRepository
 {
-    public async Task<CursorResult<Message>> GetMessagesCursorAsync(Guid chatId, string? cursor, int limit)
-    {
-        // Decode cursor — if null, start from the most recent messages
-        DateTime? beforeTime = null;
-        Guid? beforeId = null;
-
-        if (!string.IsNullOrEmpty(cursor))
-        {
-            var decoded = CursorDto.Decode(cursor);
-            beforeTime = decoded.CreatedAt;
-            beforeId = decoded.Id;
-        }
-
-        // Fetch limit+1 to detect if there are more pages
-        var fetchSize = limit + 1;
-        string sql;
-        object parameters;
-
-        // Use composite pagination: (created_at, id) < (@beforeTime, @beforeId)
-        // The row-level comparison ensures deterministic ordering even when
-        // multiple messages share the same timestamp.
-        if (beforeTime is not null && beforeId is not null)
-        {
-            sql = @"
-                SELECT * FROM messages
-                WHERE chat_id = @chatId
-                  AND is_deleted = false
-                  AND (created_at < @beforeTime
-                       OR (created_at = @beforeTime AND id < @beforeId))
-                ORDER BY created_at DESC, id DESC
-                LIMIT @fetchSize";
-
-            parameters = new { chatId, beforeTime, beforeId, fetchSize };
-        }
-        else
-        {
-            sql = @"
-                SELECT * FROM messages
-                WHERE chat_id = @chatId
-                  AND is_deleted = false
-                ORDER BY created_at DESC, id DESC
-                LIMIT @fetchSize";
-
-            parameters = new { chatId, fetchSize };
-        }
-
-        using var connection = connectionFactory.CreateConnection();
-        var rows = (await connection.QueryAsync<Message>(sql, parameters)).ToList();
-
-        // Determine page items and the "extra" record
-        List<Message> items;
-        Message? extra = null;
-
-        if (rows.Count > limit)
-        {
-            items = rows.Take(limit).ToList();
-            extra = rows[limit];
-        }
-        else
-        {
-            items = rows;
-        }
-
-        return new CursorResult<Message>
-        {
-            Items = items,
-            Extra = extra
-        };
-    }
-
     /// <summary>
     /// Cursor-based pagination with sender name via JOIN — avoids N+1 lookups.
     /// </summary>
@@ -199,19 +129,23 @@ public class MessageRepository(IDbConnectionFactory connectionFactory) : IMessag
         return moved > 0 ? ReadPointerUpdate.Moved : ReadPointerUpdate.NotMoved;
     }
 
-        /// <summary>
-    /// Finds the most recent message at or before the given date.
-    /// Used to build a cursor for the "jump to date" endpoint.
+    /// <summary>
+    /// Finds the oldest message strictly after the given moment. Used as an exclusive
+    /// cursor by "jump to date": the page before it ends with the last message at or
+    /// before the date, so that message is included.
     /// </summary>
-    public async Task<Message?> GetFirstMessageBeforeDateAsync(Guid chatId, DateTime date)
+    public async Task<Message?> GetFirstMessageAfterDateAsync(Guid chatId, DateTime date)
     {
+        // Колонки перечислены явно: SELECT * не мапит snake_case (created_at → CreatedAt),
+        // из-за этого «переход к дате» строил курсор от 0001-01-01 и возвращал пустоту.
         const string sql = @"
-            SELECT *
+            SELECT id AS Id, chat_id AS ChatId, sender_id AS SenderId, text AS Text,
+                   created_at AS CreatedAt, is_deleted AS IsDeleted
             FROM messages
             WHERE chat_id = @chatId
-              AND created_at <= @date
+              AND created_at > @date
               AND is_deleted = false
-            ORDER BY created_at DESC, id DESC
+            ORDER BY created_at, id
             LIMIT 1";
 
         using var connection = connectionFactory.CreateConnection();
@@ -287,9 +221,9 @@ public class MessageRepository(IDbConnectionFactory connectionFactory) : IMessag
         // Fetch the page
         var rows = (await connection.QueryAsync<MessageWithSender>(sql, parameters)).ToList();
 
-        // Get total count (only on first page for performance)
-        int totalCount = 0;
-        if (string.IsNullOrEmpty(cursor))
+        // Всего совпадений — на каждой странице: клиент показывает «N результатов»
+        // независимо от того, какую страницу загрузил (раньше на 2-й и далее был 0).
+        int totalCount;
         {
             const string countSql = @"
                 SELECT COUNT(*)

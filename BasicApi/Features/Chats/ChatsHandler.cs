@@ -97,12 +97,24 @@ public class ChatsHandler(
     public async Task<IActionResult> GetMessagesAtAsync(
         Guid chatId, Guid userId, DateTime date, int limit)
     {
-        // Find the most recent message at or before the requested date
-        var pivot = await messageRepository.GetFirstMessageBeforeDateAsync(chatId, date);
+        // Членство — до любых запросов к сообщениям чата.
+        if (!await chatRepository.IsMemberAsync(chatId, userId))
+            throw new ForbiddenException("User is not a member of this chat", "NOT_A_MEMBER");
 
-        // If no messages before this date, return the most recent page (cursor = null)
-        string? cursor = pivot is not null
-            ? new CursorDto(pivot.CreatedAt, pivot.Id).Encode()
+        // Дата с любым смещением (…Z, …+03:00) — один и тот же момент; в базе — UTC.
+        var utcDate = date.Kind switch
+        {
+            DateTimeKind.Local => date.ToUniversalTime(),
+            DateTimeKind.Unspecified => DateTime.SpecifyKind(date, DateTimeKind.Utc),
+            _ => date
+        };
+
+        // Курсор исключающий, поэтому строим его от первого сообщения ПОСЛЕ даты:
+        // страница перед ним заканчивается последним сообщением до даты включительно.
+        // Сообщений после даты нет — это просто последняя страница (cursor = null).
+        var firstAfter = await messageRepository.GetFirstMessageAfterDateAsync(chatId, utcDate);
+        string? cursor = firstAfter is not null
+            ? new CursorDto(firstAfter.CreatedAt, firstAfter.Id).Encode()
             : null;
 
         var result = await chatService.GetChatMessagesCursorAsync(chatId, userId, cursor, limit);

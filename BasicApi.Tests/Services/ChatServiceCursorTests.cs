@@ -126,7 +126,7 @@ public class ChatServiceCursorTests
     }
 
     [Fact]
-    public async Task GetChatMessagesCursorAsync_WhenNoMorePages_SetsHasMoreFalseWithCursor()
+    public async Task GetChatMessagesCursorAsync_WhenNoMorePages_SetsHasMoreFalseAndNoCursor()
     {
         // Arrange
         var chatId = Guid.NewGuid();
@@ -154,9 +154,9 @@ public class ChatServiceCursorTests
         // Act
         var result = await _service.GetChatMessagesCursorAsync(chatId, userId, null, 20);
 
-        // Assert
+        // Assert — следующей страницы нет, значит и курсора на неё нет
         Assert.False(result.HasMore);
-        Assert.NotNull(result.NextCursor);
+        Assert.Null(result.NextCursor);
     }
 
     [Fact]
