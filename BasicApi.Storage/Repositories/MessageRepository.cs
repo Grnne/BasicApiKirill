@@ -82,7 +82,8 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
             // The sender name comes from the same query: it is needed in the new-message event.
             const string sql = $@"
                 WITH next AS (
-                    UPDATE chats SET last_seq = last_seq + 1 WHERE id = @ChatId RETURNING last_seq
+                    UPDATE chats SET last_seq = last_seq + 1, last_activity_at = GREATEST(last_activity_at, @CreatedAt)
+                    WHERE id = @ChatId RETURNING last_seq
                 ), m AS (
                     INSERT INTO messages (id, chat_id, sender_id, text, created_at, type, seq, client_message_id,
                                           reply_to_message_id, forward_from_user_id, forward_from_chat_id,

@@ -26,6 +26,7 @@ public class ChatListResult
     public long OutboxDeliveredSeq { get; set; }
     public bool HasOthers { get; set; }
     public DateTime CreatedAt { get; set; }
+    public DateTime LastActivityAt { get; set; }
 
     // Last message fields (nullable — chat may have no messages)
     public Guid? LastMessageId { get; set; }

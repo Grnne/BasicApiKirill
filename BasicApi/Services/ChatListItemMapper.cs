@@ -26,7 +26,7 @@ public static class ChatListItemMapper
         MarkedUnread = r.MarkedUnread,
         OutboxReadSeq = r.OutboxReadSeq,
         OutboxDeliveredSeq = r.OutboxDeliveredSeq,
-        LastActivityAt = r.LastMessageCreatedAt ?? r.CreatedAt,
+        LastActivityAt = r.LastActivityAt,
         Draft = r.DraftUpdatedAt is { } draftUpdatedAt
             ? new DraftDto
             {

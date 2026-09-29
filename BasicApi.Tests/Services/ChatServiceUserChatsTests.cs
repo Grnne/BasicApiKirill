@@ -37,7 +37,9 @@ public class ChatServiceUserChatsTests
             LastMessageText = lastMsgText,
             LastMessageCreatedAt = lastMsgCreatedAt,
             LastMessageSenderName = lastMsgSenderName,
-            CreatedAt = createdAt
+            CreatedAt = createdAt,
+            // What chats.last_activity_at holds: the last message, or the creation.
+            LastActivityAt = lastMsgCreatedAt ?? createdAt
         };
 
     [Fact]

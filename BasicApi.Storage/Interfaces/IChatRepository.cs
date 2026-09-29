@@ -11,6 +11,13 @@ public interface IChatRepository
     Task<List<ChatListResult>> GetUserChatsBatchedAsync(Guid userId, CancellationToken ct = default);
 
     /// <summary>
+    /// The user's chats by last activity, newest first: up to <paramref name="limit"/> strictly
+    /// after <paramref name="before"/> (the last chat of the previous page), or from the top.
+    /// </summary>
+    Task<IReadOnlyList<ChatListResult>> GetUserChatsPageAsync(
+        Guid userId, ChatListCursor? before, int limit, CancellationToken ct = default);
+
+    /// <summary>
     /// Returns a single chat-list row for one chat, as seen by the given user
     /// (companion, unread count and last message are resolved for that viewer).
     /// Returns null when the chat does not exist or the user is not a member.

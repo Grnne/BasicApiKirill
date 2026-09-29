@@ -22,8 +22,8 @@ public sealed class GroupRepository(IDbSession db) : IGroupRepository
         db.InTransactionAsync(async ct =>
         {
             await db.ExecuteAsync(@"
-                INSERT INTO chats (id, title, type, created_at, created_by, updated_at)
-                VALUES (@chatId, @title, 'group', @now, @creatorId, @now)",
+                INSERT INTO chats (id, title, type, created_at, last_activity_at, created_by, updated_at)
+                VALUES (@chatId, @title, 'group', @now, @now, @creatorId, @now)",
                 new { chatId, title, creatorId, now }, ct);
 
             await db.ExecuteAsync(@"

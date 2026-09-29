@@ -1,7 +1,9 @@
 using BasicApi.Middleware.Exceptions;
 using BasicApi.Models.Dto.Chat;
+using BasicApi.Models.Dto.Message;
 using BasicApi.Services.Events;
 using BasicApi.Storage;
+using ChatListCursor = BasicApi.Storage.Dto.ChatListCursor;
 using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
 
@@ -19,6 +21,26 @@ public sealed class ChatService(
     {
         var rows = await chatRepository.GetUserChatsBatchedAsync(userId, ct);
         return [.. rows.Select(ChatListItemMapper.Map)];
+    }
+
+    public async Task<CursorPaginatedResponse<ChatListItemDto>> GetUserChatsPageAsync(
+        Guid userId, string? cursor, int limit, CancellationToken ct = default)
+    {
+        ChatListCursor? before = null;
+        if (!string.IsNullOrEmpty(cursor))
+            before = ChatListCursor.TryDecode(cursor, out var parsed)
+                ? parsed
+                : throw new BadRequestException("Cursor is malformed", "INVALID_CURSOR");
+
+        var rows = await chatRepository.GetUserChatsPageAsync(userId, before, limit + 1, ct);
+        var page = rows.Take(limit).ToList();
+        var hasMore = rows.Count > limit;
+        return new CursorPaginatedResponse<ChatListItemDto>
+        {
+            Items = [.. page.Select(ChatListItemMapper.Map)],
+            HasMore = hasMore,
+            NextCursor = hasMore ? new ChatListCursor(page[^1].LastActivityAt, page[^1].ChatId).Encode() : null
+        };
     }
 
     public async Task<ChatListItemDto> GetChatListItemAsync(Guid chatId, Guid userId, CancellationToken ct = default)

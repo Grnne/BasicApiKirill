@@ -31,6 +31,28 @@ public class ChatsController(
         => Ok(await chats.GetUserChatsAsync(User.GetUserId(), ct));
 
     /// <summary>
+    /// The user's chats, a page at a time.
+    /// </summary>
+    /// <remarks>
+    /// The same <c>ChatListItemDto</c> as <c>GET /api/chats</c>, newest activity first (a new
+    /// message, or creation). <c>nextCursor</c> — pass it as <c>cursor</c> for the next page; null —
+    /// the end. A chat that gets a message while paging moves to the top: keep the list up to date
+    /// from events, not by reloading pages.
+    ///
+    /// Errors: <c>400 INVALID_CURSOR</c>.
+    /// </remarks>
+    /// <param name="cursor">From the previous page; omit for the first.</param>
+    /// <param name="limit">Chats per page (default 50, max 200).</param>
+    /// <param name="ct">Request cancellation.</param>
+    [HttpGet("page")]
+    [ProducesResponseType(typeof(CursorPaginatedResponse<ChatListItemDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetUserChatsPage(
+        [FromQuery] string? cursor, [FromQuery] int limit = 50, CancellationToken ct = default)
+        => Ok(await chats.GetUserChatsPageAsync(User.GetUserId(), cursor, Math.Clamp(limit, 1, 200), ct));
+
+    /// <summary>
     /// Create a private chat with another user.
     /// Returns 200 if chat already exists, 201 if a new chat was created.
     /// </summary>

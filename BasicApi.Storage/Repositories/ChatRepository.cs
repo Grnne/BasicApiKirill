@@ -42,8 +42,8 @@ public class ChatRepository(IDbSession db) : IChatRepository
             var chatId = Guid.NewGuid();
             var now = DateTime.UtcNow;
             var inserted = await db.QueryFirstOrDefaultAsync<Guid?>($@"
-                INSERT INTO chats (id, title, type, created_at, private_key)
-                VALUES (@chatId, NULL, 'private', @now, {PrivateKeySql})
+                INSERT INTO chats (id, title, type, created_at, last_activity_at, private_key)
+                VALUES (@chatId, NULL, 'private', @now, @now, {PrivateKeySql})
                 ON CONFLICT (private_key) DO NOTHING
                 RETURNING id",
                 new { chatId, userId, otherUserId, now }, ct);
@@ -71,8 +71,8 @@ public class ChatRepository(IDbSession db) : IChatRepository
             var chatId = Guid.NewGuid();
             var now = DateTime.UtcNow;
             var inserted = await db.QueryFirstOrDefaultAsync<Guid?>(@"
-                INSERT INTO chats (id, title, type, created_at, private_key)
-                VALUES (@chatId, NULL, 'saved', @now, 'saved:' || @userId::text)
+                INSERT INTO chats (id, title, type, created_at, last_activity_at, private_key)
+                VALUES (@chatId, NULL, 'saved', @now, @now, 'saved:' || @userId::text)
                 ON CONFLICT (private_key) DO NOTHING
                 RETURNING id",
                 new { chatId, userId, now }, ct);
@@ -188,6 +188,7 @@ public class ChatRepository(IDbSession db) : IChatRepository
             COALESCE(ob.delivered_seq, 0) AS OutboxDeliveredSeq,
             ob.members > 0 AS HasOthers,
 
+            c.last_activity_at AS LastActivityAt,
             lm.id AS LastMessageId,
             lm.seq AS LastMessageSeq,
             lm.sender_id AS LastMessageSenderId,
@@ -263,12 +264,31 @@ public class ChatRepository(IDbSession db) : IChatRepository
         Guid userId, string? query, string? typeFilter, int? limit, CancellationToken ct = default)
     {
         var whereClause = BuildSearchWhereClause(query, typeFilter);
-        var orderBy = "ORDER BY COALESCE(lm.created_at, c.created_at) DESC";
+        var orderBy = "ORDER BY c.last_activity_at DESC, c.id DESC";
         var limitClause = limit.HasValue ? $" LIMIT {limit.Value}" : "";
 
         var sql = $"{ChatListBaseSql}\n{whereClause}\n{orderBy}{limitClause}";
 
         return [.. await db.QueryAsync<ChatListResult>(sql, new { userId, query }, ct)];
+    }
+
+    public async Task<IReadOnlyList<ChatListResult>> GetUserChatsPageAsync(
+        Guid userId, ChatListCursor? before, int limit, CancellationToken ct = default)
+    {
+        // A row comparison matches the order exactly: chats with the same activity go by id.
+        var sql = $@"{ChatListBaseSql}
+            {(before is null ? "" : "WHERE (c.last_activity_at, c.id) < (@beforeAt, @beforeId)")}
+            ORDER BY c.last_activity_at DESC, c.id DESC
+            LIMIT @limit";
+
+        return await db.QueryAsync<ChatListResult>(sql, new
+        {
+            userId,
+            query = (string?)null,
+            beforeAt = before?.LastActivityAt,
+            beforeId = before?.ChatId,
+            limit
+        }, ct);
     }
 
     public Task<ChatListResult?> GetChatListItemAsync(Guid chatId, Guid userId, CancellationToken ct = default)

@@ -1,10 +1,18 @@
 using BasicApi.Models.Dto.Chat;
+using BasicApi.Models.Dto.Message;
 
 namespace BasicApi.Services;
 
 public interface IChatService
 {
     Task<List<ChatListItemDto>> GetUserChatsAsync(Guid userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// The user's chats a page at a time, by last activity; <paramref name="cursor"/> is the
+    /// <c>nextCursor</c> of the previous page. Errors: 400 <c>INVALID_CURSOR</c>.
+    /// </summary>
+    Task<CursorPaginatedResponse<ChatListItemDto>> GetUserChatsPageAsync(
+        Guid userId, string? cursor, int limit, CancellationToken ct = default);
     Task<ChatDetailDto> GetChatDetailsAsync(Guid chatId, Guid userId, CancellationToken ct = default);
 
     /// <summary>
