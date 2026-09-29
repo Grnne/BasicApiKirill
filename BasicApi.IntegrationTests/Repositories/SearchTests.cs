@@ -58,14 +58,13 @@ public class SearchTests(PostgresFixture db) : DbTest(db)
         await Data.MessageAsync(chat, alice, "run (deleted)", TestData.T0.AddMinutes(4), isDeleted: true);
         await Data.MessageAsync(other, bob, "run in another chat", TestData.T0.AddMinutes(5));
 
-        var (page1, total) = await repository.SearchMessagesCursorAsync(chat, "run", cursor: null, limit: 2);
+        var (page1, total) = await repository.SearchMessagesCursorAsync(chat, "run", beforeSeq: null, limit: 2);
 
         Assert.Equal(3, total);
         Assert.Equal([third, second], page1.Items.Select(m => m.Id));
         Assert.True(page1.HasMore);
 
-        var cursor = new CursorDto(page1.Items[^1].CreatedAt, page1.Items[^1].Id).Encode();
-        var (page2, _) = await repository.SearchMessagesCursorAsync(chat, "run", cursor, limit: 2);
+        var (page2, _) = await repository.SearchMessagesCursorAsync(chat, "run", page1.Items[^1].Seq, limit: 2);
 
         Assert.Equal([first], page2.Items.Select(m => m.Id));
         Assert.False(page2.HasMore);

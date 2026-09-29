@@ -17,6 +17,7 @@ public class ChatListResult
 
     // Last message fields (nullable — chat may have no messages)
     public Guid? LastMessageId { get; set; }
+    public long? LastMessageSeq { get; set; }
     public Guid? LastMessageSenderId { get; set; }
     public string? LastMessageText { get; set; }
     public DateTime? LastMessageCreatedAt { get; set; }

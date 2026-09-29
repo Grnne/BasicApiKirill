@@ -145,8 +145,13 @@ public class ChatsController(IChatService chats, IMessageService messages, IPres
     /// <c>ChatListUpdated</c> over SignalR, the sender included — other devices of the
     /// sender learn about the message the same way.
     ///
+    /// Pass a fresh <c>clientMessageId</c> with every message and repeat it on retries:
+    /// a retry returns the already created message with <c>200</c> instead of <c>201</c>
+    /// and sends no events.
+    ///
     /// Errors: <c>400 MESSAGE_EMPTY</c>, <c>400 MESSAGE_TOO_LONG</c>,
-    /// <c>403 NOT_A_MEMBER</c>, <c>429 RATE_LIMITED</c> (commands limit per user).
+    /// <c>403 NOT_A_MEMBER</c>, <c>409 CLIENT_MESSAGE_ID_CONFLICT</c> (the id is taken
+    /// by a message in another chat), <c>429 RATE_LIMITED</c> (commands limit per user).
     /// </remarks>
     /// <param name="chatId">Chat ID</param>
     /// <param name="dto">Message text</param>
@@ -155,12 +160,17 @@ public class ChatsController(IChatService chats, IMessageService messages, IPres
     [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
     [RequestSizeLimit(64 * 1024)]
     [ProducesResponseType(typeof(MessageDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(MessageDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> SendMessage(Guid chatId, [FromBody] SendMessageDto dto, CancellationToken ct)
-        => Created(string.Empty, await messages.SendAsync(chatId, User.GetUserId(), dto.Text, ct));
+    {
+        var result = await messages.SendAsync(chatId, User.GetUserId(), dto.Text, dto.ClientMessageId, ct);
+        return result.Created ? Created(string.Empty, result.Message) : Ok(result.Message);
+    }
 
     /// <summary>
     /// Report typing.

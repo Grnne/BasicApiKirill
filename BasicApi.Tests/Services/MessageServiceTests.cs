@@ -5,6 +5,7 @@ using BasicApi.Services;
 using BasicApi.Services.Events;
 using BasicApi.Storage.Dto;
 using BasicApi.Storage.Entities;
+using BasicApi.Storage.Exceptions;
 using BasicApi.Storage.Interfaces;
 using Moq;
 
@@ -33,34 +34,43 @@ public class MessageServiceTests
             .Setup(r => r.IsMemberAsync(_chatId, _userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
-        // Репозиторий возвращает то, что вставили, с именем отправителя
+        // Репозиторий возвращает то, что вставили, с номером и именем отправителя
         _msgRepoMock
-            .Setup(r => r.CreateAsync(It.IsAny<Message>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Message m, CancellationToken _) => new MessageWithSender
-            {
-                Id = m.Id, ChatId = m.ChatId, SenderId = m.SenderId, Text = m.Text,
-                CreatedAt = m.CreatedAt, SenderName = "Alice"
-            });
+            .Setup(r => r.CreateAsync(It.IsAny<Message>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Message m, Guid? clientMessageId, CancellationToken _) => Stored(m.ChatId, m.Text, clientMessageId, m.Id));
 
         var membership = new MembershipService(_chatRepoMock.Object);
         _service = new MessageService(_msgRepoMock.Object, membership, new ChatPolicy(membership), _eventsMock.Object);
     }
+
+    private MessageWithSender Stored(Guid chatId, string text, Guid? clientMessageId = null, Guid? id = null) => new()
+    {
+        Id = id ?? Guid.NewGuid(),
+        ChatId = chatId,
+        SenderId = _userId,
+        Text = text,
+        CreatedAt = DateTime.UtcNow,
+        Seq = 7,
+        ClientMessageId = clientMessageId,
+        SenderName = "Alice"
+    };
 
     // ========== Send ==========
 
     [Fact]
     public async Task Send_ByMember_StoresMessage_AndAnnouncesItToAllMembers()
     {
-        var message = await _service.SendAsync(_chatId, _userId, "hello");
+        var result = await _service.SendAsync(_chatId, _userId, "hello");
 
-        Assert.Equal("hello", message.Text);
-        Assert.Equal("Alice", message.SenderName);
-        Assert.Equal(_chatId, message.ChatId);
-        Assert.Equal(DateTimeKind.Utc, message.CreatedAt.Kind);
+        Assert.True(result.Created);
+        Assert.Equal("hello", result.Message.Text);
+        Assert.Equal("Alice", result.Message.SenderName);
+        Assert.Equal(_chatId, result.Message.ChatId);
+        Assert.Equal(7, result.Message.Seq);
         _msgRepoMock.Verify(r => r.CreateAsync(
             It.Is<Message>(m => m.ChatId == _chatId && m.SenderId == _userId && m.Text == "hello"),
-            It.IsAny<CancellationToken>()), Times.Once);
-        _eventsMock.Verify(e => e.MessageCreatedAsync(message,
+            null, It.IsAny<CancellationToken>()), Times.Once);
+        _eventsMock.Verify(e => e.MessageCreatedAsync(result.Message,
             It.Is<IReadOnlyCollection<Guid>>(ids => ids.Count == 2 && ids.Contains(_userId) && ids.Contains(_otherId)),
             It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -72,7 +82,7 @@ public class MessageServiceTests
             _service.SendAsync(Guid.NewGuid(), _userId, "hello"));
 
         Assert.Equal("NOT_A_MEMBER", ex.ErrorCode);
-        _msgRepoMock.Verify(r => r.CreateAsync(It.IsAny<Message>(), It.IsAny<CancellationToken>()), Times.Never);
+        _msgRepoMock.VerifyNoOtherCalls();
         _eventsMock.VerifyNoOtherCalls();
     }
 
@@ -85,7 +95,7 @@ public class MessageServiceTests
         var ex = await Assert.ThrowsAsync<BadRequestException>(() => _service.SendAsync(_chatId, _userId, text));
 
         Assert.Equal(MessageText.EmptyCode, ex.ErrorCode);
-        _msgRepoMock.Verify(r => r.CreateAsync(It.IsAny<Message>(), It.IsAny<CancellationToken>()), Times.Never);
+        _msgRepoMock.VerifyNoOtherCalls();
     }
 
     [Fact]
@@ -102,9 +112,64 @@ public class MessageServiceTests
     {
         var text = new string('x', MessageText.MaxLength);
 
-        var message = await _service.SendAsync(_chatId, _userId, "  " + text + "  ");
+        var result = await _service.SendAsync(_chatId, _userId, "  " + text + "  ");
 
-        Assert.Equal(text, message.Text);
+        Assert.Equal(text, result.Message.Text);
+    }
+
+    // ========== Идемпотентность ==========
+
+    [Fact]
+    public async Task Send_Retry_ReturnsTheFirstMessage_WithoutStoringOrAnnouncingAgain()
+    {
+        var clientMessageId = Guid.NewGuid();
+        var first = Stored(_chatId, "hello", clientMessageId);
+        _msgRepoMock
+            .Setup(r => r.GetByClientMessageIdAsync(_userId, clientMessageId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(first);
+
+        var result = await _service.SendAsync(_chatId, _userId, "hello", clientMessageId);
+
+        Assert.False(result.Created);
+        Assert.Equal(first.Id, result.Message.Id);
+        Assert.Equal(clientMessageId, result.Message.ClientMessageId);
+        _msgRepoMock.Verify(r => r.CreateAsync(
+            It.IsAny<Message>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _eventsMock.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task Send_ConcurrentRetryWonTheRace_ReturnsTheWinner()
+    {
+        var clientMessageId = Guid.NewGuid();
+        var winner = Stored(_chatId, "hello", clientMessageId);
+        _msgRepoMock
+            .SetupSequence(r => r.GetByClientMessageIdAsync(_userId, clientMessageId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((MessageWithSender?)null) // до вставки его ещё нет
+            .ReturnsAsync(winner);                   // после конфликта — есть
+        _msgRepoMock
+            .Setup(r => r.CreateAsync(It.IsAny<Message>(), clientMessageId, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new DuplicateKeyException("duplicate", new Exception()));
+
+        var result = await _service.SendAsync(_chatId, _userId, "hello", clientMessageId);
+
+        Assert.False(result.Created);
+        Assert.Equal(winner.Id, result.Message.Id);
+        _eventsMock.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task Send_ClientMessageIdUsedInAnotherChat_IsAConflict()
+    {
+        var clientMessageId = Guid.NewGuid();
+        _msgRepoMock
+            .Setup(r => r.GetByClientMessageIdAsync(_userId, clientMessageId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Stored(Guid.NewGuid(), "elsewhere", clientMessageId));
+
+        var ex = await Assert.ThrowsAsync<ConflictException>(() =>
+            _service.SendAsync(_chatId, _userId, "hello", clientMessageId));
+
+        Assert.Equal("CLIENT_MESSAGE_ID_CONFLICT", ex.ErrorCode);
     }
 
     // ========== MarkRead ==========
@@ -153,28 +218,25 @@ public class MessageServiceTests
             _service.MarkReadAsync(Guid.NewGuid(), _userId, Guid.NewGuid()));
 
         Assert.Equal("NOT_A_MEMBER", ex.ErrorCode);
-        _msgRepoMock.Verify(r => r.MarkReadAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        _msgRepoMock.VerifyNoOtherCalls();
     }
 
     // ========== Jump to date ==========
 
     [Fact]
-    public async Task PageAt_BuildsExclusiveCursorFromFirstMessageAfterDate()
+    public async Task PageAt_PagesStrictlyBeforeTheFirstMessageAfterDate()
     {
         var date = new DateTime(2024, 6, 15, 0, 0, 0, DateTimeKind.Utc);
-        var next = new Message { Id = Guid.NewGuid(), CreatedAt = new DateTime(2024, 6, 16, 0, 0, 0, DateTimeKind.Utc) };
         _msgRepoMock
-            .Setup(r => r.GetFirstMessageAfterDateAsync(_chatId, date, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(next);
+            .Setup(r => r.GetFirstSeqAfterAsync(_chatId, date, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(7);
         _msgRepoMock
-            .Setup(r => r.GetMessagesWithSenderCursorAsync(_chatId, It.IsAny<string?>(), 20, It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetMessagesWithSenderCursorAsync(_chatId, It.IsAny<long?>(), 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new CursorResult<MessageWithSender>());
 
         await _service.GetPageAtAsync(_chatId, _userId, date, 20);
 
-        var expected = new CursorDto(next.CreatedAt, next.Id).Encode();
-        _msgRepoMock.Verify(r => r.GetMessagesWithSenderCursorAsync(_chatId, expected, 20, It.IsAny<CancellationToken>()),
+        _msgRepoMock.Verify(r => r.GetMessagesWithSenderCursorAsync(_chatId, 7L, 20, It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -184,7 +246,6 @@ public class MessageServiceTests
         await Assert.ThrowsAsync<ForbiddenException>(() =>
             _service.GetPageAtAsync(Guid.NewGuid(), _userId, DateTime.UtcNow, 20));
 
-        _msgRepoMock.Verify(r => r.GetFirstMessageAfterDateAsync(
-            It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
+        _msgRepoMock.VerifyNoOtherCalls();
     }
 }

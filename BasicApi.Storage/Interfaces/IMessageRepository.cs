@@ -6,38 +6,42 @@ namespace BasicApi.Storage.Interfaces;
 public interface IMessageRepository
 {
     /// <summary>
-    /// Retrieves messages with sender name via JOIN — avoids N+1.
-    /// Uses cursor-based pagination.
+    /// A page of messages with sender names, newest first by seq: strictly before
+    /// <paramref name="beforeSeq"/>, or the latest when it is null.
     /// </summary>
     Task<CursorResult<MessageWithSender>> GetMessagesWithSenderCursorAsync(
-        Guid chatId, string? cursor, int limit, CancellationToken ct = default);
+        Guid chatId, long? beforeSeq, int limit, CancellationToken ct = default);
 
     /// <summary>
-    /// Finds the oldest message strictly after the given moment (UTC), or null.
+    /// Seq of the oldest message strictly after the given moment (UTC), or null.
     /// "Jump to date" uses it as an exclusive cursor so the page ends at the date.
     /// </summary>
-    Task<Message?> GetFirstMessageAfterDateAsync(Guid chatId, DateTime date, CancellationToken ct = default);
+    Task<long?> GetFirstSeqAfterAsync(Guid chatId, DateTime date, CancellationToken ct = default);
 
-        /// <summary>
-    /// Full-text search for messages within a chat using PostgreSQL tsvector.
-    /// Supports cursor-based pagination with (created_at, id) composite cursor.
-    /// Returns messages with sender names via JOIN — avoids N+1.
-    /// </summary>
-    /// <param name="chatId">Chat to search in.</param>
-    /// <param name="query">Search query text.</param>
-    /// <param name="cursor">Cursor from previous page (optional).</param>
-    /// <param name="limit">Max results per page (default 20).</param>
-    /// <returns>A tuple: the cursor result with messages, and the total count of matching messages.</returns>
-    Task<(CursorResult<MessageWithSender> Result, int TotalCount)> SearchMessagesCursorAsync(
-        Guid chatId, string query, string? cursor, int limit, CancellationToken ct = default);
-
-    /// <summary>Inserts a message; returns it with the sender's display name.</summary>
-    Task<MessageWithSender> CreateAsync(Message message, CancellationToken ct = default);
+    /// <summary>Seq of a message of this chat; null when there is no such message in it.</summary>
+    Task<long?> GetSeqAsync(Guid chatId, Guid messageId, CancellationToken ct = default);
 
     /// <summary>
-    /// Moves the member's read pointer to the given message — forward only, by
-    /// (created_at, id). A message from another chat (or a non-existent one) is
-    /// rejected without touching the pointer.
+    /// Full-text search within a chat, newest first by seq, before <paramref name="beforeSeq"/>
+    /// when given. Also returns the total number of matches.
+    /// </summary>
+    Task<(CursorResult<MessageWithSender> Result, int TotalCount)> SearchMessagesCursorAsync(
+        Guid chatId, string query, long? beforeSeq, int limit, CancellationToken ct = default);
+
+    /// <summary>
+    /// Inserts a message with the next seq of its chat; returns it with the sender's display name.
+    /// Throws <see cref="Exceptions.DuplicateKeyException"/> when the sender already has a message
+    /// with this <paramref name="clientMessageId"/> (a concurrent retry won).
+    /// </summary>
+    Task<MessageWithSender> CreateAsync(Message message, Guid? clientMessageId = null, CancellationToken ct = default);
+
+    /// <summary>The sender's message with this client-chosen id, or null.</summary>
+    Task<MessageWithSender?> GetByClientMessageIdAsync(Guid senderId, Guid clientMessageId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Moves the member's read pointer to the given message — forward only, by seq.
+    /// A message from another chat (or a non-existent one) is rejected without
+    /// touching the pointer.
     /// </summary>
     Task<ReadPointerUpdate> MarkReadAsync(Guid chatId, Guid userId, Guid messageId, CancellationToken ct = default);
 }

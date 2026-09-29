@@ -62,23 +62,32 @@ public sealed class TestData(IDbConnectionFactory connectionFactory)
         return id;
     }
 
+    /// <summary>Сообщение со следующим seq чата — номера идут в порядке вызовов, как в приложении.</summary>
     public async Task<Guid> MessageAsync(
         Guid chatId, Guid senderId, string text, DateTime createdAt, Guid? id = null, bool isDeleted = false)
     {
         var messageId = id ?? Guid.NewGuid();
         using var connection = connectionFactory.CreateConnection();
         await connection.ExecuteAsync(@"
-            INSERT INTO messages (id, chat_id, sender_id, text, created_at, is_deleted)
-            VALUES (@messageId, @chatId, @senderId, @text, @createdAt, @isDeleted)",
+            WITH next AS (UPDATE chats SET last_seq = last_seq + 1 WHERE id = @chatId RETURNING last_seq)
+            INSERT INTO messages (id, chat_id, sender_id, text, created_at, is_deleted, seq)
+            SELECT @messageId, @chatId, @senderId, @text, @createdAt, @isDeleted, next.last_seq FROM next",
             new { messageId, chatId, senderId, text, createdAt, isDeleted });
         return messageId;
+    }
+
+    public async Task<long> SeqOfAsync(Guid messageId)
+    {
+        using var connection = connectionFactory.CreateConnection();
+        return await connection.ExecuteScalarAsync<long>("SELECT seq FROM messages WHERE id = @messageId", new { messageId });
     }
 
     public async Task MarkReadAsync(Guid chatId, Guid userId, Guid messageId)
     {
         using var connection = connectionFactory.CreateConnection();
         await connection.ExecuteAsync(
-            "UPDATE chat_members SET last_read_message_id = @messageId WHERE chat_id = @chatId AND user_id = @userId",
+            @"UPDATE chat_members SET last_read_seq = (SELECT seq FROM messages WHERE id = @messageId)
+              WHERE chat_id = @chatId AND user_id = @userId",
             new { chatId, userId, messageId });
     }
 }

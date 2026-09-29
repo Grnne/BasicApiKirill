@@ -16,11 +16,12 @@ public class ReadStateTests(PostgresFixture db) : DbTest(db)
     private async Task<int> UnreadAsync(Guid chatId, Guid userId) =>
         (await Chats.GetChatListItemAsync(chatId, userId))!.UnreadCount;
 
-    private async Task<Guid?> PointerAsync(Guid chatId, Guid userId)
+    /// <summary>Указатель прочитанного — seq последнего прочитанного сообщения.</summary>
+    private async Task<long> PointerAsync(Guid chatId, Guid userId)
     {
         await using var connection = new NpgsqlConnection(Db.ConnectionString);
-        return await connection.ExecuteScalarAsync<Guid?>(
-            "SELECT last_read_message_id FROM chat_members WHERE chat_id = @chatId AND user_id = @userId",
+        return await connection.ExecuteScalarAsync<long>(
+            "SELECT last_read_seq FROM chat_members WHERE chat_id = @chatId AND user_id = @userId",
             new { chatId, userId });
     }
 
@@ -48,8 +49,7 @@ public class ReadStateTests(PostgresFixture db) : DbTest(db)
         var chat = await Data.PrivateChatAsync(alice, bob);
         var ids = new List<Guid>();
         for (var i = 0; i < 3; i++)
-            ids.Add(await Data.MessageAsync(chat, bob, $"m{i}", TestData.T0));
-        ids.Sort(); // порядок сообщений с равным временем — по id
+            ids.Add(await Data.MessageAsync(chat, bob, $"m{i}", TestData.T0)); // порядок — по seq, не по времени
 
         Assert.Equal(ReadPointerUpdate.Moved, await Messages.MarkReadAsync(chat, alice, ids[1]));
 
@@ -71,7 +71,7 @@ public class ReadStateTests(PostgresFixture db) : DbTest(db)
         Assert.Equal(ReadPointerUpdate.MessageNotFound, await Messages.MarkReadAsync(chat, alice, foreign));
         Assert.Equal(ReadPointerUpdate.MessageNotFound, await Messages.MarkReadAsync(chat, alice, Guid.NewGuid()));
 
-        Assert.Equal(mine, await PointerAsync(chat, alice));
+        Assert.Equal(await Data.SeqOfAsync(mine), await PointerAsync(chat, alice));
     }
 
     [Fact]
@@ -87,7 +87,7 @@ public class ReadStateTests(PostgresFixture db) : DbTest(db)
         Assert.Equal(ReadPointerUpdate.Moved, await Messages.MarkReadAsync(chat, alice, newer));
         Assert.Equal(ReadPointerUpdate.NotMoved, await Messages.MarkReadAsync(chat, alice, older));
 
-        Assert.Equal(newer, await PointerAsync(chat, alice));
+        Assert.Equal(await Data.SeqOfAsync(newer), await PointerAsync(chat, alice));
         Assert.Equal(0, await UnreadAsync(chat, alice));
     }
 

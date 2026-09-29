@@ -106,20 +106,18 @@ public class ChatRepository(IDbSession db) : IChatRepository
             comp.display_name AS CompanionName,
             comp.username AS CompanionUsername,
 
-            -- Непрочитанные: чужие сообщения после указателя по (created_at, id).
-            -- Свои не считаются; равное время не путает порядок.
-            COALESCE((
+            -- Непрочитанные: чужие сообщения после указателя прочитанного. Свои не считаются.
+            (
                 SELECT COUNT(*)
                 FROM messages m_unread
-                LEFT JOIN messages m_read ON m_read.id = cm_last.last_read_message_id
                 WHERE m_unread.chat_id = c.id
+                  AND m_unread.seq > cm.last_read_seq
                   AND m_unread.is_deleted = false
                   AND m_unread.sender_id <> @userId
-                  AND (m_read.id IS NULL
-                       OR (m_unread.created_at, m_unread.id) > (m_read.created_at, m_read.id))
-            ), 0) AS UnreadCount,
+            ) AS UnreadCount,
 
             lm.id AS LastMessageId,
+            lm.seq AS LastMessageSeq,
             lm.sender_id AS LastMessageSenderId,
             lm.text AS LastMessageText,
             lm.created_at AS LastMessageCreatedAt,
@@ -127,9 +125,6 @@ public class ChatRepository(IDbSession db) : IChatRepository
 
         FROM chats c
         INNER JOIN chat_members cm ON c.id = cm.chat_id AND cm.user_id = @userId
-
-        LEFT JOIN chat_members cm_last
-            ON cm_last.chat_id = c.id AND cm_last.user_id = @userId
 
         LEFT JOIN LATERAL (
             SELECT u.id, u.display_name, u.username
@@ -140,10 +135,10 @@ public class ChatRepository(IDbSession db) : IChatRepository
         ) comp ON c.type = 'private'
 
         LEFT JOIN LATERAL (
-            SELECT m.id, m.sender_id, m.text, m.created_at
+            SELECT m.id, m.seq, m.sender_id, m.text, m.created_at
             FROM messages m
             WHERE m.chat_id = c.id AND m.is_deleted = false
-            ORDER BY m.created_at DESC, m.id DESC
+            ORDER BY m.seq DESC
             LIMIT 1
         ) lm ON TRUE
 

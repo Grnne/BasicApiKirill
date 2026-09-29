@@ -106,7 +106,8 @@ public class PrivateChatKeyMigrationTests(PostgresFixture db)
             "UPDATE chat_members SET last_read_message_id = @m2 WHERE chat_id = @dup AND user_id = @alice",
             new { m2, dup, alice });
 
-        PostgresFixture.MigrateUp(connectionString);
+        // До миграции 9: дальше указатель прочитанного хранится как seq.
+        PostgresFixture.WithRunner(connectionString, runner => runner.MigrateUp(6));
 
         var chats = (await connection.QueryAsync<Guid>("SELECT id FROM chats ORDER BY id")).ToHashSet();
         Assert.Equal(new HashSet<Guid> { keeper, other }, chats);

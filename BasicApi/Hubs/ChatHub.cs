@@ -108,7 +108,7 @@ public class ChatHub(
 
         if (UserId is not { } userId) return;
 
-        await messages.SendAsync(chatId, userId, text, Context.ConnectionAborted);
+        await messages.SendAsync(chatId, userId, text, ct: Context.ConnectionAborted);
     }
 
     public async Task Ping()

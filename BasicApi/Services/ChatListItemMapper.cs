@@ -29,7 +29,8 @@ public static class ChatListItemMapper
             SenderName = r.LastMessageSenderName ?? "Unknown",
             Text = r.LastMessageText ?? string.Empty,
             CreatedAt = r.LastMessageCreatedAt!.Value,
-            IsRead = false
+            IsRead = false,
+            Seq = r.LastMessageSeq ?? 0
         } : null
     };
 }
