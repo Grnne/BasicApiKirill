@@ -32,6 +32,11 @@ public class Program
 
         builder.Services.AddApiServices(builder.Configuration, builder.Environment);
 
+        // SignalR пишет Error на любое исключение метода хаба — и на ожидаемые ошибки
+        // клиента (NOT_A_MEMBER, MESSAGE_EMPTY), для которых REST пишет Information.
+        // Настоящие ошибки хаба пишет HubErrorFilter — с именем метода и уровнем Error.
+        builder.Logging.AddFilter("Microsoft.AspNetCore.SignalR.Internal.DefaultHubDispatcher", LogLevel.None);
+
         // Сжатие статики фронтенда: бандл ужимается втрое.
         // Пока раздачей занимается Kestrel, это его работа; появится nginx —
         // сжатие переедет туда.
