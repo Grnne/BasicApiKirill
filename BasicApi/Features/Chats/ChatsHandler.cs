@@ -16,7 +16,8 @@ public class ChatsHandler(
     IChatRepository chatRepository,
     IUserRepository userRepository,
     IMessageRepository messageRepository,
-    IHubContext<ChatHub> hubContext)
+    IHubContext<ChatHub> hubContext,
+    IUserStatusService userStatusService)
 {
     public async Task<IActionResult> GetUserChatsAsync(Guid userId)
     {
@@ -46,7 +47,24 @@ public class ChatsHandler(
         if (recipientRow is not null)
             await ChatHub.NotifyChatCreatedAsync(hubContext, otherUserId, ChatListItemMapper.Map(recipientRow));
 
+        await ExchangePresenceAsync(currentUserId, otherUserId);
+
         return new CreatedResult(string.Empty, await BuildChatListItemAsync(chatId, currentUserId));
+    }
+
+    /// <summary>
+    /// Люди только что стали собеседниками. Хаб рассылает UserOnlineChanged при подключении —
+    /// тем, с кем уже есть общий чат, так что без этого оба видели бы друг друга «не в сети»
+    /// до перезагрузки. Сообщаем только «в сети»: «не в сети» клиент и так считает по умолчанию.
+    /// </summary>
+    private async Task ExchangePresenceAsync(Guid userA, Guid userB)
+    {
+        var online = await userStatusService.GetOnlineUserIdsAsync(new HashSet<Guid> { userA, userB });
+
+        if (online.Contains(userA))
+            await hubContext.Clients.User(userB.ToString()).SendAsync("UserOnlineChanged", userA, true);
+        if (online.Contains(userB))
+            await hubContext.Clients.User(userA.ToString()).SendAsync("UserOnlineChanged", userB, true);
     }
 
     /// <summary>

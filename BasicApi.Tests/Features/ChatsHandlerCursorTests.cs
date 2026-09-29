@@ -32,7 +32,8 @@ public class ChatsHandlerCursorTests
             _chatRepoMock.Object,
             Mock.Of<IUserRepository>(),
             _msgRepoMock.Object,
-            hubContextMock.Object);
+            hubContextMock.Object,
+            Mock.Of<IUserStatusService>());
     }
 
     [Fact]

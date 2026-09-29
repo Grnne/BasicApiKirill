@@ -17,6 +17,8 @@ public class ChatsHandlerTests
     private readonly Mock<IChatService> _chatServiceMock;
     private readonly Mock<IChatRepository> _chatRepoMock;
     private readonly Mock<IUserRepository> _userRepoMock = new();
+    private readonly Mock<IUserStatusService> _statusMock = new();
+    private readonly HashSet<Guid> _online = [];
     private readonly Mock<IMessageRepository> _msgRepoMock;
     private readonly Mock<IHubContext<ChatHub>> _hubContextMock;
     private readonly Mock<IHubClients> _hubClientsMock;
@@ -45,12 +47,18 @@ public class ChatsHandlerTests
             .Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid id, CancellationToken _) => new BasicApi.Storage.Entities.User { Id = id, IsActive = true });
 
+        // Онлайн — те, кого тест положил в _online
+        _statusMock
+            .Setup(s => s.GetOnlineUserIdsAsync(It.IsAny<IReadOnlySet<Guid>>()))
+            .ReturnsAsync((IReadOnlySet<Guid> ids) => ids.Where(_online.Contains).ToHashSet());
+
         _handler = new ChatsHandler(
             _chatServiceMock.Object,
             _chatRepoMock.Object,
             _userRepoMock.Object,
             _msgRepoMock.Object,
-            _hubContextMock.Object);
+            _hubContextMock.Object,
+            _statusMock.Object);
     }
 
     /// <summary>
@@ -351,6 +359,42 @@ public class ChatsHandlerTests
         Assert.NotEqual(otherUserId, payload.CompanionId);
         Assert.Equal("Bob", payload.CompanionName);
         Assert.Equal("bob", payload.CompanionUsername);
+    }
+
+    [Fact]
+    public async Task CreatePrivateChatAsync_NewChat_BothOnline_EachLearnsTheOthersPresence()
+    {
+        // Раньше UserOnlineChanged рассылался только при подключении и только тем,
+        // с кем уже был общий чат: в новом чате оба видели друг друга «не в сети».
+        var userId = Guid.NewGuid();
+        var otherUserId = Guid.NewGuid();
+        ArrangeNewPrivateChat(userId, otherUserId);
+        _online.UnionWith([userId, otherUserId]);
+
+        await _handler.CreatePrivateChatAsync(userId, otherUserId);
+
+        var presence = _clientProxy.Invocations.Where(i => i.Method == "UserOnlineChanged").ToList();
+        Assert.Equal(2, presence.Count);
+        Assert.Contains(presence, i => (Guid)i.Args[0]! == userId && (bool)i.Args[1]!);
+        Assert.Contains(presence, i => (Guid)i.Args[0]! == otherUserId && (bool)i.Args[1]!);
+        _hubClientsMock.Verify(c => c.User(userId.ToString()), Times.Once);        // статус собеседника — создателю
+        _hubClientsMock.Verify(c => c.User(otherUserId.ToString()), Times.Exactly(2)); // ChatCreated + статус создателя
+    }
+
+    [Fact]
+    public async Task CreatePrivateChatAsync_NewChat_OfflineCompanion_IsNotAnnounced()
+    {
+        var userId = Guid.NewGuid();
+        var otherUserId = Guid.NewGuid();
+        ArrangeNewPrivateChat(userId, otherUserId);
+        _online.Add(userId); // в сети только создатель
+
+        await _handler.CreatePrivateChatAsync(userId, otherUserId);
+
+        // Собеседнику — статус создателя; создателю — ничего (по умолчанию клиент и так считает «не в сети»)
+        var presence = Assert.Single(_clientProxy.Invocations, i => i.Method == "UserOnlineChanged");
+        Assert.Equal(userId, presence.Args[0]);
+        _hubClientsMock.Verify(c => c.User(userId.ToString()), Times.Never);
     }
 
     [Fact]
