@@ -670,6 +670,60 @@ Authorization: Bearer {access}
 Удалённое для всех в истории не показывается совсем (как в Telegram), поэтому в
 номерах `seq` бывают пропуски — на них нельзя полагаться как на непрерывные.
 
+### 12.2. Ответ и пересылка
+
+**`MessageDto` — ещё два поля:**
+
+```json
+{
+  "id": "…", "text": "Конечно",
+  "replyTo": {                          // null — не ответ
+    "messageId": "…", "senderId": "…", "senderName": "Алиса",
+    "text": "Обедаем в полдень?",       // первые 100 символов (с «…», если длиннее)
+    "deleted": false                    // true — исходное удалено у всех, text пустой
+  },
+  "forwardFrom": {                      // null — не пересланное
+    "senderId": "…", "senderName": "Боб" // автор оригинала
+  }
+}
+```
+
+**Ответ.** `POST /api/chats/{chatId}/messages` принимает `replyToMessageId`:
+
+```json
+{ "text": "Конечно", "replyToMessageId": "…" }
+```
+
+- Сообщение, на которое отвечают, должно быть в этом же чате и не удалено у всех,
+  иначе `400 REPLY_TARGET_NOT_FOUND`. Удалённое у себя — можно.
+- Если исходное удалят позже, `replyTo` останется с `deleted: true` и пустым текстом.
+- Метод хаба `SendMessage` ответы не поддерживает.
+
+**Пересылка.** `POST /api/chats/{chatId}/messages/forward` — в чат `chatId`:
+
+```json
+{
+  "fromChatId": "…",
+  "messageIds": ["…", "…"],            // 1–100 разных
+  "clientMessageIds": ["…", "…"]       // необязательно, по одному на сообщение
+}
+```
+
+- `201` — `{ "items": [MessageDto, …] }`: новые сообщения в целевом чате, в исходном
+  порядке (по `seq` источника, а не по порядку в запросе).
+- Каждая копия — новое сообщение пересылающего с `forwardFrom` — автором оригинала. Для
+  пересылки пересланного — самым первым автором, как в Telegram. `replyTo` не переносится.
+- Участникам целевого чата на каждую копию приходят `MessageCreated` и `ChatListUpdated`,
+  как при обычной отправке.
+- С `clientMessageIds` повтор запроса ничего не создаёт и отвечает `200` с теми же копиями.
+- Пересланное нельзя редактировать: `403 MESSAGE_NOT_EDITABLE`. Удалять — можно.
+- Переслать можно только то, что пользователь видит: удалённое у всех или у себя —
+  `404 MESSAGE_NOT_FOUND`.
+- Ошибки: `400 INVALID_REQUEST` (пусто, повторяющиеся id, `clientMessageIds` другой
+  длины), `400 TOO_MANY_MESSAGES`, `403 NOT_A_MEMBER` (в любом из двух чатов),
+  `404 MESSAGE_NOT_FOUND`, `409 CLIENT_MESSAGE_ID_CONFLICT`, `429 RATE_LIMITED`.
+  Один запрос пересылки — одна команда в лимите.
+
 ---
 
 ## Справочник кодов ошибок
@@ -685,7 +739,9 @@ Authorization: Bearer {access}
 | `MESSAGE_TOO_LONG` | 400 | Отправка: длиннее 4096 символов после обрезки пробелов (и в хабе) |
 | `INVALID_CURSOR` | 400 | Битый или подделанный `cursor` в истории и поиске |
 | `INVALID_QUERY` | 400 | Пустой запрос поиска чатов и пользователей; в поиске по сообщениям — короче 2 символов |
-| `INVALID_REQUEST` | 400 | `POST /api/users/status`: пустой `userIds` |
+| `INVALID_REQUEST` | 400 | `POST /api/users/status`: пустой `userIds`; пересылка: пустой или повторяющийся `messageIds`, `clientMessageIds` другой длины |
+| `TOO_MANY_MESSAGES` | 400 | Пересылка: больше 100 сообщений |
+| `REPLY_TARGET_NOT_FOUND` | 400 | Отправка: `replyToMessageId` не из этого чата или удалено |
 | `TOO_MANY_IDS` | 400 | `POST /api/users/status`: больше 200 `userIds` |
 | `INVALID_PTS` | 400 | `/api/sync`: `since` или `pts` вне допустимого диапазона |
 | `SELF_CHAT` | 400 | Личный чат с самим собой |
@@ -702,10 +758,11 @@ Authorization: Bearer {access}
 | `NOT_MESSAGE_AUTHOR` | 403 | Правка или удаление у всех чужого сообщения |
 | `EDIT_WINDOW_EXPIRED` | 403 | Правка: прошло больше `Messages:EditWindowHours` (48 ч) |
 | `DELETE_WINDOW_EXPIRED` | 403 | Удаление у всех: прошло больше `Messages:DeleteWindowHours` (48 ч) |
+| `MESSAGE_NOT_EDITABLE` | 403 | Правка пересланного сообщения |
 | `ACCESS_DENIED` | 403 | Прочие отказы в доступе |
 | `USER_NOT_FOUND` | 404 | Пользователь не найден (или вне общих чатов — для статуса) |
 | `CHAT_NOT_FOUND` | 404 | Чат не найден |
-| `MESSAGE_NOT_FOUND` | 404 | `read`, правка, удаление: сообщения нет в этом чате (для правки — или оно удалено) |
+| `MESSAGE_NOT_FOUND` | 404 | `read`, правка, удаление: сообщения нет в этом чате (для правки — или оно удалено); пересылка: сообщение не видно пользователю |
 | `USERNAME_TAKEN` | 409 | Регистрация: логин занят (без учёта регистра) |
 | `EMAIL_TAKEN` | 409 | Регистрация: email занят (без учёта регистра) |
 | `USER_ALREADY_EXISTS` | 409 | Регистрация: гонка двух одинаковых регистраций |

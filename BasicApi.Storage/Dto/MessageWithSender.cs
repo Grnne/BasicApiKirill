@@ -20,4 +20,20 @@ public class MessageWithSender
     public long Seq { get; set; }
     public Guid? ClientMessageId { get; set; }
     public string SenderName { get; set; } = string.Empty;
+
+    /// <summary>The answered message, joined: its author and text (empty when it is deleted).</summary>
+    public Guid? ReplyToMessageId { get; set; }
+    public Guid? ReplyToSenderId { get; set; }
+    public string? ReplyToSenderName { get; set; }
+    public string? ReplyToText { get; set; }
+    public bool ReplyToDeleted { get; set; }
+
+    /// <summary>For a forward — the original author (with the name) and where it came from.</summary>
+    public Guid? ForwardFromUserId { get; set; }
+    public string? ForwardFromUserName { get; set; }
+    public Guid? ForwardFromChatId { get; set; }
+    public Guid? ForwardFromMessageId { get; set; }
+
+    /// <summary>A copy of another message (its links may be cleared if the original is gone).</summary>
+    public bool IsForward => ForwardFromUserId is not null || ForwardFromChatId is not null || ForwardFromMessageId is not null;
 }

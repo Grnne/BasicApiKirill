@@ -20,7 +20,23 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
         m.deleted_at AS DeletedAt,
         m.seq AS Seq,
         m.client_message_id AS ClientMessageId,
-        COALESCE(u.display_name, 'Unknown') AS SenderName";
+        COALESCE(u.display_name, 'Unknown') AS SenderName,
+        m.reply_to_message_id AS ReplyToMessageId,
+        r.sender_id AS ReplyToSenderId,
+        ru.display_name AS ReplyToSenderName,
+        r.text AS ReplyToText,
+        COALESCE(r.deleted_at IS NOT NULL, false) AS ReplyToDeleted,
+        m.forward_from_user_id AS ForwardFromUserId,
+        fu.display_name AS ForwardFromUserName,
+        m.forward_from_chat_id AS ForwardFromChatId,
+        m.forward_from_message_id AS ForwardFromMessageId";
+
+    /// <summary>Sender, the answered message with its author, the original author of a forward.</summary>
+    private const string Joins = @"
+        LEFT JOIN users u ON u.id = m.sender_id
+        LEFT JOIN messages r ON r.id = m.reply_to_message_id
+        LEFT JOIN users ru ON ru.id = r.sender_id
+        LEFT JOIN users fu ON fu.id = m.forward_from_user_id";
 
     /// <summary>
     /// What a member sees: not deleted for everyone and not hidden by them ("delete for me").
@@ -38,7 +54,7 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
         var sql = $@"
             SELECT {SelectColumns}
             FROM messages m
-            LEFT JOIN users u ON u.id = m.sender_id
+            {Joins}
             WHERE m.chat_id = @chatId
               AND {VisibleToViewer}
               {(beforeSeq is null ? "" : "AND m.seq < @beforeSeq")}
@@ -61,14 +77,17 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
                 WITH next AS (
                     UPDATE chats SET last_seq = last_seq + 1 WHERE id = @ChatId RETURNING last_seq
                 ), m AS (
-                    INSERT INTO messages (id, chat_id, sender_id, text, created_at, type, seq, client_message_id)
-                    SELECT @Id, @ChatId, @SenderId, @Text, @CreatedAt, @Type, next.last_seq, @ClientMessageId
+                    INSERT INTO messages (id, chat_id, sender_id, text, created_at, type, seq, client_message_id,
+                                          reply_to_message_id, forward_from_user_id, forward_from_chat_id,
+                                          forward_from_message_id)
+                    SELECT @Id, @ChatId, @SenderId, @Text, @CreatedAt, @Type, next.last_seq, @ClientMessageId,
+                           @ReplyToMessageId, @ForwardFromUserId, @ForwardFromChatId, @ForwardFromMessageId
                     FROM next
                     RETURNING *
                 )
                 SELECT {SelectColumns}
                 FROM m
-                LEFT JOIN users u ON u.id = m.sender_id";
+                {Joins}";
 
             try
             {
@@ -80,7 +99,11 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
                     message.Text,
                     message.CreatedAt,
                     message.Type,
-                    ClientMessageId = clientMessageId
+                    ClientMessageId = clientMessageId,
+                    message.ReplyToMessageId,
+                    message.ForwardFromUserId,
+                    message.ForwardFromChatId,
+                    message.ForwardFromMessageId
                 }, ct);
             }
             catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation &&
@@ -97,7 +120,7 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
         db.QueryFirstOrDefaultAsync<MessageWithSender>($@"
             SELECT {SelectColumns}
             FROM messages m
-            LEFT JOIN users u ON u.id = m.sender_id
+            {Joins}
             WHERE m.sender_id = @senderId AND m.client_message_id = @clientMessageId",
             new { senderId, clientMessageId }, ct);
 
@@ -105,9 +128,19 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
         db.QueryFirstOrDefaultAsync<MessageWithSender>($@"
             SELECT {SelectColumns}
             FROM messages m
-            LEFT JOIN users u ON u.id = m.sender_id
+            {Joins}
             WHERE m.id = @messageId AND m.chat_id = @chatId",
             new { chatId, messageId }, ct);
+
+    public Task<IReadOnlyList<MessageWithSender>> GetVisibleAsync(
+        Guid chatId, Guid viewerId, IReadOnlyCollection<Guid> messageIds, CancellationToken ct = default) =>
+        db.QueryAsync<MessageWithSender>($@"
+            SELECT {SelectColumns}
+            FROM messages m
+            {Joins}
+            WHERE m.chat_id = @chatId AND m.id = ANY(@messageIds) AND {VisibleToViewer}
+            ORDER BY m.seq",
+            new { chatId, viewerId, messageIds = messageIds.ToArray() }, ct);
 
     public Task<MessageWithSender?> EditTextAsync(
         Guid messageId, string text, DateTime editedAt, CancellationToken ct = default) =>
@@ -120,7 +153,7 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
             )
             SELECT {SelectColumns}
             FROM m
-            LEFT JOIN users u ON u.id = m.sender_id",
+            {Joins}",
             new { messageId, text, editedAt }, ct);
 
     public async Task<bool> DeleteForEveryoneAsync(Guid messageId, DateTime deletedAt, CancellationToken ct = default) =>
@@ -189,7 +222,7 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
         var sql = $@"
             SELECT {SelectColumns}
             FROM messages m
-            LEFT JOIN users u ON u.id = m.sender_id
+            {Joins}
             WHERE m.chat_id = @chatId
               AND {VisibleToViewer}
               AND {match}

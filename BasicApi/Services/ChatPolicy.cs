@@ -56,6 +56,7 @@ public sealed class ChatPolicy(
     public const string NotMessageAuthorCode = "NOT_MESSAGE_AUTHOR";
     public const string EditWindowExpiredCode = "EDIT_WINDOW_EXPIRED";
     public const string DeleteWindowExpiredCode = "DELETE_WINDOW_EXPIRED";
+    public const string MessageNotEditableCode = "MESSAGE_NOT_EDITABLE";
 
     private readonly MessageOptions _messages = options?.Value ?? new MessageOptions();
     private readonly TimeProvider _time = time ?? TimeProvider.System;
@@ -67,8 +68,11 @@ public sealed class ChatPolicy(
         MemberOnlyAsync(userId, chatId, ct);
 
     public Task<PolicyDecision> CanEditMessageAsync(Guid userId, MessageWithSender message, CancellationToken ct = default) =>
-        Task.FromResult(AuthorWithin(userId, message, _messages.EditWindowHours,
-            EditWindowExpiredCode, "The time to edit this message has passed"));
+        Task.FromResult(message.IsForward && message.SenderId == userId
+            // Someone else's words: the one who forwarded them may not change them.
+            ? PolicyDecision.Deny(MessageNotEditableCode, "A forwarded message cannot be edited")
+            : AuthorWithin(userId, message, _messages.EditWindowHours,
+                EditWindowExpiredCode, "The time to edit this message has passed"));
 
     // Group admins who may delete other members' messages come with groups (F3).
     public Task<PolicyDecision> CanDeleteForEveryoneAsync(Guid userId, MessageWithSender message, CancellationToken ct = default) =>

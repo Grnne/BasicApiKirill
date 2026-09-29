@@ -42,6 +42,13 @@ public interface IMessageRepository
     /// <summary>A message of this chat, tombstones included; null when there is no such message in it.</summary>
     Task<MessageWithSender?> GetAsync(Guid chatId, Guid messageId, CancellationToken ct = default);
 
+    /// <summary>
+    /// The given messages of this chat that the viewer sees (not deleted, not hidden by them),
+    /// in seq order. Missing ones are simply absent.
+    /// </summary>
+    Task<IReadOnlyList<MessageWithSender>> GetVisibleAsync(
+        Guid chatId, Guid viewerId, IReadOnlyCollection<Guid> messageIds, CancellationToken ct = default);
+
     /// <summary>Replaces the text and sets edited_at; null when the message is deleted.</summary>
     Task<MessageWithSender?> EditTextAsync(Guid messageId, string text, DateTime editedAt, CancellationToken ct = default);
 

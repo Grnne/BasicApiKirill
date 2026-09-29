@@ -8,6 +8,14 @@ public class Message
     public string Text { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public string Type { get; set; } = MessageTypes.Text;
+
+    /// <summary>The message this one answers; in the same chat.</summary>
+    public Guid? ReplyToMessageId { get; set; }
+
+    /// <summary>For a forward — the original author, chat and message.</summary>
+    public Guid? ForwardFromUserId { get; set; }
+    public Guid? ForwardFromChatId { get; set; }
+    public Guid? ForwardFromMessageId { get; set; }
 }
 
 public static class MessageTypes

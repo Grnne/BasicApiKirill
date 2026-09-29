@@ -31,11 +31,25 @@ public interface IMessageService
     /// Send: the text is trimmed at the edges and validated; an event goes to the members.
     /// With <paramref name="clientMessageId"/> sending is idempotent: a repeat returns the already
     /// created message (<c>Created = false</c>) and broadcasts nothing.
-    /// Errors: 400 <c>MESSAGE_EMPTY</c>/<c>MESSAGE_TOO_LONG</c>, 403 <c>NOT_A_MEMBER</c>,
+    /// Errors: 400 <c>MESSAGE_EMPTY</c>/<c>MESSAGE_TOO_LONG</c>/<c>REPLY_TARGET_NOT_FOUND</c>,
+    /// 403 <c>NOT_A_MEMBER</c>,
     /// 409 <c>CLIENT_MESSAGE_ID_CONFLICT</c> - this id is already taken by a message in another chat.
     /// </summary>
     Task<SendResult> SendAsync(
-        Guid chatId, Guid senderId, string? text, Guid? clientMessageId = null, CancellationToken ct = default);
+        Guid chatId, Guid senderId, string? text, Guid? clientMessageId = null, Guid? replyToMessageId = null,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Copies messages of <paramref name="fromChatId"/> into <paramref name="chatId"/> in their
+    /// original order, each with a link to its original author; members get <c>MessageCreated</c>
+    /// for each. With <paramref name="clientMessageIds"/> a retry returns the copies made before.
+    /// Errors: 400 <c>INVALID_REQUEST</c>/<c>TOO_MANY_MESSAGES</c>, 403 <c>NOT_A_MEMBER</c>,
+    /// 404 <c>MESSAGE_NOT_FOUND</c> - a message is not in the source chat or not visible to the user,
+    /// 409 <c>CLIENT_MESSAGE_ID_CONFLICT</c>.
+    /// </summary>
+    Task<ForwardResult> ForwardAsync(
+        Guid chatId, Guid userId, Guid fromChatId, IReadOnlyList<Guid> messageIds,
+        IReadOnlyList<Guid>? clientMessageIds = null, CancellationToken ct = default);
 
     /// <summary>
     /// Moves the read pointer forward. A message not from this chat - 404
@@ -64,6 +78,10 @@ public interface IMessageService
 /// <param name="Created">false - this is a repeat of an already performed send.</param>
 public sealed record SendResult(MessageDto Message, bool Created);
 
+/// <param name="Messages">The copies in the target chat, in order.</param>
+/// <param name="Created">false - all of them had been made by an earlier attempt.</param>
+public sealed record ForwardResult(IReadOnlyList<MessageDto> Messages, bool Created);
+
 public sealed class MessageService(
     IDbSession db,
     IMessageRepository messageRepository,
@@ -71,6 +89,9 @@ public sealed class MessageService(
     IChatPolicy policy,
     IChatEventPublisher events) : IMessageService
 {
+    /// <summary>How many messages one forward may carry.</summary>
+    public const int MaxForward = 100;
+
     public async Task<CursorPaginatedResponse<MessageDto>> GetPageAsync(
         Guid chatId, Guid userId, string? cursor, int limit, CancellationToken ct = default)
     {
@@ -139,7 +160,8 @@ public sealed class MessageService(
     }
 
     public async Task<SendResult> SendAsync(
-        Guid chatId, Guid senderId, string? text, Guid? clientMessageId = null, CancellationToken ct = default)
+        Guid chatId, Guid senderId, string? text, Guid? clientMessageId = null, Guid? replyToMessageId = null,
+        CancellationToken ct = default)
     {
         // Validate the text before going to the DB: it is free.
         var normalized = NormalizeText(text);
@@ -151,6 +173,13 @@ public sealed class MessageService(
             await messageRepository.GetByClientMessageIdAsync(senderId, retryId, ct) is { } sent)
         {
             return AlreadySent(sent, chatId);
+        }
+
+        // A reply to a message of another chat would leak its text into this one.
+        if (replyToMessageId is { } replyId &&
+            await messageRepository.GetAsync(chatId, replyId, ct) is not { DeletedAt: null })
+        {
+            throw new BadRequestException("The message to reply to is not in this chat", "REPLY_TARGET_NOT_FOUND");
         }
 
         var memberIds = await membership.GetMemberIdsAsync(chatId, ct);
@@ -166,7 +195,8 @@ public sealed class MessageService(
                     ChatId = chatId,
                     SenderId = senderId,
                     Text = normalized,
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt = DateTime.UtcNow,
+                    ReplyToMessageId = replyToMessageId
                 }, clientMessageId, ct));
 
                 await events.MessageCreatedAsync(created, memberIds, ct);
@@ -189,6 +219,91 @@ public sealed class MessageService(
             ? new SendResult(Map(sent), Created: false)
             : throw new ConflictException(
                 "clientMessageId is already used by a message in another chat", "CLIENT_MESSAGE_ID_CONFLICT");
+
+    public async Task<ForwardResult> ForwardAsync(
+        Guid chatId, Guid userId, Guid fromChatId, IReadOnlyList<Guid> messageIds,
+        IReadOnlyList<Guid>? clientMessageIds = null, CancellationToken ct = default)
+    {
+        if (messageIds.Count == 0 || messageIds.Distinct().Count() != messageIds.Count)
+            throw new BadRequestException("messageIds must be a non-empty list of distinct ids", "INVALID_REQUEST");
+        if (messageIds.Count > MaxForward)
+            throw new BadRequestException($"At most {MaxForward} messages can be forwarded at once", "TOO_MANY_MESSAGES");
+        if (clientMessageIds is not null &&
+            (clientMessageIds.Count != messageIds.Count || clientMessageIds.Distinct().Count() != clientMessageIds.Count))
+            throw new BadRequestException("clientMessageIds must be distinct, one per message", "INVALID_REQUEST");
+
+        await policy.DemandReadAsync(userId, fromChatId, ct);
+        await policy.DemandPostAsync(userId, chatId, ct);
+
+        // What the user does not see (deleted, hidden, another chat) cannot be forwarded.
+        var sources = await messageRepository.GetVisibleAsync(fromChatId, userId, messageIds, ct);
+        if (sources.Count != messageIds.Count)
+            throw MessageNotFound();
+
+        var clientIds = clientMessageIds is null
+            ? null
+            : messageIds.Zip(clientMessageIds).ToDictionary(p => p.First, p => p.Second);
+
+        try
+        {
+            return await ForwardOnceAsync(chatId, userId, sources, clientIds, ct);
+        }
+        catch (DuplicateKeyException)
+        {
+            // A parallel retry of the same forward got there first: everything it made is found now.
+            return await ForwardOnceAsync(chatId, userId, sources, clientIds, CancellationToken.None);
+        }
+    }
+
+    private async Task<ForwardResult> ForwardOnceAsync(
+        Guid chatId, Guid userId, IReadOnlyList<MessageWithSender> sources,
+        Dictionary<Guid, Guid>? clientIds, CancellationToken ct)
+    {
+        // Copies made by an earlier attempt, by source message.
+        var made = new Dictionary<Guid, MessageWithSender>();
+        foreach (var (sourceId, clientId) in clientIds ?? new Dictionary<Guid, Guid>())
+        {
+            if (await messageRepository.GetByClientMessageIdAsync(userId, clientId, ct) is not { } copy)
+                continue;
+            if (copy.ChatId != chatId)
+                throw new ConflictException(
+                    "clientMessageId is already used by a message in another chat", "CLIENT_MESSAGE_ID_CONFLICT");
+            made[sourceId] = copy;
+        }
+
+        var memberIds = await membership.GetMemberIdsAsync(chatId, ct);
+        var items = await db.InTransactionAsync(async ct =>
+        {
+            var items = new List<MessageDto>(sources.Count);
+            foreach (var source in sources)
+            {
+                if (made.TryGetValue(source.Id, out var copy))
+                {
+                    items.Add(Map(copy));
+                    continue;
+                }
+
+                // A forward of a forward points to the very first original, as in Telegram.
+                var created = Map(await messageRepository.CreateAsync(new Message
+                {
+                    Id = Guid.NewGuid(),
+                    ChatId = chatId,
+                    SenderId = userId,
+                    Text = source.Text,
+                    CreatedAt = DateTime.UtcNow,
+                    ForwardFromUserId = source.IsForward ? source.ForwardFromUserId : source.SenderId,
+                    ForwardFromChatId = source.IsForward ? source.ForwardFromChatId : source.ChatId,
+                    ForwardFromMessageId = source.IsForward ? source.ForwardFromMessageId : source.Id
+                }, clientIds?[source.Id], ct));
+
+                await events.MessageCreatedAsync(created, memberIds, ct);
+                items.Add(created);
+            }
+            return items;
+        }, ct: ct);
+
+        return new ForwardResult(items, Created: made.Count < sources.Count);
+    }
 
     public async Task MarkReadAsync(Guid chatId, Guid userId, Guid messageId, CancellationToken ct = default)
     {
@@ -293,8 +408,30 @@ public sealed class MessageService(
         Seq = m.Seq,
         ClientMessageId = m.ClientMessageId,
         Type = m.Type,
-        EditedAt = m.EditedAt
+        EditedAt = m.EditedAt,
+        ReplyTo = m.ReplyToMessageId is { } replyId
+            ? new MessageReplyDto
+            {
+                MessageId = replyId,
+                SenderId = m.ReplyToSenderId ?? Guid.Empty,
+                SenderName = m.ReplyToSenderName ?? "Unknown",
+                Text = m.ReplyToDeleted ? string.Empty : Preview(m.ReplyToText),
+                Deleted = m.ReplyToDeleted
+            }
+            : null,
+        ForwardFrom = m.IsForward
+            ? new MessageForwardDto
+            {
+                SenderId = m.ForwardFromUserId ?? Guid.Empty,
+                SenderName = m.ForwardFromUserName ?? "Unknown"
+            }
+            : null
     };
+
+    private static string Preview(string? text) =>
+        text is null ? string.Empty
+        : text.Length > SignalRChatEventPublisher.PreviewLength ? text[..SignalRChatEventPublisher.PreviewLength] + "…"
+        : text;
 
     /// <summary>
     /// A cursor to the next (older) page - from the last message of the page

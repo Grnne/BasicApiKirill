@@ -21,4 +21,30 @@ public class MessageDto
 
     /// <summary>When the text was last edited; null — never edited.</summary>
     public DateTime? EditedAt { get; set; }
+
+    /// <summary>The message this one answers; null — not a reply.</summary>
+    public MessageReplyDto? ReplyTo { get; set; }
+
+    /// <summary>For a forwarded message — its original author; null — not a forward.</summary>
+    public MessageForwardDto? ForwardFrom { get; set; }
+}
+
+/// <summary>Preview of the answered message.</summary>
+public class MessageReplyDto
+{
+    public Guid MessageId { get; set; }
+    public Guid SenderId { get; set; }
+    public string SenderName { get; set; } = string.Empty;
+
+    /// <summary>The start of the text; empty when the message was deleted.</summary>
+    public string Text { get; set; } = string.Empty;
+
+    /// <summary>The answered message was deleted for everyone.</summary>
+    public bool Deleted { get; set; }
+}
+
+public class MessageForwardDto
+{
+    public Guid SenderId { get; set; }
+    public string SenderName { get; set; } = string.Empty;
 }

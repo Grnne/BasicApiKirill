@@ -168,8 +168,46 @@ public class ChatsController(IChatService chats, IMessageService messages, IPres
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> SendMessage(Guid chatId, [FromBody] SendMessageDto dto, CancellationToken ct)
     {
-        var result = await messages.SendAsync(chatId, User.GetUserId(), dto.Text, dto.ClientMessageId, ct);
+        var result = await messages.SendAsync(chatId, User.GetUserId(), dto.Text, dto.ClientMessageId, dto.ReplyToMessageId, ct);
         return result.Created ? Created(string.Empty, result.Message) : Ok(result.Message);
+    }
+
+    /// <summary>
+    /// Forward messages from another chat (or this one).
+    /// </summary>
+    /// <remarks>
+    /// Copies 1–100 messages of <c>fromChatId</c> into this chat in their original order.
+    /// Each copy is a new message of the caller with <c>forwardFrom</c> — the original
+    /// author (for a forward of a forward — the very first one). Replies are not carried over.
+    /// Members of this chat receive <c>MessageCreated</c> and <c>ChatListUpdated</c> for each copy.
+    ///
+    /// Pass <c>clientMessageIds</c> (one per message, same order) and repeat them on retries:
+    /// a retry creates nothing new and answers <c>200</c> instead of <c>201</c>.
+    ///
+    /// Errors: <c>400 INVALID_REQUEST</c> (empty or repeated ids, <c>clientMessageIds</c> of another
+    /// length), <c>400 TOO_MANY_MESSAGES</c>, <c>403 NOT_A_MEMBER</c> (of either chat),
+    /// <c>404 MESSAGE_NOT_FOUND</c> (a message is not in <c>fromChatId</c>, deleted or hidden by
+    /// the caller), <c>409 CLIENT_MESSAGE_ID_CONFLICT</c>, <c>429 RATE_LIMITED</c>.
+    /// </remarks>
+    /// <param name="chatId">Target chat ID</param>
+    /// <param name="dto">Source chat and messages</param>
+    /// <param name="ct">Request cancellation.</param>
+    [HttpPost("{chatId}/messages/forward")]
+    [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
+    [ProducesResponseType(typeof(ForwardMessagesResponseDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ForwardMessagesResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> ForwardMessages(Guid chatId, [FromBody] ForwardMessagesDto dto, CancellationToken ct)
+    {
+        var result = await messages.ForwardAsync(
+            chatId, User.GetUserId(), dto.FromChatId, dto.MessageIds, dto.ClientMessageIds, ct);
+        var body = new ForwardMessagesResponseDto { Items = [.. result.Messages] };
+        return result.Created ? Created(string.Empty, body) : Ok(body);
     }
 
     /// <summary>
