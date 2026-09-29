@@ -2,6 +2,7 @@ using BasicApi.Middleware.Exceptions;
 using BasicApi.Models;
 using BasicApi.Models.Dto.Message;
 using BasicApi.Services.Events;
+using BasicApi.Storage;
 using BasicApi.Storage.Dto;
 using BasicApi.Storage.Entities;
 using BasicApi.Storage.Exceptions;
@@ -48,6 +49,7 @@ public interface IMessageService
 public sealed record SendResult(MessageDto Message, bool Created);
 
 public sealed class MessageService(
+    IDbSession db,
     IMessageRepository messageRepository,
     IMembershipService membership,
     IChatPolicy policy,
@@ -141,18 +143,26 @@ public sealed class MessageService(
 
         var memberIds = await membership.GetMemberIdsAsync(chatId, ct);
 
-        MessageWithSender created;
         try
         {
-            created = await messageRepository.CreateAsync(new Message
+            // Сообщение и событие о нём — одна транзакция: сохранено одно — сохранено и другое.
+            var message = await db.InTransactionAsync(async ct =>
             {
-                Id = Guid.NewGuid(),
-                ChatId = chatId,
-                SenderId = senderId,
-                Text = normalized,
-                CreatedAt = DateTime.UtcNow,
-                IsDeleted = false
-            }, clientMessageId, ct);
+                var created = Map(await messageRepository.CreateAsync(new Message
+                {
+                    Id = Guid.NewGuid(),
+                    ChatId = chatId,
+                    SenderId = senderId,
+                    Text = normalized,
+                    CreatedAt = DateTime.UtcNow,
+                    IsDeleted = false
+                }, clientMessageId, ct));
+
+                await events.MessageCreatedAsync(created, memberIds, ct);
+                return created;
+            }, ct: ct);
+
+            return new SendResult(message, Created: true);
         }
         catch (DuplicateKeyException)
         {
@@ -161,12 +171,6 @@ public sealed class MessageService(
                 ?? throw new InvalidOperationException("Duplicate clientMessageId, but the message is not found");
             return AlreadySent(winner, chatId);
         }
-
-        var message = Map(created);
-
-        // Сообщение уже сохранено — событие отправляем, даже если клиент ушёл.
-        await events.MessageCreatedAsync(message, memberIds, CancellationToken.None);
-        return new SendResult(message, Created: true);
     }
 
     private static SendResult AlreadySent(MessageWithSender sent, Guid chatId) =>

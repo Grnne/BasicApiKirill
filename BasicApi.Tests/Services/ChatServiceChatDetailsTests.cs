@@ -4,6 +4,7 @@ using BasicApi.Services.Events;
 using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
 using BasicApi.Storage.Dto;
+using BasicApi.Tests.TestDoubles;
 using Moq;
 
 namespace BasicApi.Tests.Services;
@@ -16,7 +17,7 @@ public class ChatServiceChatDetailsTests
     public ChatServiceChatDetailsTests()
     {
         _chatRepoMock = new Mock<IChatRepository>();
-        _service = new ChatService(_chatRepoMock.Object, Mock.Of<IUserRepository>(), new ChatPolicy(new MembershipService(_chatRepoMock.Object)),
+        _service = new ChatService(new FakeDbSession(), _chatRepoMock.Object, Mock.Of<IUserRepository>(), new ChatPolicy(new MembershipService(_chatRepoMock.Object)),
             Mock.Of<IPresenceService>(), Mock.Of<IChatEventPublisher>());
     }
 

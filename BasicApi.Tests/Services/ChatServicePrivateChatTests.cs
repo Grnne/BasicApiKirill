@@ -5,6 +5,7 @@ using BasicApi.Services.Events;
 using BasicApi.Storage.Dto;
 using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
+using BasicApi.Tests.TestDoubles;
 using Moq;
 
 namespace BasicApi.Tests.Services;
@@ -24,7 +25,7 @@ public class ChatServicePrivateChatTests
             .Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid id, CancellationToken _) => new User { Id = id, IsActive = true });
 
-        _service = new ChatService(_chatRepoMock.Object, _userRepoMock.Object,
+        _service = new ChatService(new FakeDbSession(), _chatRepoMock.Object, _userRepoMock.Object,
             new ChatPolicy(new MembershipService(_chatRepoMock.Object)), _presenceMock.Object, _eventsMock.Object);
     }
 
@@ -106,9 +107,13 @@ public class ChatServicePrivateChatTests
         // Регрессия: получателю нельзя слать его самого в качестве собеседника
         _eventsMock.Verify(e => e.ChatCreatedAsync(otherUserId,
             It.Is<ChatListItemDto>(i => i.ChatId == chatId && i.CompanionId == userId && i.CompanionName == "Bob"),
-            It.IsAny<CancellationToken>()), Times.Once);
-        _eventsMock.Verify(e => e.ChatCreatedAsync(userId, It.IsAny<ChatListItemDto>(), It.IsAny<CancellationToken>()),
-            Times.Never);
+            true, It.IsAny<CancellationToken>()), Times.Once);
+
+        // Создателю — только запись в журнал (для его других устройств), без живого события:
+        // карточку он получил в ответе.
+        _eventsMock.Verify(e => e.ChatCreatedAsync(userId,
+            It.Is<ChatListItemDto>(i => i.ChatId == chatId && i.CompanionId == otherUserId),
+            false, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

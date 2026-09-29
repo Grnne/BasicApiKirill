@@ -4,6 +4,7 @@ using BasicApi.Services.Events;
 using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
 using Microsoft.Extensions.Logging.Abstractions;
+using BasicApi.Tests.TestDoubles;
 using Moq;
 
 namespace BasicApi.Tests.Services;
@@ -97,7 +98,7 @@ public class ChatPolicyEnforcementTests
     }
 
     private MessageService Messages() =>
-        new(_msgRepoMock.Object, new MembershipService(_chatRepoMock.Object), _policyMock.Object, _eventsMock.Object);
+        new(new FakeDbSession(), _msgRepoMock.Object, new MembershipService(_chatRepoMock.Object), _policyMock.Object, _eventsMock.Object);
 
     private static async Task AssertDenied(Func<Task> action) =>
         Assert.Equal(Code, (await Assert.ThrowsAsync<ForbiddenException>(action)).ErrorCode);
@@ -120,7 +121,7 @@ public class ChatPolicyEnforcementTests
     [Fact]
     public async Task Chats_DetailsAndItemAskThePolicy()
     {
-        var chats = new ChatService(_chatRepoMock.Object, Mock.Of<IUserRepository>(), _policyMock.Object,
+        var chats = new ChatService(new FakeDbSession(), _chatRepoMock.Object, Mock.Of<IUserRepository>(), _policyMock.Object,
             Mock.Of<IPresenceService>(), _eventsMock.Object);
 
         await AssertDenied(() => chats.GetChatDetailsAsync(_chatId, _userId));

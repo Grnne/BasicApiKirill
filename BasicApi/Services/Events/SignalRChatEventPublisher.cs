@@ -6,8 +6,9 @@ using Microsoft.AspNetCore.SignalR;
 namespace BasicApi.Services.Events;
 
 /// <summary>
-/// Рассылка событий через SignalR в прежнем формате: имена событий и аргументы
-/// те же, что клиент получал от хаба.
+/// Рассылка событий через SignalR сразу, в прежнем формате: имена событий и аргументы
+/// те же, что клиент получал от хаба. Для эфемерных событий; остальные идут через
+/// <see cref="OutboxChatEventPublisher"/>.
 /// </summary>
 public sealed class SignalRChatEventPublisher(IHubContext<ChatHub> hub) : IChatEventPublisher
 {
@@ -23,8 +24,8 @@ public sealed class SignalRChatEventPublisher(IHubContext<ChatHub> hub) : IChatE
             await hub.Clients.Users(ToStrings(memberIds)).SendAsync("ChatListUpdated", message.ChatId, Preview(message), ct);
     }
 
-    public Task ChatCreatedAsync(Guid recipientId, ChatListItemDto item, CancellationToken ct = default) =>
-        hub.Clients.User(recipientId.ToString()).SendAsync("ChatCreated", item, ct);
+    public Task ChatCreatedAsync(Guid recipientId, ChatListItemDto item, bool live = true, CancellationToken ct = default) =>
+        live ? hub.Clients.User(recipientId.ToString()).SendAsync("ChatCreated", item, ct) : Task.CompletedTask;
 
     public Task UserOnlineChangedAsync(
         Guid userId, bool isOnline, IReadOnlyCollection<Guid> recipientIds, CancellationToken ct = default) =>

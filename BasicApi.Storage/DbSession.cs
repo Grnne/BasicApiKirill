@@ -24,6 +24,13 @@ public interface IDbSession
     Task<T?> ExecuteScalarAsync<T>(string sql, object? param = null, CancellationToken ct = default);
 
     /// <summary>
+    /// Действие после коммита текущей транзакции (при откате — не выполняется);
+    /// вне транзакции — сразу. Например, разбудить рассылку событий: до коммита
+    /// она их ещё не увидит.
+    /// </summary>
+    void OnCommitted(Action action);
+
+    /// <summary>
     /// Выполняет работу в транзакции: успех — коммит, исключение — откат.
     /// Вложенный вызов присоединяется к уже открытой транзакции.
     /// </summary>
@@ -37,6 +44,7 @@ public sealed class DbSession(IDbConnectionFactory connectionFactory) : IDbSessi
 {
     private DbConnection? _connection;
     private DbTransaction? _transaction;
+    private readonly List<Action> _onCommitted = [];
 
     public bool InTransaction => _transaction is not null;
 
@@ -66,6 +74,14 @@ public sealed class DbSession(IDbConnectionFactory connectionFactory) : IDbSessi
         return await query(connection, new CommandDefinition(sql, param, cancellationToken: ct));
     }
 
+    public void OnCommitted(Action action)
+    {
+        if (_transaction is null)
+            action();
+        else
+            _onCommitted.Add(action);
+    }
+
     public async Task<T> InTransactionAsync<T>(
         Func<CancellationToken, Task<T>> work,
         IsolationLevel isolation = IsolationLevel.ReadCommitted,
@@ -75,6 +91,7 @@ public sealed class DbSession(IDbConnectionFactory connectionFactory) : IDbSessi
             return await work(ct);
 
         _connection = (DbConnection)connectionFactory.CreateConnection();
+        Action[]? committed = null;
         try
         {
             await _connection.OpenAsync(ct);
@@ -85,6 +102,7 @@ public sealed class DbSession(IDbConnectionFactory connectionFactory) : IDbSessi
             // Коммит не отменяем: запрос мог оборваться уже после того, как работа
             // сделана, и откатывать её из-за ушедшего клиента нельзя.
             await _transaction.CommitAsync(CancellationToken.None);
+            committed = [.. _onCommitted];
             return result;
         }
         finally
@@ -95,6 +113,10 @@ public sealed class DbSession(IDbConnectionFactory connectionFactory) : IDbSessi
             await _connection.DisposeAsync();
             _transaction = null;
             _connection = null;
+            _onCommitted.Clear();
+
+            foreach (var action in committed ?? [])
+                action();
         }
     }
 

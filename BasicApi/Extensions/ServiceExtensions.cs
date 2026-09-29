@@ -103,6 +103,8 @@ public static class ServiceExtensions
         services.AddScoped<IMessageRepository, MessageRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<ISessionRepository, SessionRepository>();
+        services.AddScoped<IOutboxRepository, OutboxRepository>();
+        services.AddScoped<IUpdateJournal, UpdateJournalRepository>();
 
         // Доменные сервисы: контроллеры и хаб — только адаптеры над ними.
         services.AddScoped<IMembershipService, MembershipService>();
@@ -113,7 +115,13 @@ public static class ServiceExtensions
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<AuthService>();
         services.AddScoped<ISessionService, SessionService>();
-        services.AddScoped<IChatEventPublisher, SignalRChatEventPublisher>();
+        // События: сообщения и новые чаты — через outbox в транзакции изменения,
+        // «печатает» и онлайн — сразу (эфемерные).
+        services.AddScoped<SignalRChatEventPublisher>();
+        services.AddScoped<IChatEventPublisher, OutboxChatEventPublisher>();
+        services.AddSingleton<OutboxSignal>();
+        services.AddSingleton<OutboxDispatcher>();
+        services.AddHostedService(sp => sp.GetRequiredService<OutboxDispatcher>());
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IUserStatusService, UserStatusService>();
         services.AddSingleton<HubConnectionRegistry>();

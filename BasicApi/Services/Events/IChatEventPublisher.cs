@@ -16,8 +16,12 @@ public interface IChatEventPublisher
     /// </summary>
     Task MessageCreatedAsync(MessageDto message, IReadOnlyCollection<Guid> memberIds, CancellationToken ct = default);
 
-    /// <summary><c>ChatCreated</c> — одному получателю, карточка чата собрана для него.</summary>
-    Task ChatCreatedAsync(Guid recipientId, ChatListItemDto item, CancellationToken ct = default);
+    /// <summary>
+    /// Новый чат у пользователя; карточка собрана для него. <paramref name="live"/> —
+    /// прислать ли <c>ChatCreated</c> сразу: создателю чата не шлём, он получил карточку
+    /// в ответе, а его другие устройства узнают о чате через синхронизацию.
+    /// </summary>
+    Task ChatCreatedAsync(Guid recipientId, ChatListItemDto item, bool live = true, CancellationToken ct = default);
 
     /// <summary><c>UserOnlineChanged</c> — эфемерное событие, в журнал не пишется.</summary>
     Task UserOnlineChangedAsync(

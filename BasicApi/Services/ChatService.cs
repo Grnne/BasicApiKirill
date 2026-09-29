@@ -1,11 +1,13 @@
 ﻿using BasicApi.Middleware.Exceptions;
 using BasicApi.Models.Dto.Chat;
 using BasicApi.Services.Events;
+using BasicApi.Storage;
 using BasicApi.Storage.Interfaces;
 
 namespace BasicApi.Services;
 
 public sealed class ChatService(
+    IDbSession db,
     IChatRepository chatRepository,
     IUserRepository userRepository,
     IChatPolicy policy,
@@ -68,23 +70,30 @@ public sealed class ChatService(
         if (other is null || !other.IsActive)
             throw new NotFoundException("User not found", "USER_NOT_FOUND");
 
-        var (chatId, created) = await chatRepository.GetOrCreatePrivateChatAsync(userId, otherUserId, ct);
-
-        if (created)
+        // Чат и события о нём — одна транзакция.
+        var result = await db.InTransactionAsync(async ct =>
         {
-            // Чат уже создан — сообщаем о нём, даже если клиент ушёл.
-            // Карточка для второго участника своя: собеседник в ней — создатель чата.
-            var recipientRow = await chatRepository.GetChatListItemAsync(chatId, otherUserId, CancellationToken.None);
-            if (recipientRow is not null)
-                await events.ChatCreatedAsync(otherUserId, ChatListItemMapper.Map(recipientRow), CancellationToken.None);
+            var (chatId, created) = await chatRepository.GetOrCreatePrivateChatAsync(userId, otherUserId, ct);
 
+            var own = ChatListItemMapper.Map(await chatRepository.GetChatListItemAsync(chatId, userId, ct)
+                ?? throw ChatNotFound());
+
+            if (created)
+            {
+                // Карточка для второго участника своя: собеседник в ней — создатель чата.
+                var theirs = ChatListItemMapper.Map(await chatRepository.GetChatListItemAsync(chatId, otherUserId, ct)
+                    ?? throw ChatNotFound());
+                await events.ChatCreatedAsync(otherUserId, theirs, ct: ct);
+                await events.ChatCreatedAsync(userId, own, live: false, ct);
+            }
+
+            return new PrivateChatResult(own, created);
+        }, ct: ct);
+
+        if (result.Created)
             await presence.IntroduceAsync(userId, otherUserId, CancellationToken.None);
-        }
 
-        var row = await chatRepository.GetChatListItemAsync(chatId, userId, ct)
-            ?? throw ChatNotFound();
-
-        return new PrivateChatResult(ChatListItemMapper.Map(row), created);
+        return result;
     }
 
     public async Task<SearchChatsResponseDto> SearchChatsAsync(

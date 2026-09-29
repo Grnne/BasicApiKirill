@@ -7,6 +7,7 @@ using BasicApi.Storage.Dto;
 using BasicApi.Storage.Entities;
 using BasicApi.Storage.Exceptions;
 using BasicApi.Storage.Interfaces;
+using BasicApi.Tests.TestDoubles;
 using Moq;
 
 namespace BasicApi.Tests.Services;
@@ -40,7 +41,7 @@ public class MessageServiceTests
             .ReturnsAsync((Message m, Guid? clientMessageId, CancellationToken _) => Stored(m.ChatId, m.Text, clientMessageId, m.Id));
 
         var membership = new MembershipService(_chatRepoMock.Object);
-        _service = new MessageService(_msgRepoMock.Object, membership, new ChatPolicy(membership), _eventsMock.Object);
+        _service = new MessageService(new FakeDbSession(), _msgRepoMock.Object, membership, new ChatPolicy(membership), _eventsMock.Object);
     }
 
     private MessageWithSender Stored(Guid chatId, string text, Guid? clientMessageId = null, Guid? id = null) => new()
