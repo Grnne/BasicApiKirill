@@ -186,7 +186,16 @@
         <div class="subtitle">
             Подключение: <code>wss://host/hubs/chat?access_token={jwt}</code><br>
             Аутентификация: JWT Bearer (передаётся в query string <code>access_token</code>)<br>
-            <a href="/swagger">← REST API</a>
+            <a href="/swagger">← REST API</a> ·
+            изменения контракта — <code>docs/api-contract-changes.md</code>
+        </div>
+
+        <div class="note">
+            <strong>Хаб — канал событий.</strong> Команды (отправка сообщения, «печатает») есть и в REST:
+            <code>POST /api/chats/{chatId}/messages</code> и <code>POST /api/chats/{chatId}/typing</code>.
+            Методы хаба <code>SendMessage</code> и <code>Typing</code> работают через те же сервисы
+            и остаются, пока клиенты не переедут на REST. Идемпотентная отправка
+            (<code>clientMessageId</code>) — только в REST.
         </div>
 
         <!-- ==================== CLIENT → SERVER ==================== -->
@@ -198,8 +207,8 @@
                 <span class="method-name">JoinChat(chatId)</span>
             </div>
             <div class="method-description">
-                Подписаться на события чата. Вызывается после открытия чата на клиенте.
-                Только участник чата может присоединиться.
+                Подписаться на <code>MessageCreated</code> чата. Вызывается при открытии чата на клиенте.
+                Не участник — ошибка <code>NOT_A_MEMBER</code>.
             </div>
             <table>
                 <thead><tr><th>Параметр</th><th>Тип</th><th>Описание</th></tr></thead>
@@ -207,6 +216,9 @@
                     <tr><td><code>chatId</code></td><td class="type-cell">Guid</td><td>ID чата</td></tr>
                 </tbody>
             </table>
+            <div class="note">
+                Подписка живёт на соединении: после реконнекта <code>JoinChat</code> нужно вызвать снова.
+            </div>
         </div>
 
         <div class="method-card">
@@ -231,8 +243,9 @@
                 <span class="method-name">SendMessage(chatId, text)</span>
             </div>
             <div class="method-description">
-                Отправить сообщение в чат. Сообщение сохраняется в БД и рассылается всем участникам.
-                Только участник чата может отправлять сообщения.
+                Отправить сообщение. Пробелы по краям обрезаются, длина — 1–4096 символов.
+                Лучше — <code>POST /api/chats/{chatId}/messages</code> с <code>clientMessageId</code>:
+                повтор после обрыва сети не создаст дубль.
             </div>
             <table>
                 <thead><tr><th>Параметр</th><th>Тип</th><th>Описание</th></tr></thead>
@@ -242,9 +255,10 @@
                 </tbody>
             </table>
             <div class="note">
-                <strong>Самое важное:</strong> После отправки сервер генерирует 2 события:
-                <strong>MessageCreated</strong> (в группу — полное сообщение) и
-                <strong>ChatListUpdated</strong> (каждому участнику лично — текст обрезан до 100 символов).
+                <strong>События:</strong> <strong>MessageCreated</strong> (в группу чата — полное сообщение)
+                и <strong>ChatListUpdated</strong> (каждому участнику, включая отправителя, — текст обрезан до 100 символов).<br>
+                <strong>Ошибки:</strong> <code>MESSAGE_EMPTY</code>, <code>MESSAGE_TOO_LONG</code>,
+                <code>NOT_A_MEMBER</code>, <code>RATE_LIMITED</code>.
             </div>
         </div>
 
@@ -254,7 +268,10 @@
                 <span class="method-name">Typing(chatId, isTyping)</span>
             </div>
             <div class="method-description">
-                Уведомить собеседников о статусе печатания. Рассылается всем в группе чата.
+                «Печатает». Остальным участникам чата приходит <code>TypingChanged</code>.
+                Статус гаснет сам через 6 секунд: пока пользователь набирает текст, повторять
+                <code>true</code> раз в несколько секунд; перестал — <code>false</code>.
+                Не участник — <code>NOT_A_MEMBER</code>; вызовы сверх лимита молча отбрасываются.
             </div>
             <table>
                 <thead><tr><th>Параметр</th><th>Тип</th><th>Описание</th></tr></thead>
@@ -265,8 +282,33 @@
             </table>
         </div>
 
+        <h3>Ошибки методов</h3>
+        <div class="note">
+            Ошибка метода приходит как <code>HubException</code>. SignalR добавляет к тексту свой префикс:
+            <code>"An unexpected error occurred invoking 'SendMessage' on the server. HubException: NOT_A_MEMBER: User is not a member of this chat"</code>.
+            Код — слово сразу после <code>HubException: </code>.
+            <table style="margin-top: 0.5rem;">
+                <thead><tr><th>Код</th><th>Когда</th></tr></thead>
+                <tbody>
+                    <tr><td><code>NOT_A_MEMBER</code></td><td>Пользователь не участник чата</td></tr>
+                    <tr><td><code>MESSAGE_EMPTY</code></td><td>Текст пустой или из одних пробелов</td></tr>
+                    <tr><td><code>MESSAGE_TOO_LONG</code></td><td>Длиннее 4096 символов после обрезки пробелов</td></tr>
+                    <tr><td><code>RATE_LIMITED</code></td><td>Больше 20 вызовов за 10 секунд на соединение</td></tr>
+                </tbody>
+            </table>
+        </div>
+
         <!-- ==================== SERVER → CLIENT ==================== -->
         <h2>📥 Server → Client (подписка на события)</h2>
+
+        <div class="note">
+            <strong>Доставка — «хотя бы один раз».</strong> <code>MessageCreated</code>, <code>ChatListUpdated</code>
+            и <code>ChatCreated</code> сохраняются в той же транзакции, что и само изменение, и рассылаются
+            из очереди: сбой сервера не теряет событие, но изредка оно может прийти дважды — сообщения
+            различаются по <code>id</code> (или <code>chatId</code> + <code>seq</code>). Пропущенное, пока
+            клиент был отключён, забирается через <code>GET /api/sync?since={pts}</code>.
+            <code>TypingChanged</code> и <code>UserOnlineChanged</code> — эфемерные: не сохраняются и не повторяются.
+        </div>
 
         <div class="event-card">
             <div class="event-header">
@@ -274,17 +316,35 @@
                 <span class="event-name">MessageCreated</span>
             </div>
             <div class="method-description" style="margin-top: 0.5rem;">
-                Новое сообщение в чате. Получают только те, кто подписался на чат (вызвал <code>JoinChat</code>).
-                Содержит полный текст сообщения.
+                Новое сообщение в чате. Получают соединения, подписанные на чат (<code>JoinChat</code>).
+                Содержит полный текст.
             </div>
             <table>
                 <thead><tr><th>Аргумент</th><th>Тип</th><th>Описание</th></tr></thead>
                 <tbody>
-                    <tr><td><code>message</code></td><td class="type-cell"><a href="/swagger/index.html#/Chats/GetMessagesCursor">MessageDto</a></td><td>Полное сообщение</td></tr>
+                    <tr><td><code>message</code></td><td class="type-cell">MessageDto</td><td>Полное сообщение</td></tr>
+                </tbody>
+            </table>
+            <div style="margin-top: 0.5rem;">
+                <strong>MessageDto</strong> — тот же тип, что в истории (<code>GET /api/chats/{chatId}/messages/cursor</code>):
+            </div>
+            <table>
+                <thead><tr><th>Поле</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                    <tr><td><code>id</code></td><td class="type-cell">Guid</td><td>ID сообщения</td></tr>
+                    <tr><td><code>chatId</code></td><td class="type-cell">Guid</td><td>ID чата</td></tr>
+                    <tr><td><code>senderId</code></td><td class="type-cell">Guid</td><td>Отправитель</td></tr>
+                    <tr><td><code>senderName</code></td><td class="type-cell">string</td><td>Отображаемое имя отправителя</td></tr>
+                    <tr><td><code>text</code></td><td class="type-cell">string</td><td>Текст</td></tr>
+                    <tr><td><code>createdAt</code></td><td class="type-cell">DateTime</td><td>Время отправки, UTC с <code>Z</code></td></tr>
+                    <tr><td><code>isRead</code></td><td class="type-cell">boolean</td><td>Прочитано ли текущим пользователем</td></tr>
+                    <tr><td><code>seq</code></td><td class="type-cell">long</td><td>Номер сообщения в чате: 1, 2, 3, … — сообщения упорядочены по нему</td></tr>
+                    <tr><td><code>clientMessageId</code></td><td class="type-cell">Guid?</td><td>ID, который отправитель передал при REST-отправке; иначе <code>null</code></td></tr>
                 </tbody>
             </table>
             <div class="note">
-                <strong>Клиент:</strong> добавить сообщение в ленту + обновить превью в списке чатов.
+                <strong>Клиент:</strong> добавить сообщение в ленту. Своё сообщение, отправленное через REST,
+                узнаётся по <code>clientMessageId</code> — временную копию можно заменить без дубля.
             </div>
         </div>
 
@@ -294,18 +354,19 @@
                 <span class="event-name">ChatListUpdated</span>
             </div>
             <div class="method-description" style="margin-top: 0.5rem;">
-                Обновление последнего сообщения в чате. Получают <strong>все участники</strong> чата (даже те, кто не открывал чат).
-                Текст обрезан до 100 символов.
+                Новое последнее сообщение чата. Получают <strong>все участники</strong>, включая отправителя
+                (для его других устройств), даже если чат не открыт. Текст обрезан до 100 символов.
             </div>
             <table>
                 <thead><tr><th>Аргумент</th><th>Тип</th><th>Описание</th></tr></thead>
                 <tbody>
                     <tr><td><code>chatId</code></td><td class="type-cell">Guid</td><td>ID чата</td></tr>
-                    <tr><td><code>message</code></td><td class="type-cell"><a href="/swagger/index.html#/Chats/GetMessagesCursor">MessageDto</a></td><td>Сообщение (текст ≤ 100 символов)</td></tr>
+                    <tr><td><code>message</code></td><td class="type-cell">MessageDto</td><td>Сообщение (текст ≤ 100 символов)</td></tr>
                 </tbody>
             </table>
             <div class="note">
-                <strong>Клиент:</strong> только обновить превью в списке чатов, НЕ добавлять в ленту.
+                <strong>Клиент:</strong> обновить превью в списке чатов, НЕ добавлять в ленту. Чата нет в списке —
+                взять его строку: <code>GET /api/chats/{chatId}/item</code>.
             </div>
         </div>
 
@@ -315,13 +376,14 @@
                 <span class="event-name">ChatCreated</span>
             </div>
             <div class="method-description" style="margin-top: 0.5rem;">
-                Создан новый чат, в который вас добавили. Событие приходит при создании приватного
-                чата (через <code>POST /api/chats/private/{userId}</code>).
+                Вас добавили в новый чат: собеседник создал личный чат
+                (<code>POST /api/chats/private/{userId}</code>). Создателю событие не приходит —
+                чат уже есть в ответе на его запрос.
             </div>
             <table>
                 <thead><tr><th>Аргумент</th><th>Тип</th><th>Описание</th></tr></thead>
                 <tbody>
-                    <tr><td><code>item</code></td><td class="type-cell"><code>ChatListItemDto</code></td><td>Готовый элемент списка чатов</td></tr>
+                    <tr><td><code>item</code></td><td class="type-cell"><code>ChatListItemDto</code></td><td>Готовая строка списка чатов</td></tr>
                 </tbody>
             </table>
             <div style="margin-top: 0.5rem;">
@@ -330,24 +392,20 @@
             <table>
                 <thead><tr><th>Поле</th><th>Тип</th><th>Описание</th></tr></thead>
                 <tbody>
-                    <tr><td><code>chatId</code></td><td class="type-cell">Guid</td><td>ID нового чата</td></tr>
+                    <tr><td><code>chatId</code></td><td class="type-cell">Guid</td><td>ID чата</td></tr>
                     <tr><td><code>type</code></td><td class="type-cell">string</td><td><code>"private"</code> или <code>"group"</code></td></tr>
-                    <tr><td><code>title</code></td><td class="type-cell">string?</td><td>Название группы (<code>null</code> для приватных)</td></tr>
-                    <tr><td><code>companionId</code></td><td class="type-cell">Guid?</td><td>ID собеседника (для приватных)</td></tr>
-                    <tr><td><code>companionName</code></td><td class="type-cell">string?</td><td>Имя собеседника (для приватных)</td></tr>
-                    <tr><td><code>companionUsername</code></td><td class="type-cell">string?</td><td>Username собеседника (для приватных)</td></tr>
+                    <tr><td><code>title</code></td><td class="type-cell">string?</td><td>Название группы (<code>null</code> для личных)</td></tr>
+                    <tr><td><code>companionId</code></td><td class="type-cell">Guid?</td><td>ID собеседника (для личных)</td></tr>
+                    <tr><td><code>companionName</code></td><td class="type-cell">string?</td><td>Имя собеседника (для личных)</td></tr>
+                    <tr><td><code>companionUsername</code></td><td class="type-cell">string?</td><td>Логин собеседника (для личных)</td></tr>
                     <tr><td><code>lastMessage</code></td><td class="type-cell">MessageDto?</td><td><code>null</code> у только что созданного чата</td></tr>
-                    <tr><td><code>unreadCount</code></td><td class="type-cell">int</td><td>Непрочитанные</td></tr>
-                    <tr><td><code>lastActivityAt</code></td><td class="type-cell">DateTime</td><td>Время последней активности</td></tr>
+                    <tr><td><code>unreadCount</code></td><td class="type-cell">int</td><td>Непрочитанные (свои сообщения не считаются)</td></tr>
+                    <tr><td><code>lastActivityAt</code></td><td class="type-cell">DateTime</td><td>Время последней активности, UTC с <code>Z</code></td></tr>
                 </tbody>
             </table>
             <div class="note">
-                <strong>Клиент:</strong> вставить <code>item</code> в список чатов как есть + вызвать
-                <code>JoinChat(item.chatId)</code> для подписки на сообщения. Дополнительный запрос не нужен.
-            </div>
-            <div class="note">
-                <strong>Важно:</strong> companion-поля собраны с точки зрения <em>получателя</em> события —
-                в них создатель чата, а не сам получатель.
+                <strong>Клиент:</strong> вставить <code>item</code> в список как есть; дополнительный запрос не нужен.
+                Поля <code>companion*</code> собраны с точки зрения <em>получателя</em> — в них создатель чата.
             </div>
         </div>
 
@@ -357,26 +415,21 @@
                 <span class="event-name">UserOnlineChanged</span>
             </div>
             <div class="method-description" style="margin-top: 0.5rem;">
-                Статус онлайн/офлайн пользователя. Получают все участники общих чатов.
+                Пользователь появился в сети или ушёл. Получают участники общих с ним чатов.
             </div>
             <table>
                 <thead><tr><th>Аргумент</th><th>Тип</th><th>Описание</th></tr></thead>
                 <tbody>
                     <tr><td><code>userId</code></td><td class="type-cell">Guid</td><td>ID пользователя</td></tr>
-                    <tr><td><code>isOnline</code></td><td class="type-cell">boolean</td><td><code>true</code> — онлайн, <code>false</code> — офлайн</td></tr>
+                    <tr><td><code>isOnline</code></td><td class="type-cell">boolean</td><td><code>true</code> — в сети, <code>false</code> — нет</td></tr>
                 </tbody>
             </table>
             <div class="note">
-                <strong>Событие описывает только СМЕНУ статуса.</strong> Пока клиент не подключён к хабу,
-                он этих событий не получает — и после старта приложения или реконнекта не знает,
-                кто уже онлайн. Текущее состояние нужно запросить самому по REST:
-                <ul>
-                    <li><code>GET /api/users/{userId}/status</code> — один пользователь (вход на экран чата)</li>
-                    <li><code>POST /api/users/status</code> с <code>{ "userIds": [...] }</code> — пачкой
-                        (вход на экран списка чатов, отправить <code>companionId</code> видимых приватных чатов)</li>
-                </ul>
-                Обе ручки отдают оффлайн явным <code>isOnline: false</code>. Сервер снапшот онлайна
-                при подключении к хабу не пушит.
+                <strong>Событие — только о смене статуса.</strong> Снимок при подключении не приходит:
+                после каждого подключения и реконнекта клиент сам берёт текущее состояние —
+                <code>POST /api/users/status</code> с <code>{ "userIds": [...] }</code> (до 200 id; тех, с кем
+                нет общего чата, сервер из ответа убирает) или <code>GET /api/users/{userId}/status</code>.
+                Офлайн отдаётся явно: <code>isOnline: false</code>.
             </div>
         </div>
 
@@ -386,7 +439,8 @@
                 <span class="event-name">TypingChanged</span>
             </div>
             <div class="method-description" style="margin-top: 0.5rem;">
-                Статус печатания собеседника. Получают все в группе чата.
+                Собеседник печатает или перестал. Получают остальные участники чата. Кто печатает прямо
+                сейчас (например, сразу после подключения) — <code>GET /api/users/typing</code>.
             </div>
             <table>
                 <thead><tr><th>Аргумент</th><th>Тип</th><th>Описание</th></tr></thead>
@@ -396,41 +450,45 @@
                     <tr><td><code>isTyping</code></td><td class="type-cell">boolean</td><td><code>true</code> — печатает, <code>false</code> — перестал</td></tr>
                 </tbody>
             </table>
+            <div class="note">
+                Если <code>false</code> не пришло (клиент собеседника упал), статус гаснет сам через 6 секунд —
+                клиенту стоит держать тот же таймаут.
+            </div>
         </div>
 
-        <!-- ==================== АВТОМАТИЧЕСКИЕ СОБЫТИЯ ==================== -->
-        <h2>🔄 Автоматические события (OnConnected / OnDisconnected)</h2>
+        <!-- ==================== СОЕДИНЕНИЕ ==================== -->
+        <h2>🔄 Соединение</h2>
 
         <div class="note">
-            <strong>OnConnectedAsync</strong> — при подключении пользователь добавляется в <code>_onlineUsers</code>,
-            и всем участникам общих чатов отправляется <strong>UserOnlineChanged(userId, true)</strong>.
+            <strong>Онлайн.</strong> Пользователь в сети, пока у него есть хотя бы одно соединение:
+            первое соединение рассылает <code>UserOnlineChanged(userId, true)</code>, закрытие последнего —
+            <code>false</code>. Все устройства одного пользователя — один статус.
         </div>
         <div class="note">
-            <strong>OnDisconnectedAsync</strong> — при отключении пользователь удаляется из <code>_onlineUsers</code>,
-            и всем участникам общих чатов отправляется <strong>UserOnlineChanged(userId, false)</strong>.
-            Если у пользователя остались другие активные подключения, офлайн не отправляется.
+            <strong>Токен и срок жизни соединения.</strong> Access-токен проверяется при подключении.
+            Открытое соединение живёт, пока жив <em>вход</em> (сессия), с которого оно открыто, —
+            истечение самого access-токена его не закрывает. Сервер закрывает соединение:
+            <ul>
+                <li>сразу — при <code>POST /api/auth/logout</code> (соединения этого входа) и
+                    <code>POST /api/auth/logout-all</code> (все соединения пользователя);</li>
+                <li>в течение минуты — если вход закончился иначе: цепочка refresh-токенов отозвана
+                    при повторном использовании токена или истекла.</li>
+            </ul>
+            Переподключаться — только со свежим access-токеном: если токен истёк, перед реконнектом
+            сделать <code>POST /api/auth/refresh</code>. Refresh вернул <code>401</code> — вход закрыт,
+            показать экран входа.
         </div>
         <div class="note">
-            <strong>Токен на соединении не обновляется.</strong> Хаб проверяет
-            <code>access_token</code> один раз при подключении. Access-токен живёт 30 минут,
-            поэтому уже установленное соединение продолжит работать со старым токеном,
-            а вот переподключение с ним получит отказ. Порядок для клиента:
-            <code>POST /api/auth/refresh</code> → переподключить хаб с новым
-            <code>access_token</code>. Если refresh вернул 401 — это логаут,
-            соединение восстанавливать не нужно.
-        </div>
-        <div class="note">
-            <strong>Снапшот при подключении не отправляется.</strong> <code>OnConnectedAsync</code> рассылает
-            статус подключившегося другим, но самому подключившемуся список текущих онлайн-пользователей
-            не приходит. После каждого подключения/реконнекта клиент обязан сам дёрнуть
-            <code>POST /api/users/status</code>, иначе собеседники будут показаны офлайн
-            до первого <strong>UserOnlineChanged</strong>.
+            <strong>После реконнекта</strong> подписки на чаты потеряны, события за время разрыва не пришли.
+            Порядок: <code>JoinChat</code> открытого чата → <code>GET /api/sync?since={pts}</code>
+            (пропущенные сообщения и новые чаты; при <code>snapshotRequired: true</code> — перечитать
+            <code>GET /api/sync/state</code>) → <code>POST /api/users/status</code> для статусов.
         </div>
 
         <footer>
             <a href="/swagger">REST API (Swagger)</a> ·
             <a href="/signalr-docs">SignalR Docs</a> ·
-            v1.0
+            v1.1
         </footer>
     </div>
 </body>

@@ -1,24 +1,28 @@
 # ═══════════════════════════════════════════════════════════════════════
 #  Production docker-compose for BasicChatApi (Ubuntu / cloud server)
-#  ⚠ НЕ использовать для локальной разработки — для этого есть docker-compose.yml
+#  ⚠ NOT for local development — use docker-compose.yml for that
 #
-#  Запуск:
-#    1) cp .env.prod.example .env.prod          # заполнить сильные секреты
+#  Start:
+#    1) cp .env.prod.example .env.prod          # fill in strong secrets
 #    2) docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
 #
-#  Остановка:
+#  Stop:
 #    docker compose --env-file .env.prod -f docker-compose.prod.yml down
 #
-#  Логи:
+#  Logs:
 #    docker compose -f docker-compose.prod.yml logs -f basicapi
+#
+#  Only 80/443 (Caddy) are open to the outside. The API and Postgres live in internal networks.
+#  Before the first start: the DOMAIN DNS record points to the server and ports 80 and 443
+#  are open — otherwise Let's Encrypt will not issue a certificate.
 # ═══════════════════════════════════════════════════════════════════════
 
 name: basicchat
 
 services:
   postgres:
-    # ✅ ВСЕГДА пиннутая версия, а не :latest — иначе «внезапное» обновление
-    #    может уронить БД или сломать совместимость.
+    # ✅ ALWAYS a pinned version, not :latest — otherwise a "surprise" upgrade
+    #    can take the database down or break compatibility.
     image: postgres:17-alpine
     container_name: basicchat_postgres
     restart: unless-stopped
@@ -28,14 +32,14 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
 
-    # 🚨 НЕ публикуем Postgres наружу. БД доступна ТОЛЬКО внутри docker-сети.
-    #    Сканеры в интернете стучатся по 5432 — не даём им ни единого шанса.
-    #    Если нужен доступ с хоста (бэкапы, psql) — разкомментируй и забиндь
-    #    на loopback:  ports: ["127.0.0.1:5432:5432"]
+    # 🚨 Postgres is NOT published. The database is reachable ONLY inside the docker network.
+    #    Internet scanners knock on 5432 — give them no chance at all.
+    #    If you need access from the host (backups, psql), uncomment and bind to
+    #    loopback:  ports: ["127.0.0.1:5432:5432"]
 
     volumes:
-      # ✅ Правильный путь данных (не /var/lib/postgresql!) — иначе в новых
-      #    образах данные не инициализируются или ломаются при обновлении.
+      # ✅ The correct data path (not /var/lib/postgresql!) — otherwise with newer
+      #    images the data is not initialized or breaks on upgrade.
       - postgres_data:/var/lib/postgresql/data
 
     healthcheck:
@@ -61,12 +65,12 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: "10m"     # 🛡 не даём логам забить диск
+        max-size: "10m"     # 🛡 keep logs from filling the disk
         max-file: "3"
 
     deploy:
       resources:
-        limits:             # 🛡 защита от перегруза сервера
+        limits:             # 🛡 protect the server from overload
           cpus: "1.0"
           memory: 768M
           pids: 100
@@ -84,34 +88,41 @@ services:
     container_name: basicchat_api
     restart: unless-stopped
 
-    # 🛡 reaps zombies + non-root user (1654 = 'app' в .NET-образе)
+    # 🛡 reaps zombies + non-root user (1654 = 'app' in the .NET image)
     init: true
     user: "1654:1654"
 
     environment:
-      ASPNETCORE_ENVIRONMENT: Production     # ✅ НЕ Development!
+      ASPNETCORE_ENVIRONMENT: Production     # ✅ NOT Development!
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${DB_NAME};Username=${DB_USER};Password=${DB_PASSWORD};Timeout=15;Command Timeout=30;Pooling=true"
-      Jwt__Key: ${JWT_KEY}                   # 🛡 сильный секрет, не дефолтный
+      # Maximum Pool Size well below Postgres max_connections (100): under a peak
+      # queries wait in the pool queue instead of being refused by the server (capacity-and-limits.md).
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${DB_NAME};Username=${DB_USER};Password=${DB_PASSWORD};Timeout=15;Command Timeout=30;Pooling=true;Maximum Pool Size=30"
+      Jwt__Key: ${JWT_KEY}                   # 🛡 a strong secret, not the default
       Jwt__Issuer: ${JWT_ISSUER:-ChatApi}
       Jwt__Audience: ${JWT_AUDIENCE:-ChatClient}
       Jwt__ExpiryMinutes: ${JWT_EXPIRY_MINUTES:-60}
       AllowedHosts: ${ALLOWED_HOSTS:-*}
-      # Фронтенд отдаётся тем же API (wwwroot/app), поэтому по умолчанию
-      # cross-origin доступ с credentials не нужен. Заполняй, только если
-      # ходишь на API с отдельного домена/порта.
+      # Swagger UI and the API schema; off by default in production.
+      Swagger__Enabled: ${SWAGGER_ENABLED:-false}
+      # Trust X-Forwarded-For only from Caddy: its edge network has a fixed subnet.
+      ReverseProxy__TrustedNetworks: ${PROXY_SUBNET:-172.30.0.0/24}
+      # The frontend is served by the API itself (wwwroot/client), so cross-origin
+      # access with credentials is not needed by default. Fill in only if you call
+      # the API from a separate domain/port.
       Cors__AllowedOrigins: ${ALLOWED_ORIGINS:-}
 
-    ports:
-      # Если публичный доступ не нужен (доступ только через AmneziaVPN /
-      # reverse proxy) — замени на "127.0.0.1:8080:8080"
-      - "${HOST_PORT:-8080}:8080"
+    # No published ports: all traffic goes through Caddy over the edge network.
+    expose:
+      - "8080"
 
-    # 🛡 read-only rootfs + tmpfs для временных файлов
+    # 🛡 read-only rootfs + tmpfs for temporary files
     read_only: true
     tmpfs:
       - /tmp:size=64m
-      - /home/app/.aspnet/DataProtection-Keys
+      # Owned by the app user: a root-owned tmpfs made Data Protection log an Error
+      # on every restart (it could not write its key ring).
+      - /home/app/.aspnet/DataProtection-Keys:uid=1654,gid=1654,mode=0700
 
     security_opt:
       - no-new-privileges:true
@@ -123,8 +134,9 @@ services:
         condition: service_healthy
 
     healthcheck:
-      # TCP-проверка на порт Kestrel (curl/wget в .NET-образе нет)
-      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080'"]
+      # HTTP readiness check (application + database). The .NET image has no curl/wget,
+      # so bash writes the request to a socket and waits for status 200.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /health/ready HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 && head -n1 <&3 | grep -q ' 200 '"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -147,13 +159,75 @@ services:
 
     networks:
       - chat_network
+      - edge
+
+  caddy:
+    image: caddy:2.10-alpine
+    container_name: basicchat_caddy
+    restart: unless-stopped
+
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"     # HTTP/3
+
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data         # certificates and ACME keys — do not lose
+      - caddy_config:/config
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+
+    depends_on:
+      basicapi:
+        condition: service_healthy
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # Caddy needs ~220-250 KB of memory per open WebSocket. With 128M, 1000 clients
+    # drove it into constant GC at its CPU limit (latency x4) and to the edge of an
+    # OOM kill; 512M is enough for ~2000 clients (docs/load-testing.md).
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+          pids: 100
+
+    networks:
+      - edge
 
 volumes:
   postgres_data:
     name: basicchat_postgres_data
-  # Data Protection keys живут в tmpfs — при рестарте пересоздаются.
-  # Для JWT-авторизации это безопасно (токены самодостаточные).
+  caddy_data:
+    name: basicchat_caddy_data
+  caddy_config:
+    name: basicchat_caddy_config
+  # Data Protection keys live in tmpfs and are recreated on restart.
+  # That is safe for JWT auth (tokens are self-contained).
 
 networks:
+  # Database and API. internal: no way out of this network.
   chat_network:
     driver: bridge
+    internal: true
+  # Caddy ↔ API. The subnet is fixed: the application trusts proxy headers only from it.
+  edge:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${PROXY_SUBNET:-172.30.0.0/24}

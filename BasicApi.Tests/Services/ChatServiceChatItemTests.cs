@@ -1,27 +1,28 @@
 using BasicApi.Middleware.Exceptions;
 using BasicApi.Services;
+using BasicApi.Services.Events;
 using BasicApi.Storage.Dto;
 using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
+using BasicApi.Tests.TestDoubles;
 using Moq;
 
 namespace BasicApi.Tests.Services;
 
 /// <summary>
-/// Тесты на получение одного элемента списка чатов (GET /api/chats/{chatId}/item)
-/// и на то, что маппинг companion-полей не теряется в поиске чатов.
+/// Tests for fetching a single chat list item (GET /api/chats/{chatId}/item)
+/// and for companion fields not being lost in chat search.
 /// </summary>
 public class ChatServiceChatItemTests
 {
     private readonly Mock<IChatRepository> _chatRepoMock;
-    private readonly Mock<IMessageRepository> _msgRepoMock;
     private readonly ChatService _service;
 
     public ChatServiceChatItemTests()
     {
         _chatRepoMock = new Mock<IChatRepository>();
-        _msgRepoMock = new Mock<IMessageRepository>();
-        _service = new ChatService(_chatRepoMock.Object, _msgRepoMock.Object);
+        _service = new ChatService(new FakeDbSession(), _chatRepoMock.Object, Mock.Of<IUserRepository>(), new ChatPolicy(new MembershipService(_chatRepoMock.Object)),
+            Mock.Of<IPresenceService>(), Mock.Of<IChatEventPublisher>());
     }
 
     // ========== GetChatListItemAsync ==========
@@ -36,10 +37,10 @@ public class ChatServiceChatItemTests
         var msgId = Guid.NewGuid();
         var createdAt = DateTime.UtcNow;
 
-        _chatRepoMock.Setup(r => r.GetByIdAsync(chatId))
+        _chatRepoMock.Setup(r => r.GetByIdAsync(chatId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Chat { Id = chatId, Type = "private" });
-        _chatRepoMock.Setup(r => r.IsMemberAsync(chatId, userId)).ReturnsAsync(true);
-        _chatRepoMock.Setup(r => r.GetChatListItemAsync(chatId, userId))
+        _chatRepoMock.Setup(r => r.IsMemberAsync(chatId, userId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        _chatRepoMock.Setup(r => r.GetChatListItemAsync(chatId, userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ChatListResult
             {
                 ChatId = chatId,
@@ -79,11 +80,11 @@ public class ChatServiceChatItemTests
     {
         // Arrange
         var chatId = Guid.NewGuid();
-        _chatRepoMock.Setup(r => r.GetByIdAsync(chatId)).ReturnsAsync((Chat?)null);
+        _chatRepoMock.Setup(r => r.GetByIdAsync(chatId, It.IsAny<CancellationToken>())).ReturnsAsync((Chat?)null);
 
         // Act & Assert
         var ex = await Assert.ThrowsAsync<NotFoundException>(() =>
-            _service.GetChatListItemAsync(chatId, Guid.NewGuid()));
+            _service.GetChatListItemAsync(chatId, Guid.NewGuid(), It.IsAny<CancellationToken>()));
 
         Assert.Equal("CHAT_NOT_FOUND", ex.ErrorCode);
     }
@@ -95,19 +96,19 @@ public class ChatServiceChatItemTests
         var chatId = Guid.NewGuid();
         var userId = Guid.NewGuid();
 
-        _chatRepoMock.Setup(r => r.GetByIdAsync(chatId))
+        _chatRepoMock.Setup(r => r.GetByIdAsync(chatId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Chat { Id = chatId, Type = "private" });
-        _chatRepoMock.Setup(r => r.IsMemberAsync(chatId, userId)).ReturnsAsync(false);
+        _chatRepoMock.Setup(r => r.IsMemberAsync(chatId, userId, It.IsAny<CancellationToken>())).ReturnsAsync(false);
 
         // Act & Assert
         var ex = await Assert.ThrowsAsync<ForbiddenException>(() =>
-            _service.GetChatListItemAsync(chatId, userId));
+            _service.GetChatListItemAsync(chatId, userId, It.IsAny<CancellationToken>()));
 
         Assert.Equal("NOT_A_MEMBER", ex.ErrorCode);
-        _chatRepoMock.Verify(r => r.GetChatListItemAsync(It.IsAny<Guid>(), It.IsAny<Guid>()), Times.Never);
+        _chatRepoMock.Verify(r => r.GetChatListItemAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    // ========== SearchChatsAsync: companion-поля не должны теряться ==========
+    // ========== SearchChatsAsync: companion fields must not be lost ==========
 
     [Fact]
     public async Task SearchChatsAsync_PrivateChat_KeepsCompanionIdAndUsername()
@@ -118,7 +119,7 @@ public class ChatServiceChatItemTests
         var companionId = Guid.NewGuid();
 
         _chatRepoMock
-            .Setup(r => r.SearchChatsBatchedAsync(userId, "ali", "private", 20))
+            .Setup(r => r.SearchChatsBatchedAsync(userId, "ali", "private", 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync([
                 new ChatListResult
                 {
@@ -132,13 +133,13 @@ public class ChatServiceChatItemTests
             ]);
 
         _chatRepoMock
-            .Setup(r => r.CountChatsByQueryAsync(userId, "ali", "private"))
+            .Setup(r => r.CountChatsByQueryAsync(userId, "ali", "private", It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
         // Act
         var result = await _service.SearchChatsAsync(userId, "ali", "private", 20);
 
-        // Assert — регрессия: раньше маппер поиска терял CompanionId/CompanionUsername
+        // Assert - regression: the search mapper used to lose CompanionId/CompanionUsername
         var item = Assert.Single(result.Items);
         Assert.Equal(companionId, item.CompanionId);
         Assert.Equal("alice", item.CompanionUsername);
@@ -153,7 +154,7 @@ public class ChatServiceChatItemTests
         var companionId = Guid.NewGuid();
 
         _chatRepoMock
-            .Setup(r => r.GetUserChatsBatchedAsync(userId))
+            .Setup(r => r.GetUserChatsBatchedAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([
                 new ChatListResult
                 {

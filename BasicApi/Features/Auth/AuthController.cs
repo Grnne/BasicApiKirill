@@ -1,5 +1,6 @@
 using BasicApi.Extensions;
 using BasicApi.Models.Dto.Auth;
+using BasicApi.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -10,7 +11,7 @@ namespace BasicApi.Features.Auth;
 [Route("api/[controller]")]
 [Produces("application/json")]
 [Tags("Authentication")]
-public class AuthController(AuthHandler handler) : ControllerBase
+public class AuthController(AuthService auth) : ControllerBase
 {
     private string? UserAgent => Request.Headers.UserAgent.FirstOrDefault();
     private string? RemoteIp => HttpContext.Connection.RemoteIpAddress?.ToString();
@@ -31,7 +32,7 @@ public class AuthController(AuthHandler handler) : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> Login([FromBody] LoginRequestDto request)
-        => await handler.LoginAsync(request, UserAgent, RemoteIp, HttpContext.RequestAborted);
+        => Ok(await auth.LoginAsync(request, UserAgent, RemoteIp, HttpContext.RequestAborted));
 
     /// <summary>
     /// Register a new user
@@ -48,7 +49,7 @@ public class AuthController(AuthHandler handler) : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> Register([FromBody] RegisterRequestDto request)
-        => await handler.RegisterAsync(request, UserAgent, RemoteIp, HttpContext.RequestAborted);
+        => Created(string.Empty, await auth.RegisterAsync(request, UserAgent, RemoteIp, HttpContext.RequestAborted));
 
     /// <summary>
     /// Exchange a refresh token for a new access/refresh pair.
@@ -76,7 +77,7 @@ public class AuthController(AuthHandler handler) : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequestDto request)
-        => await handler.RefreshAsync(request.RefreshToken, UserAgent, RemoteIp, HttpContext.RequestAborted);
+        => Ok(await auth.RefreshAsync(request.RefreshToken, UserAgent, RemoteIp, HttpContext.RequestAborted));
 
     /// <summary>
     /// Log out of the current session.
@@ -95,7 +96,10 @@ public class AuthController(AuthHandler handler) : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Logout([FromBody] LogoutRequestDto? request)
-        => await handler.LogoutAsync(request?.RefreshToken, HttpContext.RequestAborted);
+    {
+        await auth.LogoutAsync(request?.RefreshToken, HttpContext.RequestAborted);
+        return Ok();
+    }
 
     /// <summary>
     /// Log out of every session on all devices.
@@ -109,7 +113,10 @@ public class AuthController(AuthHandler handler) : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> LogoutAll()
-        => await handler.LogoutAllAsync(User.GetUserId(), HttpContext.RequestAborted);
+    {
+        await auth.LogoutAllAsync(User.GetUserId(), HttpContext.RequestAborted);
+        return Ok();
+    }
 
     /// <summary>
     /// Validate whether a JWT access token is still valid.
@@ -131,7 +138,7 @@ public class AuthController(AuthHandler handler) : ControllerBase
     [AllowAnonymous]
     [HttpGet("validate")]
     [ProducesResponseType(typeof(ValidateTokenResponseDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> ValidateToken()
+    public IActionResult ValidateToken()
     {
         // Extract raw token from Authorization header
         var authHeader = Request.Headers.Authorization.ToString();
@@ -139,6 +146,6 @@ public class AuthController(AuthHandler handler) : ControllerBase
             ? authHeader["Bearer ".Length..]
             : string.Empty;
 
-        return await handler.ValidateTokenAsync(token);
+        return Ok(auth.ValidateToken(token));
     }
 }

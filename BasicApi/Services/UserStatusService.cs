@@ -4,18 +4,40 @@ namespace BasicApi.Services;
 
 /// <summary>
 /// In-memory tracker for user online/offline and typing status.
-/// Thread-safe via ConcurrentDictionary and immutable snapshots.
+/// Presence changes take a per-user lock, so connect/disconnect races cannot
+/// lose a connection or report online/offline twice.
 /// NOTE: For horizontal scaling, replace with Redis or SignalR Redis backplane.
 /// </summary>
-public class UserStatusService : IUserStatusService
+public class UserStatusService(TimeProvider? timeProvider = null) : IUserStatusService
 {
-    // Map: userId → { connectionId → byte }
-    // ConcurrentDictionary<string, byte> is used as a thread-safe set of connection IDs
-    private readonly ConcurrentDictionary<Guid, ConcurrentDictionary<string, byte>> _onlineUsers = new();
+    /// <summary>
+    /// How long "typing" lives without a refresh. Clients repeat Typing(true) while the
+    /// user types; if they vanish without Typing(false), the state expires on its own.
+    /// </summary>
+    public static readonly TimeSpan TypingTtl = TimeSpan.FromSeconds(6);
 
-    // Map: chatId (string) → { userId → byte }
-    // ConcurrentDictionary<Guid, byte> is used as a thread-safe set of userIds typing in that chat
-    private readonly ConcurrentDictionary<string, ConcurrentDictionary<Guid, byte>> _typingByChat = new();
+    private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
+
+    /// <summary>
+    /// Connections of a single user. All changes are under a lock on this object
+    /// (a per-user lock: different users do not get in each other's way).
+    /// </summary>
+    private sealed class Connections
+    {
+        public readonly HashSet<string> Ids = [];
+
+        /// <summary>
+        /// The set has already been removed from the dictionary (the last connection left). A connection
+        /// that managed to grab a reference to it must take a new one - otherwise it would end up
+        /// in an "orphaned" set, and the user would look offline while actually being connected.
+        /// </summary>
+        public bool Removed;
+    }
+
+    private readonly ConcurrentDictionary<Guid, Connections> _onlineUsers = new();
+
+    // Map: chatId → { userId → typing expires at }
+    private readonly ConcurrentDictionary<Guid, ConcurrentDictionary<Guid, DateTimeOffset>> _typingByChat = new();
 
     public Task<IReadOnlySet<Guid>> GetOnlineUserIdsAsync(IReadOnlySet<Guid> userIds)
     {
@@ -28,84 +50,113 @@ public class UserStatusService : IUserStatusService
         return Task.FromResult<IReadOnlySet<Guid>>(online);
     }
 
-    public Task<Dictionary<Guid, HashSet<Guid>>> GetTypingStatusAsync(Guid userId)
+    public Task<Dictionary<Guid, HashSet<Guid>>> GetTypingStatusAsync(IReadOnlyCollection<Guid> chatIds)
     {
-        // Returns a snapshot of all typing statuses.
-        // Filtering by user's chats is done in the handler layer.
+        // Only the requested chats: the caller passes the user's chats, and others'
+        // are not read at all (previously the whole map was iterated and the filter was outside).
+        var now = _time.GetUtcNow();
         var result = new Dictionary<Guid, HashSet<Guid>>();
-        foreach (var kvp in _typingByChat)
+        foreach (var chatId in chatIds)
         {
-            if (kvp.Value.Count > 0)
+            if (!_typingByChat.TryGetValue(chatId, out var users))
+                continue;
+
+            var typing = new HashSet<Guid>();
+            foreach (var (userId, expiresAt) in users)
             {
-                var chatId = Guid.Parse(kvp.Key);
-                result[chatId] = [.. kvp.Value.Keys];
+                if (expiresAt > now)
+                    typing.Add(userId);
+                else
+                    users.TryRemove(KeyValuePair.Create(userId, expiresAt)); // expired - clean it up along the way
             }
+
+            if (typing.Count > 0)
+                result[chatId] = typing;
         }
         return Task.FromResult(result);
     }
 
     public Task<bool> SetUserOnlineStatusAsync(Guid userId, string connectionId, bool status)
+        => Task.FromResult(status ? AddConnection(userId, connectionId) : RemoveConnection(userId, connectionId));
+
+    /// <returns>True if this is the user's first connection (they came online).</returns>
+    private bool AddConnection(Guid userId, string connectionId)
     {
-        if (status)
+        while (true)
         {
-            // AddOrUpdate: creates a new inner dict if absent, or adds the connection.
-            // The factory/addValueFactory run outside the dictionary lock,
-            // but TryAdd/TryUpdate inside the inner dict are atomic.
-            var connSet = _onlineUsers.GetOrAdd(userId, _ => new ConcurrentDictionary<string, byte>());
-            var isNew = connSet.IsEmpty;
-            connSet.TryAdd(connectionId, 0);
-            return Task.FromResult(isNew);
-        }
-        else
-        {
-            if (_onlineUsers.TryGetValue(userId, out var connSet))
+            var connections = _onlineUsers.GetOrAdd(userId, _ => new Connections());
+            lock (connections)
             {
-                connSet.TryRemove(connectionId, out _);
-                if (connSet.IsEmpty)
-                {
-                    // Atomically remove the user only if no other connection was added concurrently
-                    _onlineUsers.TryRemove(KeyValuePair.Create(userId, connSet));
-                    // Double-check: if TryRemove failed, someone re-added a connection
-                    return Task.FromResult(!_onlineUsers.ContainsKey(userId));
-                }
+                if (connections.Removed)
+                    continue; // lost the race to the last disconnect - take the fresh set
+
+                var isFirst = connections.Ids.Count == 0;
+                connections.Ids.Add(connectionId);
+                return isFirst;
             }
-            return Task.FromResult(false);
+        }
+    }
+
+    /// <returns>True if this was the last connection (the user went offline).</returns>
+    private bool RemoveConnection(Guid userId, string connectionId)
+    {
+        if (!_onlineUsers.TryGetValue(userId, out var connections))
+            return false;
+
+        lock (connections)
+        {
+            if (connections.Removed || !connections.Ids.Remove(connectionId) || connections.Ids.Count > 0)
+                return false;
+
+            connections.Removed = true;
+            _onlineUsers.TryRemove(KeyValuePair.Create(userId, connections));
+            return true;
         }
     }
 
     public Task<int> GetConnectionCountAsync(Guid userId)
     {
-        if (_onlineUsers.TryGetValue(userId, out var connSet))
-            return Task.FromResult(connSet.Count);
-        return Task.FromResult(0);
+        if (!_onlineUsers.TryGetValue(userId, out var connections))
+            return Task.FromResult(0);
+
+        lock (connections)
+            return Task.FromResult(connections.Removed ? 0 : connections.Ids.Count);
     }
 
     public Task<bool> IsConnectionActiveAsync(Guid userId, string connectionId)
     {
-        if (_onlineUsers.TryGetValue(userId, out var connSet))
-            return Task.FromResult(connSet.ContainsKey(connectionId));
-        return Task.FromResult(false);
+        if (!_onlineUsers.TryGetValue(userId, out var connections))
+            return Task.FromResult(false);
+
+        lock (connections)
+            return Task.FromResult(!connections.Removed && connections.Ids.Contains(connectionId));
     }
 
     public Task SetTypingAsync(Guid chatId, Guid userId, bool isTyping)
     {
-        var key = chatId.ToString();
         if (isTyping)
         {
-            var userSet = _typingByChat.GetOrAdd(key, _ => new ConcurrentDictionary<Guid, byte>());
-            userSet.TryAdd(userId, 0);
+            var users = _typingByChat.GetOrAdd(chatId, _ => new ConcurrentDictionary<Guid, DateTimeOffset>());
+            users[userId] = _time.GetUtcNow() + TypingTtl;
         }
-        else
+        else if (_typingByChat.TryGetValue(chatId, out var users))
         {
-            if (_typingByChat.TryGetValue(key, out var userSet))
-            {
-                userSet.TryRemove(userId, out _);
-                if (userSet.IsEmpty)
-                {
-                    _typingByChat.TryRemove(KeyValuePair.Create(key, userSet));
-                }
-            }
+            users.TryRemove(userId, out _);
         }
+        // We do not remove empty chat dictionaries: a race between removal and a parallel Set would lose
+        // the entry, and memory is bounded by the number of chats where anyone has ever typed.
         return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<Guid>> ClearTypingAsync(Guid userId)
+    {
+        var now = _time.GetUtcNow();
+        var chats = new List<Guid>();
+        foreach (var (chatId, users) in _typingByChat)
+        {
+            if (users.TryRemove(userId, out var expiresAt) && expiresAt > now)
+                chats.Add(chatId);
+        }
+        return Task.FromResult<IReadOnlyList<Guid>>(chats);
     }
 }

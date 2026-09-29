@@ -28,5 +28,7 @@ README.md
 !.git/config
 !.git/packed-refs
 !.git/refs/heads/**
-# Собранный фронтенд: в образ он попадает из стадии client, а не с машины
+# Built frontend: it gets into the image from the client stage, not from the host
 BasicApi/wwwroot/client
+# Load test tool: not part of the image
+tools/

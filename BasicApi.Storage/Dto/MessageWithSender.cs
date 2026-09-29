@@ -12,5 +12,7 @@ public class MessageWithSender
     public string Text { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
     public bool IsDeleted { get; set; }
+    public long Seq { get; set; }
+    public Guid? ClientMessageId { get; set; }
     public string SenderName { get; set; } = string.Empty;
 }

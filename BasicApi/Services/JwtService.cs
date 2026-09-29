@@ -28,6 +28,12 @@ public class JwtService : IJwtService
     }
 
     public string GenerateToken(Guid userId, string username, string email)
+        => CreateToken(userId, username, email, sessionFamilyId: null);
+
+    public string GenerateToken(Guid userId, string username, string email, Guid sessionFamilyId)
+        => CreateToken(userId, username, email, sessionFamilyId);
+
+    private string CreateToken(Guid userId, string username, string email, Guid? sessionFamilyId)
     {
         var claims = new List<Claim>
         {
@@ -39,6 +45,9 @@ public class JwtService : IJwtService
                 DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),
                 ClaimValueTypes.Integer64)
         };
+
+        if (sessionFamilyId is not null)
+            claims.Add(new Claim(JwtRegisteredClaimNames.Sid, sessionFamilyId.Value.ToString()));
 
         var tokenDescriptor = new SecurityTokenDescriptor
         {

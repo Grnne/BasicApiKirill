@@ -41,7 +41,7 @@ public class SessionService(
         {
             Id = Guid.NewGuid(),
             UserId = user.Id,
-            FamilyId = Guid.NewGuid(), // новый логин — новая цепочка ротаций
+            FamilyId = Guid.NewGuid(), // a new login — a new rotation chain
             RefreshTokenHash = HashRefreshToken(refreshToken),
             CreatedAt = now,
             ExpiresAt = now.AddDays(_refreshDays),
@@ -51,7 +51,7 @@ public class SessionService(
 
         await sessionRepository.CreateAsync(session, ct);
 
-        return BuildResponse(user, refreshToken, session.ExpiresAt);
+        return BuildResponse(user, refreshToken, session.ExpiresAt, session.FamilyId);
     }
 
     public async Task<AuthResponseDto> RefreshAsync(string refreshToken, string? userAgent, string? ip, CancellationToken ct = default)
@@ -64,7 +64,7 @@ public class SessionService(
         if (session.ExpiresAt <= now)
             throw new UnauthorizedException("Refresh token has expired", "REFRESH_TOKEN_EXPIRED");
 
-        // Уже погашенная сессия: либо честный logout, либо гонка, либо кража.
+        // An already-consumed session: either an honest logout, a race, or theft.
         var withinGraceWindow = false;
         if (session.RevokedAt is not null)
         {
@@ -73,16 +73,16 @@ public class SessionService(
 
             withinGraceWindow = (now - session.RevokedAt.Value).TotalSeconds <= _graceSeconds;
 
-            // Ротация — ещё не гарантия, что цепочка жива: logout или logout-all могли
-            // погасить преемника уже после неё. Без этой проверки до-ротационный токен
-            // позволял бы обойти выход из аккаунта в течение всего grace-окна.
+            // Rotation does not guarantee the chain is alive: logout or logout-all could have
+            // revoked the successor after it. Without this check a pre-rotation token
+            // would allow bypassing sign-out for the whole grace window.
             if (withinGraceWindow && !await sessionRepository.HasLiveSessionInFamilyAsync(session.FamilyId, ct))
                 throw new UnauthorizedException("Session has been revoked", "SESSION_REVOKED");
 
             if (!withinGraceWindow)
             {
-                // Токен предъявлен повторно спустя длительное время — считаем скомпрометированным
-                // и гасим всю цепочку, включая ту сессию, которой сейчас пользуется вор.
+                // The token was presented again after a long time — treated as compromised
+                // and we revoke the whole chain, including the session the thief is currently using.
                 await sessionRepository.RevokeFamilyAsync(session.FamilyId, now, ct);
                 throw new UnauthorizedException("Refresh token has already been used", "REFRESH_TOKEN_REUSED");
             }
@@ -102,43 +102,51 @@ public class SessionService(
         {
             Id = Guid.NewGuid(),
             UserId = user.Id,
-            FamilyId = session.FamilyId, // ротация остаётся в той же цепочке
+            FamilyId = session.FamilyId, // rotation stays in the same chain
             RefreshTokenHash = HashRefreshToken(newRefreshToken),
             CreatedAt = now,
-            ExpiresAt = session.ExpiresAt, // окно не продлевается бесконечной ротацией
+            ExpiresAt = session.ExpiresAt, // the window is not extended by endless rotation
             UserAgent = Truncate(userAgent, 400),
             Ip = Truncate(ip, 64)
         };
 
         if (withinGraceWindow)
         {
-            // Исходная строка уже ротирована — просто добавляем ещё одну сессию в семью.
+            // The original row is already rotated — just add one more session to the family.
             await sessionRepository.CreateAsync(replacement, ct);
         }
         else if (!await sessionRepository.TryRotateAsync(session.Id, replacement, now, ct))
         {
-            // Кто-то ротировал эту сессию между SELECT и UPDATE. Это та же гонка,
-            // просто пойманная на шаг позже — клиента выкидывать не за что.
+            // Someone rotated this session between SELECT and UPDATE. This is the same race,
+            // just caught a step later — there is nothing to kick the client out for.
             await sessionRepository.CreateAsync(replacement, ct);
         }
 
-        return BuildResponse(user, newRefreshToken, replacement.ExpiresAt);
+        return BuildResponse(user, newRefreshToken, replacement.ExpiresAt, replacement.FamilyId);
     }
 
-    public async Task RevokeAsync(string? refreshToken, CancellationToken ct = default)
+    public async Task<Guid?> RevokeAsync(string? refreshToken, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(refreshToken))
-            return;
+            return null;
 
         var session = await sessionRepository.GetByRefreshTokenHashAsync(HashRefreshToken(refreshToken), ct);
         if (session is null || session.RevokedAt is not null)
-            return;
+            return null;
 
         await sessionRepository.RevokeAsync(session.Id, DateTime.UtcNow, ct);
+        return session.FamilyId;
     }
 
     public Task RevokeAllForUserAsync(Guid userId, CancellationToken ct = default)
         => sessionRepository.RevokeAllForUserAsync(userId, DateTime.UtcNow, ct);
+
+    public Task<bool> IsSessionFamilyLiveAsync(Guid sessionFamilyId, CancellationToken ct = default)
+        => sessionRepository.HasLiveSessionInFamilyAsync(sessionFamilyId, ct);
+
+    public Task<IReadOnlyCollection<Guid>> GetLiveSessionFamiliesAsync(
+        IReadOnlyCollection<Guid> sessionFamilyIds, CancellationToken ct = default)
+        => sessionRepository.GetLiveFamiliesAsync(sessionFamilyIds, ct);
 
     /// <summary>
     /// SHA-256 hex of the refresh token. Refresh tokens are 256 bits of CSPRNG output,
@@ -153,13 +161,13 @@ public class SessionService(
             .Replace('/', '_')
             .TrimEnd('=');
 
-    private AuthResponseDto BuildResponse(User user, string refreshToken, DateTime refreshExpiresAt) => new()
+    private AuthResponseDto BuildResponse(User user, string refreshToken, DateTime refreshExpiresAt, Guid sessionFamilyId) => new()
     {
         UserId = user.Id,
         Username = user.Username,
         Email = user.Email,
         DisplayName = user.DisplayName,
-        Token = jwtService.GenerateToken(user.Id, user.Username, user.Email),
+        Token = jwtService.GenerateToken(user.Id, user.Username, user.Email, sessionFamilyId),
         ExpiresAt = jwtService.GetExpiryDate(),
         RefreshToken = refreshToken,
         RefreshTokenExpiresAt = refreshExpiresAt

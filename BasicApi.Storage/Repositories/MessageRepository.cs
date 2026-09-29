@@ -1,323 +1,184 @@
-﻿using System.Data;
+﻿using System.Text.RegularExpressions;
 using BasicApi.Storage.Dto;
 using BasicApi.Storage.Entities;
+using BasicApi.Storage.Exceptions;
 using BasicApi.Storage.Interfaces;
-using Dapper;
+using Npgsql;
 
 namespace BasicApi.Storage.Repositories;
 
-public class MessageRepository(IDbConnectionFactory connectionFactory) : IMessageRepository
+public partial class MessageRepository(IDbSession db) : IMessageRepository
 {
-    public async Task<CursorResult<Message>> GetMessagesCursorAsync(Guid chatId, string? cursor, int limit)
+    private const string SelectColumns = @"
+        m.id AS Id,
+        m.chat_id AS ChatId,
+        m.sender_id AS SenderId,
+        m.text AS Text,
+        m.created_at AS CreatedAt,
+        m.is_deleted AS IsDeleted,
+        m.seq AS Seq,
+        m.client_message_id AS ClientMessageId,
+        COALESCE(u.display_name, 'Unknown') AS SenderName";
+
+    /// <summary>
+    /// Page from newest to oldest by seq; with one extra row — the sign of a next page.
+    /// </summary>
+    public async Task<CursorResult<MessageWithSender>> GetMessagesWithSenderCursorAsync(
+        Guid chatId, long? beforeSeq, int limit, CancellationToken ct = default)
     {
-        // Decode cursor — if null, start from the most recent messages
-        DateTime? beforeTime = null;
-        Guid? beforeId = null;
+        var sql = $@"
+            SELECT {SelectColumns}
+            FROM messages m
+            LEFT JOIN users u ON u.id = m.sender_id
+            WHERE m.chat_id = @chatId
+              AND m.is_deleted = false
+              {(beforeSeq is null ? "" : "AND m.seq < @beforeSeq")}
+            ORDER BY m.seq DESC
+            LIMIT @fetchSize";
 
-        if (!string.IsNullOrEmpty(cursor))
+        var rows = await db.QueryAsync<MessageWithSender>(sql, new { chatId, beforeSeq, fetchSize = limit + 1 }, ct);
+        return Page(rows, limit);
+    }
+
+    public Task<MessageWithSender> CreateAsync(
+        Message message, Guid? clientMessageId = null, CancellationToken ct = default) =>
+        db.InTransactionAsync(async ct =>
         {
-            var decoded = CursorDto.Decode(cursor);
-            beforeTime = decoded.CreatedAt;
-            beforeId = decoded.Id;
-        }
+            // The number comes from the chat counter. UPDATE locks the chat row until the transaction ends:
+            // concurrent sends to one chat get numbers in turn, with no gaps or repeats.
+            // The sender name comes from the same query: it is needed in the new-message event.
+            const string sql = $@"
+                WITH next AS (
+                    UPDATE chats SET last_seq = last_seq + 1 WHERE id = @ChatId RETURNING last_seq
+                ), m AS (
+                    INSERT INTO messages (id, chat_id, sender_id, text, created_at, is_deleted, seq, client_message_id)
+                    SELECT @Id, @ChatId, @SenderId, @Text, @CreatedAt, @IsDeleted, next.last_seq, @ClientMessageId
+                    FROM next
+                    RETURNING *
+                )
+                SELECT {SelectColumns}
+                FROM m
+                LEFT JOIN users u ON u.id = m.sender_id";
 
-        // Fetch limit+1 to detect if there are more pages
-        var fetchSize = limit + 1;
-        string sql;
-        object parameters;
+            try
+            {
+                return await db.QuerySingleAsync<MessageWithSender>(sql, new
+                {
+                    message.Id,
+                    message.ChatId,
+                    message.SenderId,
+                    message.Text,
+                    message.CreatedAt,
+                    message.IsDeleted,
+                    ClientMessageId = clientMessageId
+                }, ct);
+            }
+            catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation &&
+                                               ex.ConstraintName == "ux_messages_sender_id_client_message_id")
+            {
+                // A concurrent retry of the same send got there first. The transaction will roll back
+                // together with the issued number; the caller will find that message.
+                throw new DuplicateKeyException("Message with this clientMessageId already exists", ex);
+            }
+        }, ct: ct);
 
-        // Use composite pagination: (created_at, id) < (@beforeTime, @beforeId)
-        // The row-level comparison ensures deterministic ordering even when
-        // multiple messages share the same timestamp.
-        if (beforeTime is not null && beforeId is not null)
-        {
-            sql = @"
-                SELECT * FROM messages
-                WHERE chat_id = @chatId
-                  AND is_deleted = false
-                  AND (created_at < @beforeTime
-                       OR (created_at = @beforeTime AND id < @beforeId))
-                ORDER BY created_at DESC, id DESC
-                LIMIT @fetchSize";
+    public Task<MessageWithSender?> GetByClientMessageIdAsync(
+        Guid senderId, Guid clientMessageId, CancellationToken ct = default) =>
+        db.QueryFirstOrDefaultAsync<MessageWithSender>($@"
+            SELECT {SelectColumns}
+            FROM messages m
+            LEFT JOIN users u ON u.id = m.sender_id
+            WHERE m.sender_id = @senderId AND m.client_message_id = @clientMessageId",
+            new { senderId, clientMessageId }, ct);
 
-            parameters = new { chatId, beforeTime, beforeId, fetchSize };
-        }
-        else
-        {
-            sql = @"
-                SELECT * FROM messages
-                WHERE chat_id = @chatId
-                  AND is_deleted = false
-                ORDER BY created_at DESC, id DESC
-                LIMIT @fetchSize";
+    public Task<long?> GetSeqAsync(Guid chatId, Guid messageId, CancellationToken ct = default) =>
+        db.QueryFirstOrDefaultAsync<long?>(
+            "SELECT seq FROM messages WHERE id = @messageId AND chat_id = @chatId", new { chatId, messageId }, ct);
 
-            parameters = new { chatId, fetchSize };
-        }
+    public async Task<ReadPointerUpdate> MarkReadAsync(
+        Guid chatId, Guid userId, Guid messageId, CancellationToken ct = default)
+    {
+        // In one query: the message must belong to this chat, and the pointer moves
+        // only forward — two devices reporting out of order will not roll back
+        // what has been read.
+        const string sql = @"
+            WITH target AS (
+                SELECT seq FROM messages WHERE id = @messageId AND chat_id = @chatId
+            ), moved AS (
+                UPDATE chat_members cm
+                SET last_read_seq = t.seq
+                FROM target t
+                WHERE cm.chat_id = @chatId AND cm.user_id = @userId AND cm.last_read_seq < t.seq
+                RETURNING 1
+            )
+            SELECT (SELECT COUNT(*) FROM target) AS Found, (SELECT COUNT(*) FROM moved) AS Moved";
 
-        using var connection = connectionFactory.CreateConnection();
-        var rows = (await connection.QueryAsync<Message>(sql, parameters)).ToList();
+        var (found, moved) = await db.QuerySingleAsync<(long Found, long Moved)>(
+            sql, new { chatId, userId, messageId }, ct);
 
-        // Determine page items and the "extra" record
-        List<Message> items;
-        Message? extra = null;
-
-        if (rows.Count > limit)
-        {
-            items = rows.Take(limit).ToList();
-            extra = rows[limit];
-        }
-        else
-        {
-            items = rows;
-        }
-
-        return new CursorResult<Message>
-        {
-            Items = items,
-            Extra = extra
-        };
+        if (found == 0) return ReadPointerUpdate.MessageNotFound;
+        return moved > 0 ? ReadPointerUpdate.Moved : ReadPointerUpdate.NotMoved;
     }
 
     /// <summary>
-    /// Cursor-based pagination with sender name via JOIN — avoids N+1 lookups.
+    /// Number of the earliest message strictly after the moment. "Jump to date" builds an exclusive
+    /// cursor from it: the page before it ends with the last message
+    /// at that moment or earlier.
     /// </summary>
-    public async Task<CursorResult<MessageWithSender>> GetMessagesWithSenderCursorAsync(
-        Guid chatId, string? cursor, int limit)
-    {
-        DateTime? beforeTime = null;
-        Guid? beforeId = null;
+    public Task<long?> GetFirstSeqAfterAsync(Guid chatId, DateTime date, CancellationToken ct = default) =>
+        db.QueryFirstOrDefaultAsync<long?>(@"
+            SELECT MIN(seq) FROM messages
+            WHERE chat_id = @chatId AND created_at > @date AND is_deleted = false",
+            new { chatId, date }, ct);
 
-        if (!string.IsNullOrEmpty(cursor))
-        {
-            var decoded = CursorDto.Decode(cursor);
-            beforeTime = decoded.CreatedAt;
-            beforeId = decoded.Id;
-        }
-
-        var fetchSize = limit + 1;
-        string sql;
-        object parameters;
-
-        const string selectColumns = @"
-                m.id AS Id,
-                m.chat_id AS ChatId,
-                m.sender_id AS SenderId,
-                m.text AS Text,
-                m.created_at AS CreatedAt,
-                m.is_deleted AS IsDeleted,
-                COALESCE(u.display_name, 'Unknown') AS SenderName";
-
-        if (beforeTime is not null && beforeId is not null)
-        {
-            sql = $@"
-                SELECT {selectColumns}
-                FROM messages m
-                LEFT JOIN users u ON u.id = m.sender_id
-                WHERE m.chat_id = @chatId
-                  AND m.is_deleted = false
-                  AND (m.created_at < @beforeTime
-                       OR (m.created_at = @beforeTime AND m.id < @beforeId))
-                ORDER BY m.created_at DESC, m.id DESC
-                LIMIT @fetchSize";
-
-            parameters = new { chatId, beforeTime, beforeId, fetchSize };
-        }
-        else
-        {
-            sql = $@"
-                SELECT {selectColumns}
-                FROM messages m
-                LEFT JOIN users u ON u.id = m.sender_id
-                WHERE m.chat_id = @chatId
-                  AND m.is_deleted = false
-                ORDER BY m.created_at DESC, m.id DESC
-                LIMIT @fetchSize";
-
-            parameters = new { chatId, fetchSize };
-        }
-
-        using var connection = connectionFactory.CreateConnection();
-        var rows = (await connection.QueryAsync<MessageWithSender>(sql, parameters)).ToList();
-
-        List<MessageWithSender> items;
-        MessageWithSender? extra = null;
-
-        if (rows.Count > limit)
-        {
-            items = rows.Take(limit).ToList();
-            extra = rows[limit];
-        }
-        else
-        {
-            items = rows;
-        }
-
-        return new CursorResult<MessageWithSender>
-        {
-            Items = items,
-            Extra = extra
-        };
-    }
-
-    public async Task<Guid> CreateAsync(Message message)
-    {
-        const string sql = @"
-            INSERT INTO messages (id, chat_id, sender_id, text, created_at, is_deleted) 
-            VALUES (@Id, @ChatId, @SenderId, @Text, @CreatedAt, @IsDeleted)";
-
-                using var connection = connectionFactory.CreateConnection();
-        await connection.ExecuteAsync(sql, message);
-        return message.Id;
-    }
-
-    public async Task UpdateLastReadAsync(Guid chatId, Guid userId, Guid messageId)
-    {
-        const string sql = @"
-            UPDATE chat_members
-            SET last_read_message_id = @messageId
-            WHERE chat_id = @chatId AND user_id = @userId";
-
-                using var connection = connectionFactory.CreateConnection();
-        await connection.ExecuteAsync(sql, new { chatId, userId, messageId });
-    }
-    public async Task<int> GetUnreadCountAsync(Guid chatId, Guid userId)
-    {
-        const string sql = @"
-        SELECT COUNT(*) 
-        FROM messages m
-        WHERE m.chat_id = @chatId 
-        AND m.created_at > (
-            SELECT COALESCE(
-                (SELECT created_at FROM messages WHERE id = cm.last_read_message_id),
-                '1970-01-01'::timestamp
-            )
-            FROM chat_members cm
-            WHERE cm.chat_id = @chatId AND cm.user_id = @userId
-        )";
-
-        using var connection = connectionFactory.CreateConnection();
-                return await connection.ExecuteScalarAsync<int>(sql, new { chatId, userId });
-    }
-
-        /// <summary>
-    /// Finds the most recent message at or before the given date.
-    /// Used to build a cursor for the "jump to date" endpoint.
-    /// </summary>
-    public async Task<Message?> GetFirstMessageBeforeDateAsync(Guid chatId, DateTime date)
-    {
-        const string sql = @"
-            SELECT *
-            FROM messages
-            WHERE chat_id = @chatId
-              AND created_at <= @date
-              AND is_deleted = false
-            ORDER BY created_at DESC, id DESC
-            LIMIT 1";
-
-        using var connection = connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<Message>(sql, new { chatId, date });
-    }
-
-        /// <summary>
-    /// Full-text search for messages within a chat using PostgreSQL tsvector.
-    /// Supports cursor-based pagination with the same (created_at, id) composite cursor pattern.
-    /// Returns messages with sender names via JOIN.
-    /// Uses plainto_tsquery for safe user input handling.
-    /// Also returns the total count of matching messages.
+    /// <summary>
+    /// Full-text search within a chat, newest first by seq, with the total number of
+    /// matches (same on every page). The query config must match the one of
+    /// messages.search_vector ('russian').
     /// </summary>
     public async Task<(CursorResult<MessageWithSender> Result, int TotalCount)> SearchMessagesCursorAsync(
-        Guid chatId, string query, string? cursor, int limit)
+        Guid chatId, string query, long? beforeSeq, int limit, CancellationToken ct = default)
     {
-        DateTime? beforeTime = null;
-        Guid? beforeId = null;
+        const string match = "m.search_vector @@ to_tsquery('russian', @prefixQuery)";
+        var prefixQuery = ToPrefixQuery(query);
 
-        if (!string.IsNullOrEmpty(cursor))
-        {
-            var decoded = CursorDto.Decode(cursor);
-            beforeTime = decoded.CreatedAt;
-            beforeId = decoded.Id;
-        }
+        var sql = $@"
+            SELECT {SelectColumns}
+            FROM messages m
+            LEFT JOIN users u ON u.id = m.sender_id
+            WHERE m.chat_id = @chatId
+              AND m.is_deleted = false
+              AND {match}
+              {(beforeSeq is null ? "" : "AND m.seq < @beforeSeq")}
+            ORDER BY m.seq DESC
+            LIMIT @fetchSize";
 
-        var fetchSize = limit + 1;
-        string sql;
-        object parameters;
+        var rows = await db.QueryAsync<MessageWithSender>(sql, new { chatId, prefixQuery, beforeSeq, fetchSize = limit + 1 }, ct);
 
-        const string selectColumns = @"
-                m.id AS Id,
-                m.chat_id AS ChatId,
-                m.sender_id AS SenderId,
-                m.text AS Text,
-                m.created_at AS CreatedAt,
-                m.is_deleted AS IsDeleted,
-                COALESCE(u.display_name, 'Unknown') AS SenderName";
+        // Total matches — on every page: the client shows "N results"
+        // regardless of which page it loaded.
+        var totalCount = await db.ExecuteScalarAsync<int>($@"
+            SELECT COUNT(*) FROM messages m
+            WHERE m.chat_id = @chatId AND m.is_deleted = false AND {match}",
+            new { chatId, prefixQuery }, ct);
 
-        if (beforeTime is not null && beforeId is not null)
-        {
-            sql = $@"
-                SELECT {selectColumns}
-                FROM messages m
-                LEFT JOIN users u ON u.id = m.sender_id
-                WHERE m.chat_id = @chatId
-                  AND m.is_deleted = false
-                  AND to_tsvector('english', m.text) @@ plainto_tsquery('english', @query)
-                  AND (m.created_at < @beforeTime
-                       OR (m.created_at = @beforeTime AND m.id < @beforeId))
-                ORDER BY m.created_at DESC, m.id DESC
-                LIMIT @fetchSize";
-
-            parameters = new { chatId, query, beforeTime, beforeId, fetchSize };
-        }
-        else
-        {
-            sql = $@"
-                SELECT {selectColumns}
-                FROM messages m
-                LEFT JOIN users u ON u.id = m.sender_id
-                WHERE m.chat_id = @chatId
-                  AND m.is_deleted = false
-                  AND to_tsvector('english', m.text) @@ plainto_tsquery('english', @query)
-                ORDER BY m.created_at DESC, m.id DESC
-                LIMIT @fetchSize";
-
-            parameters = new { chatId, query, fetchSize };
-        }
-
-        using var connection = connectionFactory.CreateConnection();
-
-        // Fetch the page
-        var rows = (await connection.QueryAsync<MessageWithSender>(sql, parameters)).ToList();
-
-        // Get total count (only on first page for performance)
-        int totalCount = 0;
-        if (string.IsNullOrEmpty(cursor))
-        {
-            const string countSql = @"
-                SELECT COUNT(*)
-                FROM messages m
-                WHERE m.chat_id = @chatId
-                  AND m.is_deleted = false
-                  AND to_tsvector('english', m.text) @@ plainto_tsquery('english', @query)";
-
-            totalCount = await connection.ExecuteScalarAsync<int>(countSql, new { chatId, query });
-        }
-
-        List<MessageWithSender> items;
-        MessageWithSender? extra = null;
-
-        if (rows.Count > limit)
-        {
-            items = rows.Take(limit).ToList();
-            extra = rows[limit];
-        }
-        else
-        {
-            items = rows;
-        }
-
-        return (new CursorResult<MessageWithSender>
-        {
-            Items = items,
-            Extra = extra
-        }, totalCount);
+        return (Page(rows, limit), totalCount);
     }
+
+    /// <summary>
+    /// Query words are matched as word prefixes: "запуск" finds both "запускаем" and "до запуска"
+    /// (the Russian stemmer reduces them to different stems), and the query works as you type.
+    /// Only letters and digits are taken from the input, so tsquery operators cannot get through.
+    /// Stop words ("и", "в", "the") are dropped by the dictionary itself.
+    /// </summary>
+    internal static string ToPrefixQuery(string query) =>
+        string.Join(" & ", WordPattern().Matches(query).Select(m => m.Value + ":*"));
+
+    [GeneratedRegex(@"[\p{L}\p{N}]+")]
+    private static partial Regex WordPattern();
+
+    private static CursorResult<MessageWithSender> Page(IReadOnlyList<MessageWithSender> rows, int limit) =>
+        rows.Count > limit
+            ? new CursorResult<MessageWithSender> { Items = [.. rows.Take(limit)], Extra = rows[limit] }
+            : new CursorResult<MessageWithSender> { Items = [.. rows] };
 }

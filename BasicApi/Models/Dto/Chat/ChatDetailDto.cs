@@ -1,6 +1,5 @@
 ﻿namespace BasicApi.Models.Dto.Chat;
 
-// ========== Models/Dto/Chat/ChatDetailDto.cs ==========
 public class ChatDetailDto
 {
     public Guid ChatId { get; set; }

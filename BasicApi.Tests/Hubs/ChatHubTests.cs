@@ -1,613 +1,237 @@
 using System.Security.Claims;
 using BasicApi.Hubs;
+using BasicApi.Middleware.Exceptions;
 using BasicApi.Services;
-using BasicApi.Storage.Entities;
-using BasicApi.Storage.Interfaces;
-using Microsoft.AspNetCore.Http;
+using BasicApi.Tests.TestDoubles;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.SignalR;
-using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 
 namespace BasicApi.Tests.Hubs;
 
 /// <summary>
-/// Helper to capture SendAsync calls via the IClientProxy interface.
-/// SignalR's SendAsync is an extension method (ClientProxyExtensions),
-/// which Moq can't verify directly. Instead we use strict invocation tracking
-/// via Verify on the underlying interface method with a custom matcher.
+/// The hub is an adapter: it parses a call and hands it to a service. The rules (membership, text,
+/// presence) are tested in the service tests; here — that the call got where it should,
+/// and what remains with the hub: the session on connect, groups, the call limit.
 /// </summary>
 public class ChatHubTests
 {
-    private readonly Mock<IChatRepository> _chatRepoMock;
-    private readonly Mock<IMessageRepository> _messageRepoMock;
-    private readonly Mock<ILogger<ChatHub>> _loggerMock;
-    private readonly Mock<IUserStatusService> _statusMock;
-    private readonly Mock<HubCallerContext> _contextMock;
-    private readonly Mock<IHubCallerClients> _clientsMock;
-    private readonly Mock<IGroupManager> _groupsMock;
-    private readonly TestClientProxy _clientProxy;
-    private readonly ChatHub _hub;
-    private readonly Guid _userId;
-    private readonly string _connectionId;
-
-    private static int _connectionCounter;
+    private readonly Mock<IMessageService> _messagesMock = new();
+    private readonly Mock<IPresenceService> _presenceMock = new();
+    private readonly Mock<IChatPolicy> _policyMock = new();
+    private readonly Mock<ISessionService> _sessionsMock = new();
+    private readonly Mock<IGroupManager> _groupsMock = new();
+    private readonly RecordingHubClients _clients = new();
+    private readonly Mock<IHubCallerClients> _callerClientsMock = new();
+    private readonly Guid _userId = Guid.NewGuid();
+    private readonly Guid _sessionFamilyId = Guid.NewGuid();
+    private readonly string _connectionId = $"conn-{Guid.NewGuid():N}";
 
     public ChatHubTests()
     {
-        _connectionId = $"test-connection-id-{Interlocked.Increment(ref _connectionCounter)}";
-        _userId = Guid.NewGuid();
-        _chatRepoMock = new Mock<IChatRepository>();
-        _messageRepoMock = new Mock<IMessageRepository>();
-        _loggerMock = new Mock<ILogger<ChatHub>>();
-        _statusMock = new Mock<IUserStatusService>();
-        _contextMock = new Mock<HubCallerContext>();
-        _clientsMock = new Mock<IHubCallerClients>();
-        _groupsMock = new Mock<IGroupManager>();
-        _clientProxy = new TestClientProxy();
-
-        // In-memory tracking for the IUserStatusService mock (mirrors UserStatusService behavior)
-        var onlineState = new Dictionary<Guid, HashSet<string>>();
-
-        _statusMock
-            .Setup(s => s.SetUserOnlineStatusAsync(It.IsAny<Guid>(), It.IsAny<string>(), true))
-            .Returns((Guid userId, string connId, bool _) =>
-            {
-                if (!onlineState.ContainsKey(userId))
-                    onlineState[userId] = new HashSet<string>();
-                var isNew = onlineState[userId].Count == 0;
-                onlineState[userId].Add(connId);
-                return Task.FromResult(isNew);
-            });
-
-        _statusMock
-            .Setup(s => s.SetUserOnlineStatusAsync(It.IsAny<Guid>(), It.IsAny<string>(), false))
-            .Returns((Guid userId, string connId, bool _) =>
-            {
-                if (onlineState.TryGetValue(userId, out var conns))
-                {
-                    conns.Remove(connId);
-                    if (conns.Count == 0)
-                    {
-                        onlineState.Remove(userId);
-                        return Task.FromResult(true);
-                    }
-                }
-                return Task.FromResult(false);
-            });
-
-        _statusMock
-            .Setup(s => s.GetConnectionCountAsync(It.IsAny<Guid>()))
-            .Returns((Guid userId) =>
-                Task.FromResult(onlineState.TryGetValue(userId, out var conns) ? conns.Count : 0));
-
-        _statusMock
-            .Setup(s => s.IsConnectionActiveAsync(It.IsAny<Guid>(), It.IsAny<string>()))
-            .Returns((Guid userId, string connId) =>
-                Task.FromResult(onlineState.TryGetValue(userId, out var conns) && conns.Contains(connId)));
-
-        _statusMock
-            .Setup(s => s.SetTypingAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<bool>()))
-            .Returns(Task.CompletedTask);
-
-        // Настраиваем контекст с authenticated user
-        var claimsPrincipal = new ClaimsPrincipal(new ClaimsIdentity([
-            new Claim(ClaimTypes.NameIdentifier, _userId.ToString())
-        ], "test"));
-
-        _contextMock.Setup(c => c.User).Returns(claimsPrincipal);
-        _contextMock.Setup(c => c.ConnectionId).Returns(_connectionId);
-        // Подкладываем пустой FeatureCollection, чтобы GetHttpContext() не упал NRE
-        _contextMock.Setup(c => c.Features).Returns(new FeatureCollection());
-
-        // По умолчанию User(), Group() и Caller возвращают наш TestClientProxy
-        _clientsMock
-            .Setup(c => c.User(It.IsAny<string>()))
-            .Returns(_clientProxy);
-
-        _clientsMock
-            .Setup(c => c.Group(It.IsAny<string>()))
-            .Returns(_clientProxy);
-
-        _clientsMock
-            .Setup(c => c.Caller)
-            .Returns(_clientProxy);
-
-        _hub = new ChatHub(_chatRepoMock.Object, _messageRepoMock.Object, _statusMock.Object, _loggerMock.Object)
-        {
-            Context = _contextMock.Object,
-            Clients = _clientsMock.Object,
-            Groups = _groupsMock.Object
-        };
-    }
-
-    #region OnConnectedAsync
-
-    [Fact]
-    public async Task OnConnectedAsync_WhenUserIdFound_SendsOnlineToAllChatMembers()
-    {
-        // Arrange
-        var memberIds = new List<Guid> { Guid.NewGuid(), Guid.NewGuid() };
-        _chatRepoMock
-            .Setup(r => r.GetAllChatMembersAsync(_userId))
-            .ReturnsAsync(memberIds);
-
-        // Act
-        await _hub.OnConnectedAsync();
-
-        // Assert
-        Assert.Equal(2, _clientProxy.Invocations.Count);
-        Assert.All(_clientProxy.Invocations, inv =>
-        {
-            Assert.Equal("UserOnlineChanged", inv.Method);
-            Assert.Equal(2, inv.Args.Length);
-            Assert.Equal(_userId, inv.Args[0]);
-            Assert.True((bool)inv.Args[1]!);
-        });
-
-        foreach (var memberId in memberIds)
-        {
-            _clientsMock.Verify(c => c.User(memberId.ToString()), Times.Once);
-        }
-    }
-
-    [Fact]
-    public async Task OnConnectedAsync_WhenNoChatMembers_SendsNothing()
-    {
-        // Arrange
-        _chatRepoMock
-            .Setup(r => r.GetAllChatMembersAsync(_userId))
-            .ReturnsAsync(new List<Guid>());
-
-        // Act
-        await _hub.OnConnectedAsync();
-
-        // Assert
-        Assert.Empty(_clientProxy.Invocations);
-    }
-
-    [Fact]
-    public async Task OnConnectedAsync_WhenUnauthenticated_DoesNotSendOnline()
-    {
-        // Arrange
-        var unauthenticatedContext = new Mock<HubCallerContext>();
-        unauthenticatedContext.Setup(c => c.User).Returns(new ClaimsPrincipal());
-        unauthenticatedContext.Setup(c => c.Features).Returns(new FeatureCollection());
-
-        var hub = new ChatHub(_chatRepoMock.Object, _messageRepoMock.Object, _statusMock.Object, _loggerMock.Object)
-        {
-            Context = unauthenticatedContext.Object,
-            Clients = _clientsMock.Object,
-            Groups = _groupsMock.Object
-        };
-
-        // Act
-        await hub.OnConnectedAsync();
-
-        // Assert
-        _chatRepoMock.Verify(r => r.GetAllChatMembersAsync(It.IsAny<Guid>()), Times.Never);
-        Assert.Empty(_clientProxy.Invocations);
-    }
-
-    #endregion
-
-    #region OnDisconnectedAsync
-
-    [Fact]
-    public async Task OnDisconnectedAsync_WhenNoOtherConnection_SendsOfflineToAllChatMembers()
-    {
-        // Arrange
-        // Сначала "подключаемся", чтобы появилась запись в onlineState
-        _chatRepoMock
-            .Setup(r => r.GetAllChatMembersAsync(_userId))
-            .ReturnsAsync(new List<Guid>());
-        await _hub.OnConnectedAsync();
-        _clientProxy.Invocations.Clear();
-
-        // Теперь настраиваем возврат участников для дисконнекта
-        var memberIds = new List<Guid> { Guid.NewGuid(), Guid.NewGuid() };
-        _chatRepoMock
-            .Setup(r => r.GetAllChatMembersAsync(_userId))
-            .ReturnsAsync(memberIds);
-
-        // Act
-        await _hub.OnDisconnectedAsync(null);
-
-        // Assert
-        Assert.Equal(2, _clientProxy.Invocations.Count);
-        Assert.All(_clientProxy.Invocations, inv =>
-        {
-            Assert.Equal("UserOnlineChanged", inv.Method);
-            Assert.Equal(_userId, inv.Args[0]);
-            Assert.False((bool)inv.Args[1]!);
-        });
-
-        foreach (var memberId in memberIds)
-        {
-            _clientsMock.Verify(c => c.User(memberId.ToString()), Times.Once);
-        }
-    }
-
-    [Fact]
-    public async Task OnDisconnectedAsync_WhenUnauthenticated_DoesNotSendOffline()
-    {
-        // Arrange
-        var unauthenticatedContext = new Mock<HubCallerContext>();
-        unauthenticatedContext.Setup(c => c.User).Returns(new ClaimsPrincipal());
-        unauthenticatedContext.Setup(c => c.Features).Returns(new FeatureCollection());
-
-        var hub = new ChatHub(_chatRepoMock.Object, _messageRepoMock.Object, _statusMock.Object, _loggerMock.Object)
-        {
-            Context = unauthenticatedContext.Object,
-            Clients = _clientsMock.Object,
-            Groups = _groupsMock.Object
-        };
-
-        // Act
-        await hub.OnDisconnectedAsync(null);
-
-        // Assert
-        _chatRepoMock.Verify(r => r.GetAllChatMembersAsync(It.IsAny<Guid>()), Times.Never);
-        Assert.Empty(_clientProxy.Invocations);
-    }
-
-    #endregion
-
-    #region JoinChat
-
-    [Fact]
-    public async Task JoinChat_WhenMember_AddsToGroup()
-    {
-        // Arrange
-        var chatId = Guid.NewGuid();
-        _chatRepoMock
-            .Setup(r => r.IsMemberAsync(chatId, _userId))
+        _callerClientsMock.Setup(c => c.Caller).Returns(() => _clients.Client(_connectionId));
+        _sessionsMock
+            .Setup(s => s.IsSessionFamilyLiveAsync(_sessionFamilyId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
+        _presenceMock
+            .Setup(p => p.GetConnectionInfoAsync(It.IsAny<Guid>(), It.IsAny<string>()))
+            .ReturnsAsync(new ConnectionInfo(1, true));
+        _policyMock
+            .Setup(p => p.CanReadAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(PolicyDecision.Allow);
+    }
 
-        // Act
-        await _hub.JoinChat(chatId);
+    private Mock<HubCallerContext> Context(bool authenticated = true)
+    {
+        var context = new Mock<HubCallerContext>();
+        var identity = authenticated
+            ? new ClaimsIdentity([
+                new Claim(ClaimTypes.NameIdentifier, _userId.ToString()),
+                new Claim(ClaimTypes.Sid, _sessionFamilyId.ToString())
+            ], "test")
+            : new ClaimsIdentity();
+        context.Setup(c => c.User).Returns(new ClaimsPrincipal(identity));
+        context.Setup(c => c.ConnectionId).Returns(_connectionId);
+        context.Setup(c => c.Features).Returns(new FeatureCollection());
+        return context;
+    }
 
-        // Assert
-        _groupsMock.Verify(
-            g => g.AddToGroupAsync(_connectionId, chatId.ToString(), default),
+    private ChatHub Hub(Mock<HubCallerContext>? context = null) =>
+        new(_messagesMock.Object, _presenceMock.Object, _policyMock.Object, _sessionsMock.Object,
+            new HubConnectionRegistry(), NullLogger<ChatHub>.Instance)
+        {
+            Context = (context ?? Context()).Object,
+            Clients = _callerClientsMock.Object,
+            Groups = _groupsMock.Object
+        };
+
+    // ========== Connection ==========
+
+    [Fact]
+    public async Task OnConnected_LiveSession_ReportsConnectionToPresence()
+    {
+        await Hub().OnConnectedAsync();
+
+        _presenceMock.Verify(p => p.ConnectedAsync(_userId, _connectionId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task OnConnected_RevokedSession_AbortsConnection_WithoutGoingOnline()
+    {
+        // The access token is still alive, but the login is already closed by logout.
+        _sessionsMock
+            .Setup(s => s.IsSessionFamilyLiveAsync(_sessionFamilyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        var context = Context();
+
+        await Hub(context).OnConnectedAsync();
+
+        context.Verify(c => c.Abort(), Times.Once);
+        _presenceMock.Verify(p => p.ConnectedAsync(
+            It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task OnConnected_Unauthenticated_DoesNothing()
+    {
+        await Hub(Context(authenticated: false)).OnConnectedAsync();
+
+        _presenceMock.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task OnDisconnected_ReportsDisconnectionToPresence()
+    {
+        await Hub().OnDisconnectedAsync(null);
+
+        _presenceMock.Verify(p => p.DisconnectedAsync(_userId, _connectionId), Times.Once);
+    }
+
+    // ========== Chat groups ==========
+
+    [Fact]
+    public async Task JoinChat_Member_AddsConnectionToChatGroup()
+    {
+        var chatId = Guid.NewGuid();
+
+        await Hub().JoinChat(chatId);
+
+        _policyMock.Verify(p => p.CanReadAsync(_userId, chatId, It.IsAny<CancellationToken>()), Times.Once);
+        _groupsMock.Verify(g => g.AddToGroupAsync(_connectionId, chatId.ToString(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
     [Fact]
-    public async Task JoinChat_WhenNotMember_DoesNotAddToGroup()
+    public async Task JoinChat_NonMember_IsRejected_AndNotAddedToGroup()
     {
-        // Arrange
         var chatId = Guid.NewGuid();
-        _chatRepoMock
-            .Setup(r => r.IsMemberAsync(chatId, _userId))
-            .ReturnsAsync(false);
+        _policyMock
+            .Setup(p => p.CanReadAsync(_userId, chatId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(PolicyDecision.Deny("NOT_A_MEMBER", "User is not a member of this chat"));
 
-        // Act
-        await _hub.JoinChat(chatId);
+        var ex = await Assert.ThrowsAsync<ForbiddenException>(() => Hub().JoinChat(chatId));
 
-        // Assert
-        _groupsMock.Verify(
-            g => g.AddToGroupAsync(It.IsAny<string>(), It.IsAny<string>(), default),
-            Times.Never);
-    }
+        Assert.Equal("NOT_A_MEMBER", ex.ErrorCode);
 
-    private static Mock<HubCallerContext> CreateUnauthenticatedContext()
-    {
-        var ctx = new Mock<HubCallerContext>();
-        ctx.Setup(c => c.User).Returns(new ClaimsPrincipal());
-        ctx.Setup(c => c.Features).Returns(new FeatureCollection());
-        return ctx;
+        _groupsMock.Verify(g => g.AddToGroupAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task JoinChat_WhenUnauthenticated_DoesNotAddToGroup()
+    public async Task LeaveChat_RemovesConnectionFromChatGroup()
     {
-        // Arrange
-        var unauthenticatedContext = CreateUnauthenticatedContext();
+        var chatId = Guid.NewGuid();
 
-        var hub = new ChatHub(_chatRepoMock.Object, _messageRepoMock.Object, _statusMock.Object, _loggerMock.Object)
+        await Hub().LeaveChat(chatId);
+
+        _groupsMock.Verify(g => g.RemoveFromGroupAsync(_connectionId, chatId.ToString(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    // ========== Commands ==========
+
+    [Fact]
+    public async Task SendMessage_GoesToMessageService()
+    {
+        var chatId = Guid.NewGuid();
+
+        await Hub().SendMessage(chatId, "hello");
+
+        _messagesMock.Verify(m => m.SendAsync(chatId, _userId, "hello", null, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task SendMessage_OverCallLimit_IsRejectedWithCode()
+    {
+        var hub = Hub();
+
+        HubException? last = null;
+        for (var i = 0; i < 25; i++)
         {
-            Context = unauthenticatedContext.Object,
-            Clients = _clientsMock.Object,
-            Groups = _groupsMock.Object
-        };
+            try { await hub.SendMessage(Guid.NewGuid(), "x"); }
+            catch (HubException ex) { last = ex; }
+        }
 
-        // Act
+        Assert.NotNull(last);
+        Assert.StartsWith("RATE_LIMITED:", last.Message);
+        _messagesMock.Verify(m => m.SendAsync(
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()),
+            Times.Exactly(20));
+    }
+
+    [Fact]
+    public async Task Typing_GoesToPresenceService()
+    {
+        var chatId = Guid.NewGuid();
+
+        await Hub().Typing(chatId, true);
+
+        _presenceMock.Verify(p => p.SetTypingAsync(chatId, _userId, true, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Typing_OverCallLimit_IsIgnoredSilently()
+    {
+        var hub = Hub();
+
+        for (var i = 0; i < 25; i++)
+            await hub.Typing(Guid.NewGuid(), true);
+
+        _presenceMock.Verify(p => p.SetTypingAsync(
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Exactly(20));
+    }
+
+    [Fact]
+    public async Task Unauthenticated_CommandsDoNothing()
+    {
+        var hub = Hub(Context(authenticated: false));
+
+        await hub.SendMessage(Guid.NewGuid(), "hello");
+        await hub.Typing(Guid.NewGuid(), true);
         await hub.JoinChat(Guid.NewGuid());
-
-        // Assert
-        _chatRepoMock.Verify(r => r.IsMemberAsync(It.IsAny<Guid>(), It.IsAny<Guid>()), Times.Never);
-        _groupsMock.Verify(
-            g => g.AddToGroupAsync(It.IsAny<string>(), It.IsAny<string>(), default),
-            Times.Never);
-    }
-
-    #endregion
-
-    #region LeaveChat
-
-    [Fact]
-    public async Task LeaveChat_RemovesFromGroup()
-    {
-        // Arrange
-        var chatId = Guid.NewGuid();
-        _chatRepoMock
-            .Setup(r => r.IsMemberAsync(chatId, _userId))
-            .ReturnsAsync(true);
-
-        // Act
-        await _hub.LeaveChat(chatId);
-
-        // Assert
-        _groupsMock.Verify(
-            g => g.RemoveFromGroupAsync(_connectionId, chatId.ToString(), default),
-            Times.Once);
-    }
-
-    #endregion
-
-    #region SendMessage
-
-    [Fact]
-    public async Task SendMessage_WhenMember_CreatesAndSendsMessage()
-    {
-        // Arrange
-        var chatId = Guid.NewGuid();
-        var text = "Hello!";
-        var senderName = "Test User";
-        var otherUserId = Guid.NewGuid();
-
-        _chatRepoMock
-            .Setup(r => r.IsMemberAsync(chatId, _userId))
-            .ReturnsAsync(true);
-
-        _messageRepoMock
-            .Setup(r => r.CreateAsync(It.IsAny<Message>()))
-            .ReturnsAsync(Guid.NewGuid());
-
-        _chatRepoMock
-            .Setup(r => r.GetUserNameAsync(_userId))
-            .ReturnsAsync(senderName);
-
-        _chatRepoMock
-            .Setup(r => r.GetChatParticipantsAsync(chatId))
-            .ReturnsAsync([
-                new BasicApi.Storage.Dto.ChatParticipantDto(_userId, "Me", "me"),
-                new BasicApi.Storage.Dto.ChatParticipantDto(otherUserId, "Other", "other")
-            ]);
-
-        // Act
-        await _hub.SendMessage(chatId, text);
-
-        // Assert
-        _messageRepoMock.Verify(
-            r => r.CreateAsync(It.Is<Message>(m =>
-                m.ChatId == chatId &&
-                m.SenderId == _userId &&
-                m.Text == text &&
-                !m.IsDeleted)),
-            Times.Once);
-
-        // Должно быть 3 ивента: MessageCreated в группу + ChatListUpdated себе + ChatListUpdated другому
-        Assert.Equal(3, _clientProxy.Invocations.Count);
-
-        // Первый — MessageCreated в группу
-        Assert.Equal("MessageCreated", _clientProxy.Invocations[0].Method);
-        var dto = Assert.IsType<BasicApi.Models.Dto.Message.MessageDto>(_clientProxy.Invocations[0].Args[0]);
-        Assert.Equal(text, dto.Text);
-        Assert.Equal(senderName, dto.SenderName);
-        Assert.Equal(_userId, dto.SenderId);
-
-        // Второй — ChatListUpdated себе
-        Assert.Equal("ChatListUpdated", _clientProxy.Invocations[1].Method);
-        Assert.Equal(chatId, _clientProxy.Invocations[1].Args[0]);
-        var selfUpdate = Assert.IsType<BasicApi.Models.Dto.Message.MessageDto>(_clientProxy.Invocations[1].Args[1]);
-        Assert.Equal(text, selfUpdate.Text);
-
-        // Третий — ChatListUpdated другому участнику
-        Assert.Equal("ChatListUpdated", _clientProxy.Invocations[2].Method);
-        Assert.Equal(chatId, _clientProxy.Invocations[2].Args[0]);
-        var otherUpdate = Assert.IsType<BasicApi.Models.Dto.Message.MessageDto>(_clientProxy.Invocations[2].Args[1]);
-        Assert.Equal(text, otherUpdate.Text);
-    }
-
-    [Fact]
-    public async Task SendMessage_WhenNotMember_DoesNotCreateOrSend()
-    {
-        // Arrange
-        _chatRepoMock
-            .Setup(r => r.IsMemberAsync(It.IsAny<Guid>(), _userId))
-            .ReturnsAsync(false);
-
-        // Act
-        await _hub.SendMessage(Guid.NewGuid(), "test");
-
-        // Assert
-        _messageRepoMock.Verify(r => r.CreateAsync(It.IsAny<Message>()), Times.Never);
-        Assert.Empty(_clientProxy.Invocations);
-    }
-
-    [Fact]
-    public async Task SendMessage_WhenUnauthenticated_DoesNotCreateOrSend()
-    {
-        // Arrange
-        var unauthenticatedContext = CreateUnauthenticatedContext();
-
-        var hub = new ChatHub(_chatRepoMock.Object, _messageRepoMock.Object, _statusMock.Object, _loggerMock.Object)
-        {
-            Context = unauthenticatedContext.Object,
-            Clients = _clientsMock.Object,
-            Groups = _groupsMock.Object
-        };
-
-        // Act
-        await hub.SendMessage(Guid.NewGuid(), "test");
-
-        // Assert
-        _chatRepoMock.Verify(r => r.IsMemberAsync(It.IsAny<Guid>(), It.IsAny<Guid>()), Times.Never);
-        _messageRepoMock.Verify(r => r.CreateAsync(It.IsAny<Message>()), Times.Never);
-        Assert.Empty(_clientProxy.Invocations);
-    }
-
-    #endregion
-
-    #region Ping
-
-    [Fact]
-    public async Task Ping_ReturnsPongWithConnectionInfo()
-    {
-        // Arrange — first connect so the user has an active connection
-        _chatRepoMock
-            .Setup(r => r.GetAllChatMembersAsync(_userId))
-            .ReturnsAsync(new List<Guid>());
-        await _hub.OnConnectedAsync();
-        _clientProxy.Invocations.Clear();
-
-        // Act
-        await _hub.Ping();
-
-        // Assert — verify the service was queried correctly
-        Assert.Single(_clientProxy.Invocations);
-        Assert.Equal("Pong", _clientProxy.Invocations[0].Method);
-        _statusMock.Verify(s => s.GetConnectionCountAsync(_userId), Times.Exactly(2)); // once in OnConnectedAsync log, once in Ping
-        _statusMock.Verify(s => s.IsConnectionActiveAsync(_userId, _connectionId), Times.Once);
-    }
-
-    [Fact]
-    public async Task Ping_WhenUnauthenticated_DoesNotSend()
-    {
-        // Arrange
-        var unauthenticatedContext = CreateUnauthenticatedContext();
-
-        var hub = new ChatHub(_chatRepoMock.Object, _messageRepoMock.Object, _statusMock.Object, _loggerMock.Object)
-        {
-            Context = unauthenticatedContext.Object,
-            Clients = _clientsMock.Object,
-            Groups = _groupsMock.Object
-        };
-
-        // Act
         await hub.Ping();
 
-        // Assert
-        Assert.Empty(_clientProxy.Invocations);
-    }
-
-    #endregion
-
-    #region Typing
-
-    [Fact]
-    public async Task Typing_SendsTypingChangedToGroup()
-    {
-        // Arrange
-        var chatId = Guid.NewGuid();
-        var otherUserId = Guid.NewGuid();
-        _chatRepoMock
-            .Setup(r => r.GetChatParticipantsAsync(chatId))
-            .ReturnsAsync([
-                new BasicApi.Storage.Dto.ChatParticipantDto(_userId, "Me", "me"),
-                new BasicApi.Storage.Dto.ChatParticipantDto(otherUserId, "Other", "other")
-            ]);
-
-        // Act
-        await _hub.Typing(chatId, true);
-
-        // Assert
-        _statusMock.Verify(s => s.SetTypingAsync(chatId, _userId, true), Times.Once);
-
-        var inv = Assert.Single(_clientProxy.Invocations);
-        Assert.Equal("TypingChanged", inv.Method);
-        Assert.Equal(3, inv.Args.Length);
-        Assert.Equal(chatId, inv.Args[0]);
-        Assert.Equal(_userId, inv.Args[1]);
-        Assert.True((bool)inv.Args[2]!);
+        _messagesMock.VerifyNoOtherCalls();
+        _presenceMock.VerifyNoOtherCalls();
+        _policyMock.VerifyNoOtherCalls();
+        Assert.Empty(_clients.Sent);
     }
 
     [Fact]
-    public async Task Typing_WhenUnauthenticated_DoesNotSend()
+    public async Task Ping_AnswersCallerWithConnectionInfo()
     {
-        // Arrange
-        var unauthenticatedContext = CreateUnauthenticatedContext();
+        _presenceMock
+            .Setup(p => p.GetConnectionInfoAsync(_userId, _connectionId))
+            .ReturnsAsync(new ConnectionInfo(2, true));
 
-        var hub = new ChatHub(_chatRepoMock.Object, _messageRepoMock.Object, _statusMock.Object, _loggerMock.Object)
-        {
-            Context = unauthenticatedContext.Object,
-            Clients = _clientsMock.Object,
-            Groups = _groupsMock.Object
-        };
+        await Hub().Ping();
 
-        // Act
-        await hub.Typing(Guid.NewGuid(), false);
-
-        // Assert
-        Assert.Empty(_clientProxy.Invocations);
-    }
-
-    #endregion
-
-    #region NotifyChatCreatedAsync (static)
-
-    [Fact]
-    public async Task NotifyChatCreatedAsync_SendsChatCreatedToRecipient()
-    {
-        // Arrange
-        var hubContextMock = new Mock<IHubContext<ChatHub>>();
-        var hubClientsMock = new Mock<IHubClients>();
-        var clientProxy = new TestClientProxy();
-
-        hubClientsMock
-            .Setup(c => c.User(It.IsAny<string>()))
-            .Returns(clientProxy);
-
-        hubContextMock
-            .Setup(c => c.Clients)
-            .Returns(hubClientsMock.Object);
-
-        var chatId = Guid.NewGuid();
-        var recipientId = Guid.NewGuid();
-        var item = new BasicApi.Models.Dto.Chat.ChatListItemDto
-        {
-            ChatId = chatId,
-            Type = "private",
-            Title = null,
-            CompanionId = Guid.NewGuid(),
-            CompanionName = "Alice",
-            CompanionUsername = "alice"
-        };
-
-        // Act
-        await ChatHub.NotifyChatCreatedAsync(hubContextMock.Object, recipientId, item);
-
-        // Assert — событие несёт один аргумент: готовый элемент списка чатов
-        var inv = Assert.Single(clientProxy.Invocations);
-        Assert.Equal("ChatCreated", inv.Method);
-        Assert.Same(item, Assert.Single(inv.Args));
-
-        hubClientsMock.Verify(c => c.User(recipientId.ToString()), Times.Once);
-    }
-
-    #endregion
-}
-
-/// <summary>
-/// A test implementation of IClientProxy and ISingleClientProxy that records all SendAsync calls.
-/// SignalR's SendCoreAsync on IClientProxy is a real interface method,
-/// not an extension method, so we can implement the interface directly and track invocations.
-/// </summary>
-public class TestClientProxy : IClientProxy, ISingleClientProxy
-{
-    public List<(string Method, object?[] Args)> Invocations { get; } = new();
-
-    public Task SendCoreAsync(string method, object?[] args, CancellationToken cancellationToken = default)
-    {
-        Invocations.Add((method, args));
-        return Task.CompletedTask;
-    }
-
-    public Task<T> InvokeCoreAsync<T>(string method, object?[] args, CancellationToken cancellationToken = default)
-    {
-        Invocations.Add((method, args));
-        return Task.FromResult<T>(default!);
+        var pong = Assert.Single(_clients.Sent);
+        Assert.Equal(("client", "Pong"), (pong.Target, pong.Method));
+        Assert.Equal([_connectionId], pong.Ids);
+        var payload = Assert.Single(pong.Args)!;
+        Assert.Equal(2, payload.GetType().GetProperty("ConnectionCount")!.GetValue(payload));
+        Assert.Equal(_userId, payload.GetType().GetProperty("UserId")!.GetValue(payload));
     }
 }

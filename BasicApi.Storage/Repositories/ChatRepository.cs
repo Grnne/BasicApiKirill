@@ -1,168 +1,89 @@
-﻿using System.Data;
-using BasicApi.Storage.Dto;
+﻿using BasicApi.Storage.Dto;
 using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
-using Dapper;
 
 namespace BasicApi.Storage.Repositories;
 
-public class ChatRepository(IDbConnectionFactory connectionFactory) : IChatRepository
+public class ChatRepository(IDbSession db) : IChatRepository
 {
-        public async Task<IEnumerable<Chat>> GetUserChatsAsync(Guid userId)
+    public Task<IReadOnlyList<Guid>> GetUserChatIdsAsync(Guid userId, CancellationToken ct = default) =>
+        db.QueryAsync<Guid>("SELECT chat_id FROM chat_members WHERE user_id = @userId", new { userId }, ct);
+
+    public Task<List<ChatListResult>> GetUserChatsBatchedAsync(Guid userId, CancellationToken ct = default)
+        => SearchChatsBatchedAsync(userId, null, null, null, ct);
+
+    public Task<Chat?> GetByIdAsync(Guid chatId, CancellationToken ct = default)
     {
         const string sql = @"
-            SELECT DISTINCT 
-                c.id AS Id, 
-                c.title AS Title, 
-                c.type AS Type, 
-                c.created_at AS CreatedAt
-            FROM chats c
-            INNER JOIN chat_members cm ON c.id = cm.chat_id
-            WHERE cm.user_id = @userId
-            ORDER BY c.created_at DESC";
-
-        using var connection = connectionFactory.CreateConnection();
-        return await connection.QueryAsync<Chat>(sql, new { userId });
-    }
-
-        public async Task<List<ChatListResult>> GetUserChatsBatchedAsync(Guid userId)
-        => await SearchChatsBatchedAsync(userId, null, null, null);
-
-    public async Task<Chat?> GetByIdAsync(Guid chatId)
-    {
-        const string sql = @"
-            SELECT 
-                id AS Id, 
-                title AS Title, 
-                type AS Type, 
+            SELECT
+                id AS Id,
+                title AS Title,
+                type AS Type,
                 created_at AS CreatedAt
-            FROM chats 
+            FROM chats
             WHERE id = @chatId";
 
-        using var connection = connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<Chat>(sql, new { chatId });
+        return db.QueryFirstOrDefaultAsync<Chat>(sql, new { chatId }, ct);
     }
 
-    public async Task<Chat?> GetPrivateChatAsync(Guid userId1, Guid userId2)
-    {
-        const string sql = @"
-            SELECT 
-                c.id AS Id, 
-                c.title AS Title, 
-                c.type AS Type, 
-                c.created_at AS CreatedAt
-            FROM chats c
-            INNER JOIN chat_members cm1 ON c.id = cm1.chat_id
-            INNER JOIN chat_members cm2 ON c.id = cm2.chat_id
-            WHERE c.type = 'private' 
-                AND cm1.user_id = @userId1 
-                AND cm2.user_id = @userId2";
+    /// <summary>Pair key for a private chat; participant order does not matter.</summary>
+    private const string PrivateKeySql =
+        "LEAST(@userId, @otherUserId)::text || ':' || GREATEST(@userId, @otherUserId)::text";
 
-        using var connection = connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<Chat>(sql, new { userId1, userId2 });
-    }
-
-    public async Task<Guid> CreateAsync(Chat chat, Guid[] memberIds)
-    {
-        using var connection = connectionFactory.CreateConnection();
-        connection.Open();
-        using var transaction = connection.BeginTransaction();
-
-        try
+    public Task<(Guid ChatId, bool Created)> GetOrCreatePrivateChatAsync(
+        Guid userId, Guid otherUserId, CancellationToken ct = default) =>
+        db.InTransactionAsync(async ct =>
         {
-            const string insertChatSql = @"
-                INSERT INTO chats (id, title, type, created_at) 
-                VALUES (@Id, @Title, @Type, @CreatedAt)";
+            // The unique index on private_key resolves the race: a parallel insert of the same
+            // pair waits for the first one to commit and gets DO NOTHING instead of a second chat.
+            var chatId = Guid.NewGuid();
+            var now = DateTime.UtcNow;
+            var inserted = await db.QueryFirstOrDefaultAsync<Guid?>($@"
+                INSERT INTO chats (id, title, type, created_at, private_key)
+                VALUES (@chatId, NULL, 'private', @now, {PrivateKeySql})
+                ON CONFLICT (private_key) DO NOTHING
+                RETURNING id",
+                new { chatId, userId, otherUserId, now }, ct);
 
-            await connection.ExecuteAsync(insertChatSql, chat, transaction);
-
-            const string insertMemberSql = @"
-                INSERT INTO chat_members (chat_id, user_id, joined_at) 
-                VALUES (@ChatId, @UserId, @JoinedAt)";
-
-            foreach (var userId in memberIds)
+            if (inserted is not null)
             {
-                await connection.ExecuteAsync(insertMemberSql, new
-                {
-                    ChatId = chat.Id,
-                    UserId = userId,
-                    JoinedAt = DateTime.UtcNow
-                }, transaction);
+                await db.ExecuteAsync(@"
+                    INSERT INTO chat_members (chat_id, user_id, joined_at)
+                    VALUES (@chatId, @userId, @now), (@chatId, @otherUserId, @now)",
+                    new { chatId, userId, otherUserId, now }, ct);
+                return (chatId, true);
             }
 
-            transaction.Commit();
-            return chat.Id;
-        }
-        catch
-        {
-            transaction.Rollback();
-            throw;
-        }
-    }
+            var existing = await db.QuerySingleAsync<Guid>(
+                $"SELECT id FROM chats WHERE private_key = {PrivateKeySql}",
+                new { userId, otherUserId }, ct);
+            return (existing, false);
+        }, ct: ct);
 
-    public async Task<bool> IsMemberAsync(Guid chatId, Guid userId)
+    public async Task<bool> IsMemberAsync(Guid chatId, Guid userId, CancellationToken ct = default)
     {
-        const string sql = "SELECT COUNT(1) FROM chat_members WHERE chat_id = @chatId AND user_id = @userId";
-                using var connection = connectionFactory.CreateConnection();
-        return await connection.ExecuteScalarAsync<bool>(sql, new { chatId, userId });
+        const string sql = "SELECT EXISTS(SELECT 1 FROM chat_members WHERE chat_id = @chatId AND user_id = @userId)";
+        return await db.ExecuteScalarAsync<bool>(sql, new { chatId, userId }, ct);
     }
 
-        public async Task<int> GetUnreadCountAsync(Guid chatId, Guid userId)
+    public Task<IReadOnlyList<Guid>> GetMemberIdsAsync(Guid chatId, CancellationToken ct = default) =>
+        db.QueryAsync<Guid>("SELECT user_id FROM chat_members WHERE chat_id = @chatId", new { chatId }, ct);
+
+    public async Task<List<ChatParticipantDto>> GetChatParticipantsAsync(Guid chatId, CancellationToken ct = default)
     {
         const string sql = @"
-            SELECT COUNT(*)
-            FROM messages m
-            WHERE m.chat_id = @chatId
-              AND m.is_deleted = false
-              AND m.created_at > COALESCE(
-                  (SELECT created_at FROM messages WHERE id = (
-                      SELECT last_read_message_id FROM chat_members
-                      WHERE chat_id = @chatId AND user_id = @userId
-                  )),
-                  '1970-01-01'::timestamp
-              )";
-
-                using var connection = connectionFactory.CreateConnection();
-        return await connection.ExecuteScalarAsync<int>(sql, new { chatId, userId });
-    }
-
-    public async Task<string?> GetCompanionNameAsync(Guid chatId, Guid userId)
-    {
-        const string sql = @"
-            SELECT u.display_name 
-            FROM chat_members cm
-            INNER JOIN users u ON cm.user_id = u.id
-            WHERE cm.chat_id = @chatId AND cm.user_id != @userId";
-
-                using var connection = connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<string?>(sql, new { chatId, userId });
-    }
-
-    public async Task<string> GetUserNameAsync(Guid userId)
-    {
-        const string sql = "SELECT display_name FROM users WHERE id = @userId";
-                using var connection = connectionFactory.CreateConnection();
-        var name = await connection.QueryFirstOrDefaultAsync<string>(sql, new { userId });
-        return name ?? "Unknown";
-    }
-
-    public async Task<List<ChatParticipantDto>> GetChatParticipantsAsync(Guid chatId)
-    {
-        const string sql = @"
-            SELECT 
-                u.id AS UserId, 
-                u.display_name AS DisplayName, 
+            SELECT
+                u.id AS UserId,
+                u.display_name AS DisplayName,
                 u.username AS Username
             FROM chat_members cm
             INNER JOIN users u ON cm.user_id = u.id
             WHERE cm.chat_id = @chatId";
 
-                using var connection = connectionFactory.CreateConnection();
-                var result = await connection.QueryAsync<ChatParticipantDto>(sql, new { chatId });
-                return [.. result];
+        return [.. await db.QueryAsync<ChatParticipantDto>(sql, new { chatId }, ct)];
     }
 
-    public async Task<List<Guid>> GetAllChatMembersAsync(Guid userId)
+    public async Task<List<Guid>> GetAllChatMembersAsync(Guid userId, CancellationToken ct = default)
     {
         const string sql = @"
             SELECT DISTINCT cm.user_id
@@ -171,11 +92,10 @@ public class ChatRepository(IDbConnectionFactory connectionFactory) : IChatRepos
                 SELECT chat_id FROM chat_members WHERE user_id = @userId
             ) AND cm.user_id != @userId";
 
-        using var connection = connectionFactory.CreateConnection();
-        return (await connection.QueryAsync<Guid>(sql, new { userId })).AsList();
+        return [.. await db.QueryAsync<Guid>(sql, new { userId }, ct)];
     }
 
-        private const string ChatListBaseSql = @"
+    private const string ChatListBaseSql = @"
         SELECT
             c.id AS ChatId,
             c.type AS Type,
@@ -186,18 +106,18 @@ public class ChatRepository(IDbConnectionFactory connectionFactory) : IChatRepos
             comp.display_name AS CompanionName,
             comp.username AS CompanionUsername,
 
-            COALESCE((
+            -- Unread: other members' messages after the read pointer. Own messages do not count.
+            (
                 SELECT COUNT(*)
                 FROM messages m_unread
                 WHERE m_unread.chat_id = c.id
+                  AND m_unread.seq > cm.last_read_seq
                   AND m_unread.is_deleted = false
-                  AND m_unread.created_at > COALESCE(
-                      (SELECT created_at FROM messages WHERE id = cm_last.last_read_message_id),
-                      '1970-01-01'::timestamp
-                  )
-            ), 0) AS UnreadCount,
+                  AND m_unread.sender_id <> @userId
+            ) AS UnreadCount,
 
             lm.id AS LastMessageId,
+            lm.seq AS LastMessageSeq,
             lm.sender_id AS LastMessageSenderId,
             lm.text AS LastMessageText,
             lm.created_at AS LastMessageCreatedAt,
@@ -205,9 +125,6 @@ public class ChatRepository(IDbConnectionFactory connectionFactory) : IChatRepos
 
         FROM chats c
         INNER JOIN chat_members cm ON c.id = cm.chat_id AND cm.user_id = @userId
-
-        LEFT JOIN chat_members cm_last
-            ON cm_last.chat_id = c.id AND cm_last.user_id = @userId
 
         LEFT JOIN LATERAL (
             SELECT u.id, u.display_name, u.username
@@ -218,10 +135,10 @@ public class ChatRepository(IDbConnectionFactory connectionFactory) : IChatRepos
         ) comp ON c.type = 'private'
 
         LEFT JOIN LATERAL (
-            SELECT m.id, m.sender_id, m.text, m.created_at
+            SELECT m.id, m.seq, m.sender_id, m.text, m.created_at
             FROM messages m
             WHERE m.chat_id = c.id AND m.is_deleted = false
-            ORDER BY m.created_at DESC, m.id DESC
+            ORDER BY m.seq DESC
             LIMIT 1
         ) lm ON TRUE
 
@@ -259,7 +176,8 @@ public class ChatRepository(IDbConnectionFactory connectionFactory) : IChatRepos
         return conditions.Count > 0 ? "WHERE " + string.Join(" AND ", conditions) : "";
     }
 
-    public async Task<List<ChatListResult>> SearchChatsBatchedAsync(Guid userId, string? query, string? typeFilter, int? limit)
+    public async Task<List<ChatListResult>> SearchChatsBatchedAsync(
+        Guid userId, string? query, string? typeFilter, int? limit, CancellationToken ct = default)
     {
         var whereClause = BuildSearchWhereClause(query, typeFilter);
         var orderBy = "ORDER BY COALESCE(lm.created_at, c.created_at) DESC";
@@ -267,22 +185,21 @@ public class ChatRepository(IDbConnectionFactory connectionFactory) : IChatRepos
 
         var sql = $"{ChatListBaseSql}\n{whereClause}\n{orderBy}{limitClause}";
 
-        using var connection = connectionFactory.CreateConnection();
-        return (await connection.QueryAsync<ChatListResult>(sql, new { userId, query })).AsList();
+        return [.. await db.QueryAsync<ChatListResult>(sql, new { userId, query }, ct)];
     }
 
-    public async Task<ChatListResult?> GetChatListItemAsync(Guid chatId, Guid userId)
+    public Task<ChatListResult?> GetChatListItemAsync(Guid chatId, Guid userId, CancellationToken ct = default)
     {
         // Same projection as the chat list — the INNER JOIN on chat_members
         // already scopes the row to the viewer, so a non-member gets null.
         var sql = $"{ChatListBaseSql}\n{BuildSearchWhereClause(null, null, byChatId: true)}\nLIMIT 1";
 
-        using var connection = connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<ChatListResult>(
-            sql, new { userId, chatId, query = (string?)null });
+        return db.QueryFirstOrDefaultAsync<ChatListResult>(
+            sql, new { userId, chatId, query = (string?)null }, ct);
     }
 
-    public async Task<int> CountChatsByQueryAsync(Guid userId, string? query, string? typeFilter)
+    public async Task<int> CountChatsByQueryAsync(
+        Guid userId, string? query, string? typeFilter, CancellationToken ct = default)
     {
         var whereClause = BuildSearchWhereClause(query, typeFilter);
 
@@ -299,7 +216,6 @@ public class ChatRepository(IDbConnectionFactory connectionFactory) : IChatRepos
             ) comp ON c.type = 'private'
             {whereClause}";
 
-        using var connection = connectionFactory.CreateConnection();
-        return await connection.ExecuteScalarAsync<int>(sql, new { userId, query });
+        return await db.ExecuteScalarAsync<int>(sql, new { userId, query }, ct);
     }
 }

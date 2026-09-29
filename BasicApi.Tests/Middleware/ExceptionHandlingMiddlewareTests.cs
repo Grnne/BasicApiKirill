@@ -2,7 +2,10 @@ using System.Text.Json;
 using BasicApi.Middleware;
 using BasicApi.Middleware.Exceptions;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Testing;
 using Moq;
 
 namespace BasicApi.Tests.Middleware;
@@ -13,7 +16,8 @@ public class ExceptionHandlingMiddlewareTests
         Exception exception,
         out MemoryStream bodyStream,
         out DefaultHttpContext context,
-        bool isDevelopment = false)
+        bool isDevelopment = false,
+        FakeLogger<ExceptionHandlingMiddleware>? logger = null)
     {
         bodyStream = new MemoryStream();
 
@@ -31,7 +35,8 @@ public class ExceptionHandlingMiddlewareTests
                 // Throw the specified exception when the next delegate is called
                 throw exception;
             },
-            envMock.Object);
+            envMock.Object,
+            logger ?? new FakeLogger<ExceptionHandlingMiddleware>());
 
         return middleware;
     }
@@ -301,5 +306,92 @@ public class ExceptionHandlingMiddlewareTests
 
         // Assert
         Assert.False(context.Response.Headers.ContainsKey("WWW-Authenticate"));
+    }
+
+    [Fact]
+    public async Task GenericException_IsLoggedAsError_WithExceptionAndTraceId()
+    {
+        var logger = new FakeLogger<ExceptionHandlingMiddleware>();
+        var exception = new InvalidOperationException("db is down");
+        var middleware = CreateMiddleware(exception, out _, out var context, logger: logger);
+
+        await middleware.InvokeAsync(context);
+
+        var record = Assert.Single(logger.Collector.GetSnapshot());
+        Assert.Equal(LogLevel.Error, record.Level);
+        Assert.Same(exception, record.Exception);
+        Assert.Contains("test-trace-id", record.Message);
+        Assert.Contains("/api/test", record.Message);
+    }
+
+    [Fact]
+    public async Task DomainException_IsLoggedAsInformation_WithoutStackTrace()
+    {
+        var logger = new FakeLogger<ExceptionHandlingMiddleware>();
+        var middleware = CreateMiddleware(new NotFoundException("Chat not found", "CHAT_NOT_FOUND"),
+            out _, out var context, logger: logger);
+
+        await middleware.InvokeAsync(context);
+
+        var record = Assert.Single(logger.Collector.GetSnapshot());
+        Assert.Equal(LogLevel.Information, record.Level);
+        Assert.Null(record.Exception);
+        Assert.Contains("CHAT_NOT_FOUND", record.Message);
+        Assert.Contains("404", record.Message);
+    }
+
+    [Fact]
+    public async Task ResponseAlreadyStarted_LogsAndRethrows_WithoutWritingBody()
+    {
+        // The headers have already gone to the client — writing ProblemDetails on top is not possible,
+        // otherwise the secondary exception would hide the original one.
+        var logger = new FakeLogger<ExceptionHandlingMiddleware>();
+        var exception = new InvalidOperationException("failed mid-stream");
+        var middleware = CreateMiddleware(exception, out var bodyStream, out var context, logger: logger);
+        context.Features.Set<IHttpResponseFeature>(new StartedResponseFeature());
+
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(() => middleware.InvokeAsync(context));
+
+        Assert.Same(exception, thrown);
+        Assert.Equal(0, bodyStream.Length);
+        var record = Assert.Single(logger.Collector.GetSnapshot());
+        Assert.Equal(LogLevel.Error, record.Level);
+    }
+
+    [Fact]
+    public async Task ClientAbortedRequest_IsNotLoggedAsError()
+    {
+        // The client closed the tab mid-request — this is not a server error.
+        var logger = new FakeLogger<ExceptionHandlingMiddleware>();
+        var middleware = CreateMiddleware(new OperationCanceledException(),
+            out var bodyStream, out var context, logger: logger);
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        context.RequestAborted = cts.Token;
+
+        await middleware.InvokeAsync(context);
+
+        Assert.Equal(499, context.Response.StatusCode);
+        Assert.Equal(0, bodyStream.Length);
+        Assert.DoesNotContain(logger.Collector.GetSnapshot(), r => r.Level >= LogLevel.Warning);
+    }
+
+    [Fact]
+    public async Task OperationCanceled_WithoutClientAbort_IsServerError()
+    {
+        // A timeout inside the server (e.g. a DB command) is a real error.
+        var logger = new FakeLogger<ExceptionHandlingMiddleware>();
+        var middleware = CreateMiddleware(new OperationCanceledException(),
+            out _, out var context, logger: logger);
+
+        await middleware.InvokeAsync(context);
+
+        Assert.Equal(500, context.Response.StatusCode);
+        Assert.Equal(LogLevel.Error, Assert.Single(logger.Collector.GetSnapshot()).Level);
+    }
+
+    private sealed class StartedResponseFeature : HttpResponseFeature
+    {
+        public override bool HasStarted => true;
     }
 }

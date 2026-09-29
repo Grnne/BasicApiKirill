@@ -370,5 +370,8 @@ FodyWeavers.xsd
 !.env.prod.example
 !.env.example
 
-# Собранный фронтенд (Vite -> BasicApi/wwwroot/client)
+# Built frontend (Vite -> BasicApi/wwwroot/client)
 BasicApi/wwwroot/client/
+
+# Local override of the prod stack (see the local prod stack section of docs/deploy.md)
+docker-compose.local.yml

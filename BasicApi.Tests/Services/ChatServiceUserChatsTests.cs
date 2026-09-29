@@ -1,8 +1,10 @@
 using BasicApi.Models.Dto.Chat;
 using BasicApi.Models.Dto.Message;
 using BasicApi.Services;
+using BasicApi.Services.Events;
 using BasicApi.Storage.Dto;
 using BasicApi.Storage.Interfaces;
+using BasicApi.Tests.TestDoubles;
 using Moq;
 
 namespace BasicApi.Tests.Services;
@@ -10,14 +12,13 @@ namespace BasicApi.Tests.Services;
 public class ChatServiceUserChatsTests
 {
     private readonly Mock<IChatRepository> _chatRepoMock;
-    private readonly Mock<IMessageRepository> _msgRepoMock;
     private readonly ChatService _service;
 
     public ChatServiceUserChatsTests()
     {
         _chatRepoMock = new Mock<IChatRepository>();
-        _msgRepoMock = new Mock<IMessageRepository>();
-        _service = new ChatService(_chatRepoMock.Object, _msgRepoMock.Object);
+        _service = new ChatService(new FakeDbSession(), _chatRepoMock.Object, Mock.Of<IUserRepository>(), new ChatPolicy(new MembershipService(_chatRepoMock.Object)),
+            Mock.Of<IPresenceService>(), Mock.Of<IChatEventPublisher>());
     }
 
     private static ChatListResult MakeRow(Guid chatId, string type, string? title,
@@ -25,19 +26,19 @@ public class ChatServiceUserChatsTests
         Guid? lastMsgId, Guid? lastMsgSenderId, string? lastMsgText,
         DateTime? lastMsgCreatedAt, string? lastMsgSenderName,
         DateTime createdAt) => new()
-    {
-        ChatId = chatId,
-        Type = type,
-        Title = title,
-        CompanionName = companionName,
-        UnreadCount = unreadCount,
-        LastMessageId = lastMsgId,
-        LastMessageSenderId = lastMsgSenderId,
-        LastMessageText = lastMsgText,
-        LastMessageCreatedAt = lastMsgCreatedAt,
-        LastMessageSenderName = lastMsgSenderName,
-        CreatedAt = createdAt
-    };
+        {
+            ChatId = chatId,
+            Type = type,
+            Title = title,
+            CompanionName = companionName,
+            UnreadCount = unreadCount,
+            LastMessageId = lastMsgId,
+            LastMessageSenderId = lastMsgSenderId,
+            LastMessageText = lastMsgText,
+            LastMessageCreatedAt = lastMsgCreatedAt,
+            LastMessageSenderName = lastMsgSenderName,
+            CreatedAt = createdAt
+        };
 
     [Fact]
     public async Task GetUserChatsAsync_ReturnsMappedChats()
@@ -57,7 +58,7 @@ public class ChatServiceUserChatsTests
         };
 
         _chatRepoMock
-            .Setup(r => r.GetUserChatsBatchedAsync(userId))
+            .Setup(r => r.GetUserChatsBatchedAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(rows);
 
         // Act
@@ -96,7 +97,7 @@ public class ChatServiceUserChatsTests
         };
 
         _chatRepoMock
-            .Setup(r => r.GetUserChatsBatchedAsync(userId))
+            .Setup(r => r.GetUserChatsBatchedAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(rows);
 
         // Act
@@ -132,11 +133,11 @@ public class ChatServiceUserChatsTests
         };
 
         _chatRepoMock
-            .Setup(r => r.SearchChatsBatchedAsync(userId, query, typeFilter, 20))
+            .Setup(r => r.SearchChatsBatchedAsync(userId, query, typeFilter, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync(rows);
 
         _chatRepoMock
-            .Setup(r => r.CountChatsByQueryAsync(userId, query, typeFilter))
+            .Setup(r => r.CountChatsByQueryAsync(userId, query, typeFilter, It.IsAny<CancellationToken>()))
             .ReturnsAsync(totalCount);
 
         // Act
@@ -171,11 +172,11 @@ public class ChatServiceUserChatsTests
         };
 
         _chatRepoMock
-            .Setup(r => r.SearchChatsBatchedAsync(userId, query, null, 20))
+            .Setup(r => r.SearchChatsBatchedAsync(userId, query, null, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync(allRows);
 
         _chatRepoMock
-            .Setup(r => r.CountChatsByQueryAsync(userId, query, null))
+            .Setup(r => r.CountChatsByQueryAsync(userId, query, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(2);
 
         // Act
@@ -189,8 +190,8 @@ public class ChatServiceUserChatsTests
         Assert.Equal(query, result.Query);
         Assert.Equal(2, result.TotalCount);
 
-        _chatRepoMock.Verify(r => r.SearchChatsBatchedAsync(userId, query, null, 20), Times.Once);
-        _chatRepoMock.Verify(r => r.CountChatsByQueryAsync(userId, query, null), Times.Once);
+        _chatRepoMock.Verify(r => r.SearchChatsBatchedAsync(userId, query, null, 20, It.IsAny<CancellationToken>()), Times.Once);
+        _chatRepoMock.Verify(r => r.CountChatsByQueryAsync(userId, query, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -214,11 +215,11 @@ public class ChatServiceUserChatsTests
         var query = "nonexistent";
 
         _chatRepoMock
-            .Setup(r => r.SearchChatsBatchedAsync(userId, query, null, 20))
+            .Setup(r => r.SearchChatsBatchedAsync(userId, query, null, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
         _chatRepoMock
-            .Setup(r => r.CountChatsByQueryAsync(userId, query, null))
+            .Setup(r => r.CountChatsByQueryAsync(userId, query, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(0);
 
         // Act

@@ -15,7 +15,11 @@ public interface IUserRepository
     /// <summary>Records a successful sign-in.</summary>
     Task UpdateLastLoginAsync(Guid userId, DateTime lastLoginAt, CancellationToken ct = default);
 
-    Task<Guid?> GetIdByUsernameOrEmailAsync(string usernameOrEmail, CancellationToken ct = default);
+    /// <summary>
+    /// Id of an active user by username (case-insensitive). Deliberately not by email:
+    /// an email must not reveal whether its owner has an account.
+    /// </summary>
+    Task<Guid?> GetIdByUsernameAsync(string username, CancellationToken ct = default);
 
     /// <summary>
     /// Returns a user by id, or null if no such user exists.

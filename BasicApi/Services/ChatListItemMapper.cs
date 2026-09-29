@@ -5,9 +5,9 @@ using BasicApi.Storage.Dto;
 namespace BasicApi.Services;
 
 /// <summary>
-/// Единственное место, где строка списка чатов из БД превращается в DTO.
-/// Раньше маппинг был продублирован в списке чатов и в поиске, из-за чего
-/// поиск терял CompanionId/CompanionUsername.
+/// The only place where a chat list row from the DB is turned into a DTO.
+/// The mapping used to be duplicated in the chat list and in search, which is why
+/// search lost CompanionId/CompanionUsername.
 /// </summary>
 public static class ChatListItemMapper
 {
@@ -29,7 +29,8 @@ public static class ChatListItemMapper
             SenderName = r.LastMessageSenderName ?? "Unknown",
             Text = r.LastMessageText ?? string.Empty,
             CreatedAt = r.LastMessageCreatedAt!.Value,
-            IsRead = false
+            IsRead = false,
+            Seq = r.LastMessageSeq ?? 0
         } : null
     };
 }

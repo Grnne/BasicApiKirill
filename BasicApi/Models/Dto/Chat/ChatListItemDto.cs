@@ -2,7 +2,6 @@ using BasicApi.Models.Dto.Message;
 
 namespace BasicApi.Models.Dto.Chat;
 
-// ========== Models/Dto/Chat/ChatListItemDto.cs ==========
 public class ChatListItemDto
 {
     public Guid ChatId { get; set; }

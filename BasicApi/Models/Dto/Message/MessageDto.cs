@@ -9,4 +9,10 @@ public class MessageDto
     public string Text { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
     public bool IsRead { get; set; }
+
+    /// <summary>Number of the message in the chat: 1, 2, 3, … Messages are ordered by it.</summary>
+    public long Seq { get; set; }
+
+    /// <summary>Id supplied by the sender when sending via REST; null — not supplied.</summary>
+    public Guid? ClientMessageId { get; set; }
 }
