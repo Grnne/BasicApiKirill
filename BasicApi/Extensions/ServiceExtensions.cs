@@ -33,69 +33,69 @@ public static class ServiceExtensions
     public static IServiceCollection AddApiServices(
         this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
     {
-                                services.AddControllers()
+        services.AddControllers()
             .ConfigureApiBehaviorOptions(options =>
-        {
-                        options.InvalidModelStateResponseFactory = context =>
             {
-                var errors = context.ModelState
-                    .Where(e => e.Value?.Errors.Count > 0)
-                    .ToDictionary(
-                        e => e.Key,
-                        e => e.Value!.Errors.Select(x => new
-                        {
-                            code = GetValidationErrorCode(x.ErrorMessage),
-                            message = x.ErrorMessage
-                        }).ToArray()
-                    );
-
-                var problemDetails = new ProblemDetails
+                options.InvalidModelStateResponseFactory = context =>
                 {
-                    Type = "about:blank",
-                    Title = "Bad Request",
-                    Status = StatusCodes.Status400BadRequest,
-                    Detail = "One or more validation errors occurred.",
-                    Instance = context.HttpContext.Request.Path,
-                    Extensions =
+                    var errors = context.ModelState
+                        .Where(e => e.Value?.Errors.Count > 0)
+                        .ToDictionary(
+                            e => e.Key,
+                            e => e.Value!.Errors.Select(x => new
+                            {
+                                code = GetValidationErrorCode(x.ErrorMessage),
+                                message = x.ErrorMessage
+                            }).ToArray()
+                        );
+
+                    var problemDetails = new ProblemDetails
                     {
-                        ["traceId"] = context.HttpContext.TraceIdentifier,
-                        ["errorCode"] = "VALIDATION_ERROR",
-                        ["errors"] = errors
-                    }
-                };
+                        Type = "about:blank",
+                        Title = "Bad Request",
+                        Status = StatusCodes.Status400BadRequest,
+                        Detail = "One or more validation errors occurred.",
+                        Instance = context.HttpContext.Request.Path,
+                        Extensions =
+                        {
+                            ["traceId"] = context.HttpContext.TraceIdentifier,
+                            ["errorCode"] = "VALIDATION_ERROR",
+                            ["errors"] = errors
+                        }
+                    };
 
-                return new ObjectResult(problemDetails)
-                {
-                    StatusCode = StatusCodes.Status400BadRequest,
-                    ContentTypes = { "application/problem+json" }
+                    return new ObjectResult(problemDetails)
+                    {
+                        StatusCode = StatusCodes.Status400BadRequest,
+                        ContentTypes = { "application/problem+json" }
+                    };
                 };
-            };
+            });
+
+        services.AddSwaggerWithDocs(configuration);
+        services.AddJwtAuth(configuration);
+        services.AddApiRateLimiting(configuration);
+        services.AddSignalR(options =>
+        {
+            // Доменные ошибки → HubException с кодом; остальное — в лог.
+            options.AddFilter<HubErrorFilter>();
+            // Разрешаем параллельную обработку вызовов
+            options.MaximumParallelInvocationsPerClient = 2;
+            // Текст исключений клиенту — только при разработке: в проде он
+            // раскрывает внутренности (SQL, пути, имена классов).
+            options.EnableDetailedErrors = environment.IsDevelopment();
+            // Максимальный размер входящего сообщения. Команды переезжают в REST
+            // (POST /api/chats/{id}/messages, /typing); когда фронт переедет, хабу
+            // хватит нескольких КБ — тогда снизить.
+            options.MaximumReceiveMessageSize = 128 * 1024;
+            // Ограничиваем буфер для команд, чтобы избежать накопления зависших вызовов
+            options.StreamBufferCapacity = 10;
         });
-                services.AddSwaggerWithDocs(configuration);
-                services.AddJwtAuth(configuration);
-                services.AddApiRateLimiting(configuration);
-                services.AddSignalR(options =>
-                {
-                    // Доменные ошибки → HubException с кодом; остальное — в лог.
-                    options.AddFilter<HubErrorFilter>();
-                    // Разрешаем параллельную обработку вызовов
-                    options.MaximumParallelInvocationsPerClient = 2;
-                    // Текст исключений клиенту — только при разработке: в проде он
-                    // раскрывает внутренности (SQL, пути, имена классов).
-                    options.EnableDetailedErrors = environment.IsDevelopment();
-                    // Максимальный размер входящего сообщения. Команды переезжают в REST
-                    // (POST /api/chats/{id}/messages, /typing); когда фронт переедет, хабу
-                    // хватит нескольких КБ — тогда снизить.
-                    options.MaximumReceiveMessageSize = 128 * 1024;
-                    // Ограничиваем буфер для команд, чтобы избежать накопления зависших вызовов
-                    options.StreamBufferCapacity = 10;
-                });
-
 
         var connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("DefaultConnection is not configured");
 
-                services.AddSingleton<IDbConnectionFactory>(new NpgsqlConnectionFactory(connectionString));
+        services.AddSingleton<IDbConnectionFactory>(new NpgsqlConnectionFactory(connectionString));
 
         // Одна сессия БД на запрос (вызов хаба): репозитории делят её транзакцию.
         services.AddScoped<IDbSession, DbSession>();
@@ -197,7 +197,7 @@ public static class ServiceExtensions
                     ClockSkew = TimeSpan.Zero
                 };
 
-                                // SignalR ������� ����� ����� query string
+                // SignalR sends the token in the query string: WebSocket cannot carry headers
                 options.Events = new JwtBearerEvents
                 {
                     OnMessageReceived = context =>
@@ -215,16 +215,16 @@ public static class ServiceExtensions
                     },
                     OnChallenge = context =>
                     {
-                        // ��������� ����������� ������ 401 ����� �� .NET
-                        // � ������ ����������, ������� ������� ExceptionHandlingMiddleware
+                        // Suppress the default empty 401 from .NET and throw instead,
+                        // so ExceptionHandlingMiddleware answers with ProblemDetails
                         context.HandleResponse();
 
                         throw new UnauthorizedException("Authentication required", "TOKEN_MISSING_OR_EXPIRED");
                     },
                     OnForbidden = context =>
                     {
-                        // ��������� ����������� ������ 403 ����� �� .NET
-                        // � ������ ����������, ������� ������� ExceptionHandlingMiddleware
+                        // Suppress the default empty 403 from .NET and throw instead,
+                        // so ExceptionHandlingMiddleware answers with ProblemDetails
                         throw new ForbiddenException("Access denied", "ACCESS_DENIED");
                     }
                 };

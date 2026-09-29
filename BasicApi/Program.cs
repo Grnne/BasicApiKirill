@@ -63,12 +63,12 @@ public class Program
         app.UseMiddleware<ExceptionHandlingMiddleware>();
 
         // Run migrations
-            using (var scope = app.Services.CreateScope())
-            {
-                scope.ServiceProvider
-                    .GetRequiredService<IMigrationRunner>()
-                    .MigrateUp();
-            }
+        using (var scope = app.Services.CreateScope())
+        {
+            scope.ServiceProvider
+                .GetRequiredService<IMigrationRunner>()
+                .MigrateUp();
+        }
         // Заголовки безопасности для всех ответов. Дёшево и закрывает
         // несколько типовых атак: подмену типа файла, вставку страницы
         // в чужой iframe, утечку адреса через Referer и — через CSP —

@@ -38,7 +38,7 @@ public class MessageServicePageTests
         };
 
     [Fact]
-        public async Task GetPageAsync_WhenNotMember_ThrowsForbiddenAccess()
+    public async Task GetPageAsync_WhenNotMember_ThrowsForbiddenAccess()
     {
         // Arrange
         _chatRepoMock
@@ -197,7 +197,7 @@ public class MessageServicePageTests
         Assert.Single(result.Items);
         Assert.Equal("Older msg", result.Items[0].Text);
 
-                _msgRepoMock.Verify(
+        _msgRepoMock.Verify(
             r => r.GetMessagesWithSenderCursorAsync(chatId, 42L, 20, It.IsAny<CancellationToken>()),
             Times.Once);
     }
@@ -284,7 +284,7 @@ public class MessageServicePageTests
             .Setup(r => r.IsMemberAsync(chatId, userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
-                _msgRepoMock
+        _msgRepoMock
             .Setup(r => r.SearchMessagesCursorAsync(chatId, query, null, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync((new CursorResult<MessageWithSender>
             {
@@ -316,7 +316,7 @@ public class MessageServicePageTests
             .Setup(r => r.IsMemberAsync(chatId, userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
-                _msgRepoMock
+        _msgRepoMock
             .Setup(r => r.SearchMessagesCursorAsync(chatId, query, null, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync((new CursorResult<MessageWithSender>
             {

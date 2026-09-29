@@ -26,19 +26,19 @@ public class ChatServiceUserChatsTests
         Guid? lastMsgId, Guid? lastMsgSenderId, string? lastMsgText,
         DateTime? lastMsgCreatedAt, string? lastMsgSenderName,
         DateTime createdAt) => new()
-    {
-        ChatId = chatId,
-        Type = type,
-        Title = title,
-        CompanionName = companionName,
-        UnreadCount = unreadCount,
-        LastMessageId = lastMsgId,
-        LastMessageSenderId = lastMsgSenderId,
-        LastMessageText = lastMsgText,
-        LastMessageCreatedAt = lastMsgCreatedAt,
-        LastMessageSenderName = lastMsgSenderName,
-        CreatedAt = createdAt
-    };
+        {
+            ChatId = chatId,
+            Type = type,
+            Title = title,
+            CompanionName = companionName,
+            UnreadCount = unreadCount,
+            LastMessageId = lastMsgId,
+            LastMessageSenderId = lastMsgSenderId,
+            LastMessageText = lastMsgText,
+            LastMessageCreatedAt = lastMsgCreatedAt,
+            LastMessageSenderName = lastMsgSenderName,
+            CreatedAt = createdAt
+        };
 
     [Fact]
     public async Task GetUserChatsAsync_ReturnsMappedChats()

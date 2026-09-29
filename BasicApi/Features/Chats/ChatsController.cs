@@ -38,7 +38,7 @@ public class ChatsController(IChatService chats, IMessageService messages, IPres
     /// <c>ChatCreated</c> event, built from their own point of view.
     /// </remarks>
     [HttpPost("private/{userId}")]
-        [ProducesResponseType(typeof(ChatListItemDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ChatListItemDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ChatListItemDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
@@ -136,7 +136,7 @@ public class ChatsController(IChatService chats, IMessageService messages, IPres
         CancellationToken ct = default)
         => Ok(await messages.GetPageAtAsync(chatId, User.GetUserId(), date, Math.Clamp(limit, 1, 100), ct));
 
-        /// <summary>
+    /// <summary>
     /// Send a message.
     /// </summary>
     /// <remarks>
