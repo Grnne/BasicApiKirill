@@ -22,6 +22,9 @@ public class ChatListItemDto
     /// <summary>Seq of the last message the user has read.</summary>
     public long LastReadSeq { get; set; }
 
+    /// <summary>The user marked the chat as unread; reading it clears the mark.</summary>
+    public bool MarkedUnread { get; set; }
+
     /// <summary>
     /// The user's own messages up to this seq have been read by another member; 0 — none.
     /// Grows with <c>MessagesRead</c>.

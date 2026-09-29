@@ -15,6 +15,7 @@ public class ChatListResult
     public int UnreadCount { get; set; }
     public int UnreadMentionCount { get; set; }
     public long LastReadSeq { get; set; }
+    public bool MarkedUnread { get; set; }
     public long OutboxReadSeq { get; set; }
     public long OutboxDeliveredSeq { get; set; }
     public bool HasOthers { get; set; }

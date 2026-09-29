@@ -22,6 +22,7 @@ public static class ChatListItemMapper
         UnreadCount = r.UnreadCount,
         UnreadMentionCount = r.UnreadMentionCount,
         LastReadSeq = r.LastReadSeq,
+        MarkedUnread = r.MarkedUnread,
         OutboxReadSeq = r.OutboxReadSeq,
         OutboxDeliveredSeq = r.OutboxDeliveredSeq,
         LastActivityAt = r.LastMessageCreatedAt ?? r.CreatedAt,

@@ -49,6 +49,9 @@ public sealed class OutboxChatEventPublisher(
         ReceiptDto receipt, IReadOnlyCollection<Guid> authorIds, CancellationToken ct = default) =>
         ToAllAsync(UpdateTypes.MessagesRead, receipt, authorIds, ct);
 
+    public Task ReadStateChangedAsync(ReadStateDto state, Guid userId, CancellationToken ct = default) =>
+        ToAllAsync(UpdateTypes.ReadStateChanged, state, [userId], ct);
+
     /// <summary>
     /// The same payload to the journal and to every connection of the recipients — not just the
     /// open chat: a client updates the chat list preview from it too.
@@ -97,5 +100,6 @@ public static class UpdateTypes
     public const string ReactionsChanged = "ReactionsChanged";
     public const string MessagesDelivered = "MessagesDelivered";
     public const string MessagesRead = "MessagesRead";
+    public const string ReadStateChanged = "ReadStateChanged";
     public const string ChatCreated = "ChatCreated";
 }

@@ -93,6 +93,12 @@ public class ChatRepository(IDbSession db) : IChatRepository
         return await db.ExecuteScalarAsync<bool>(sql, new { chatId, userId }, ct);
     }
 
+    public async Task<bool> SetMarkedUnreadAsync(Guid chatId, Guid userId, bool markedUnread, CancellationToken ct = default) =>
+        await db.ExecuteAsync(@"
+            UPDATE chat_members SET marked_unread = @markedUnread
+            WHERE chat_id = @chatId AND user_id = @userId AND marked_unread <> @markedUnread",
+            new { chatId, userId, markedUnread }, ct) > 0;
+
     public Task<IReadOnlyList<Guid>> GetMemberIdsAsync(Guid chatId, CancellationToken ct = default) =>
         db.QueryAsync<Guid>("SELECT user_id FROM chat_members WHERE chat_id = @chatId", new { chatId }, ct);
 
@@ -160,6 +166,7 @@ public class ChatRepository(IDbSession db) : IChatRepository
             ) AS UnreadMentionCount,
 
             cm.last_read_seq AS LastReadSeq,
+            cm.marked_unread AS MarkedUnread,
             COALESCE(ob.read_seq, 0) AS OutboxReadSeq,
             COALESCE(ob.delivered_seq, 0) AS OutboxDeliveredSeq,
             ob.members > 0 AS HasOthers,

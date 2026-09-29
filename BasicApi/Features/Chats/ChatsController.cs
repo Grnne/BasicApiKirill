@@ -14,7 +14,11 @@ namespace BasicApi.Features.Chats;
 [Produces("application/json")]
 [Tags("Chats")]
 public class ChatsController(
-    IChatService chats, IMessageService messages, IReactionService reactions, IPresenceService presence) : ControllerBase
+    IChatService chats,
+    IMessageService messages,
+    IReactionService reactions,
+    IReadStateService readState,
+    IPresenceService presence) : ControllerBase
 {
     /// <summary>
     /// Get all chats for the current user
@@ -375,17 +379,44 @@ public class ChatsController(
     /// </summary>
     /// <remarks>
     /// Moves the caller's read pointer to this message (forward only; an older one is not an
-    /// error). Authors whose messages first became read receive <c>MessagesRead</c>.
+    /// error) and clears "marked as unread". Authors whose messages first became read receive
+    /// <c>MessagesRead</c>; the caller's devices receive <c>ReadStateChanged</c> with the new counters.
     ///
     /// Errors: <c>403 NOT_A_MEMBER</c>, <c>404 MESSAGE_NOT_FOUND</c> (not in this chat).
     /// </remarks>
     [HttpPost("{chatId}/read")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> MarkRead(Guid chatId, [FromBody] MarkMessageReadDto dto, CancellationToken ct)
     {
-        await messages.MarkReadAsync(chatId, User.GetUserId(), dto.LastMessageId, ct);
+        await readState.MarkReadAsync(chatId, User.GetUserId(), dto.LastMessageId, ct);
         return Ok();
+    }
+
+    /// <summary>
+    /// Mark the chat as unread, or remove the mark.
+    /// </summary>
+    /// <remarks>
+    /// A reminder for the user only: nobody else sees it, the unread counter does not change.
+    /// Reading the chat (<c>POST /read</c>) removes it. The caller's devices receive
+    /// <c>ReadStateChanged</c>; setting what is already set changes nothing and sends nothing.
+    ///
+    /// Errors: <c>403 NOT_A_MEMBER</c>, <c>429 RATE_LIMITED</c>.
+    /// </remarks>
+    /// <param name="chatId">Chat ID</param>
+    /// <param name="dto">The mark</param>
+    /// <param name="ct">Request cancellation.</param>
+    [HttpPut("{chatId}/marked-unread")]
+    [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> SetMarkedUnread(Guid chatId, [FromBody] MarkUnreadDto dto, CancellationToken ct)
+    {
+        await readState.SetMarkedUnreadAsync(chatId, User.GetUserId(), dto.MarkedUnread, ct);
+        return NoContent();
     }
 
     /// <summary>

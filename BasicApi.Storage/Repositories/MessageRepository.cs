@@ -216,19 +216,35 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
             if (target is not { } seq)
                 return new ReadPointerMove(ReadPointerUpdate.MessageNotFound);
 
-            var current = await db.QueryFirstOrDefaultAsync<long?>(@"
-                SELECT last_read_seq FROM chat_members WHERE chat_id = @chatId AND user_id = @userId FOR UPDATE",
+            var current = await db.QueryFirstOrDefaultAsync<MemberReadState>(@"
+                SELECT last_read_seq AS ReadSeq, marked_unread AS MarkedUnread FROM chat_members
+                WHERE chat_id = @chatId AND user_id = @userId FOR UPDATE",
                 new { chatId, userId }, ct);
-            if (current is not { } from || from >= seq)
-                return new ReadPointerMove(ReadPointerUpdate.NotMoved, current ?? 0, current ?? 0);
+            if (current is null)
+                return new ReadPointerMove(ReadPointerUpdate.NotMoved);
 
+            var moves = current.ReadSeq < seq;
+            if (!moves && !current.MarkedUnread)
+                return new ReadPointerMove(ReadPointerUpdate.NotMoved, current.ReadSeq, current.ReadSeq);
+
+            // Reading clears "marked as unread" even when there was nothing new to read.
             await db.ExecuteAsync(@"
                 UPDATE chat_members
-                SET last_read_seq = @seq, last_delivered_seq = GREATEST(last_delivered_seq, @seq)
+                SET last_read_seq = GREATEST(last_read_seq, @seq),
+                    last_delivered_seq = GREATEST(last_delivered_seq, @seq),
+                    marked_unread = false
                 WHERE chat_id = @chatId AND user_id = @userId",
                 new { chatId, userId, seq }, ct);
-            return new ReadPointerMove(ReadPointerUpdate.Moved, from, seq);
+            return moves
+                ? new ReadPointerMove(ReadPointerUpdate.Moved, current.ReadSeq, seq, current.MarkedUnread)
+                : new ReadPointerMove(ReadPointerUpdate.NotMoved, current.ReadSeq, current.ReadSeq, current.MarkedUnread);
         }, ct: ct);
+
+    private sealed class MemberReadState
+    {
+        public long ReadSeq { get; set; }
+        public bool MarkedUnread { get; set; }
+    }
 
     public Task<ReadPointers?> GetReadPointersAsync(Guid chatId, Guid viewerId, CancellationToken ct = default) =>
         db.QueryFirstOrDefaultAsync<ReadPointers>(@"

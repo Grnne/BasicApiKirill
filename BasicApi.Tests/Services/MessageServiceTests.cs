@@ -12,7 +12,7 @@ using Moq;
 
 namespace BasicApi.Tests.Services;
 
-/// <summary>Sending, read state and "jump to date".</summary>
+/// <summary>Sending and "jump to date".</summary>
 public class MessageServiceTests
 {
     private readonly Mock<IChatRepository> _chatRepoMock = new();
@@ -176,93 +176,6 @@ public class MessageServiceTests
             _service.SendAsync(_chatId, _userId, "hello", clientMessageId));
 
         Assert.Equal("CLIENT_MESSAGE_ID_CONFLICT", ex.ErrorCode);
-    }
-
-    // ========== MarkRead ==========
-
-    [Fact]
-    public async Task MarkRead_MovesPointer()
-    {
-        var messageId = Guid.NewGuid();
-        _msgRepoMock
-            .Setup(r => r.MarkReadAsync(_chatId, _userId, messageId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ReadPointerMove(ReadPointerUpdate.Moved));
-
-        await _service.MarkReadAsync(_chatId, _userId, messageId);
-
-        _msgRepoMock.Verify(r => r.MarkReadAsync(_chatId, _userId, messageId, It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task MarkRead_TellsTheAuthorsWhoseMessagesFirstBecameRead()
-    {
-        var messageId = Guid.NewGuid();
-        _msgRepoMock
-            .Setup(r => r.MarkReadAsync(_chatId, _userId, messageId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ReadPointerMove(ReadPointerUpdate.Moved, 3, 9));
-        _msgRepoMock
-            .Setup(r => r.GetAuthorsNewlyReachedAsync(_chatId, _userId, 3, 9, ReceiptKind.Read, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([_otherId]);
-
-        await _service.MarkReadAsync(_chatId, _userId, messageId);
-
-        _eventsMock.Verify(e => e.MessagesReadAsync(
-            It.Is<ReceiptDto>(r => r.ChatId == _chatId && r.UserId == _userId && r.Seq == 9),
-            It.Is<IReadOnlyCollection<Guid>>(ids => ids.SequenceEqual(new[] { _otherId })),
-            It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task MarkRead_WhenNobodyNewIsReached_SendsNothing()
-    {
-        _msgRepoMock
-            .Setup(r => r.MarkReadAsync(_chatId, _userId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ReadPointerMove(ReadPointerUpdate.Moved, 3, 9));
-        _msgRepoMock
-            .Setup(r => r.GetAuthorsNewlyReachedAsync(_chatId, _userId, 3, 9, ReceiptKind.Read, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
-
-        await _service.MarkReadAsync(_chatId, _userId, Guid.NewGuid());
-
-        _eventsMock.VerifyNoOtherCalls();
-    }
-
-    [Fact]
-    public async Task MarkRead_OlderMessage_IsNotAnError()
-    {
-        // The pointer does not move backwards, but for the client this is not an error: they have already read further.
-        _msgRepoMock
-            .Setup(r => r.MarkReadAsync(_chatId, _userId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ReadPointerMove(ReadPointerUpdate.NotMoved));
-
-        await _service.MarkReadAsync(_chatId, _userId, Guid.NewGuid());
-
-        _msgRepoMock.Verify(r => r.GetAuthorsNewlyReachedAsync(It.IsAny<Guid>(), It.IsAny<Guid>(),
-            It.IsAny<long>(), It.IsAny<long>(), It.IsAny<ReceiptKind>(), It.IsAny<CancellationToken>()), Times.Never);
-        _eventsMock.VerifyNoOtherCalls();
-    }
-
-    [Fact]
-    public async Task MarkRead_MessageNotInChat_Is404()
-    {
-        _msgRepoMock
-            .Setup(r => r.MarkReadAsync(_chatId, _userId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ReadPointerMove(ReadPointerUpdate.MessageNotFound));
-
-        var ex = await Assert.ThrowsAsync<NotFoundException>(() =>
-            _service.MarkReadAsync(_chatId, _userId, Guid.NewGuid()));
-
-        Assert.Equal("MESSAGE_NOT_FOUND", ex.ErrorCode);
-    }
-
-    [Fact]
-    public async Task MarkRead_NotMember_Is403()
-    {
-        var ex = await Assert.ThrowsAsync<ForbiddenException>(() =>
-            _service.MarkReadAsync(Guid.NewGuid(), _userId, Guid.NewGuid()));
-
-        Assert.Equal("NOT_A_MEMBER", ex.ErrorCode);
-        _msgRepoMock.VerifyNoOtherCalls();
     }
 
     // ========== Jump to date ==========

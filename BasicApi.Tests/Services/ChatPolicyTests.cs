@@ -112,9 +112,23 @@ public class ChatPolicyEnforcementTests
         await AssertDenied(() => messages.GetPageAsync(_chatId, _userId, null, 20));
         await AssertDenied(() => messages.GetPageAtAsync(_chatId, _userId, DateTime.UtcNow, 20));
         await AssertDenied(() => messages.SearchAsync(_chatId, _userId, "hello", null, 20));
-        await AssertDenied(() => messages.MarkReadAsync(_chatId, _userId, Guid.NewGuid()));
 
         _msgRepoMock.VerifyNoOtherCalls();
+        _eventsMock.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task ReadState_AllOperationsAskThePolicy()
+    {
+        var readState = new ReadStateService(
+            new FakeDbSession(), _msgRepoMock.Object, _chatRepoMock.Object, _policyMock.Object, _eventsMock.Object);
+
+        await AssertDenied(() => readState.MarkReadAsync(_chatId, _userId, Guid.NewGuid()));
+        await AssertDenied(() => readState.SetMarkedUnreadAsync(_chatId, _userId, true));
+
+        _msgRepoMock.VerifyNoOtherCalls();
+        _chatRepoMock.Verify(r => r.SetMarkedUnreadAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<bool>(),
+            It.IsAny<CancellationToken>()), Times.Never);
         _eventsMock.VerifyNoOtherCalls();
     }
 

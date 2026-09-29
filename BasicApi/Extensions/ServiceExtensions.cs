@@ -114,6 +114,7 @@ public static class ServiceExtensions
         services.AddScoped<IChatService, ChatService>();
         services.AddScoped<IMessageService, MessageService>();
         services.AddScoped<IReactionService, ReactionService>();
+        services.AddScoped<IReadStateService, ReadStateService>();
         services.AddScoped<IPresenceService, PresenceService>();
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<ISyncService, SyncService>();
