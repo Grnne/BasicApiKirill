@@ -71,9 +71,9 @@ public class ChatPolicyTests
 }
 
 /// <summary>
-/// Сервисы не решают сами, что можно: любой отказ политики — с её кодом — доходит
-/// до клиента, и ничего не выполняется. Так новые правила плана 2 (блокировки,
-/// права в группах) заработают без правок в сервисах.
+/// Services do not decide on their own what is allowed: any policy denial, with its code,
+/// reaches the client and nothing is executed. This way the new rules of plan 2 (blocks,
+/// group permissions) will work without changes in the services.
 /// </summary>
 public class ChatPolicyEnforcementTests
 {
@@ -91,7 +91,7 @@ public class ChatPolicyEnforcementTests
         _policyMock.Setup(p => p.CanReadAsync(_userId, _chatId, It.IsAny<CancellationToken>())).ReturnsAsync(deny);
         _policyMock.Setup(p => p.CanPostAsync(_userId, _chatId, It.IsAny<CancellationToken>())).ReturnsAsync(deny);
 
-        // Членство есть — отказывает именно политика.
+        // Membership exists, so it is the policy that denies.
         _chatRepoMock.Setup(r => r.IsMemberAsync(_chatId, _userId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
         _chatRepoMock.Setup(r => r.GetMemberIdsAsync(_chatId, It.IsAny<CancellationToken>())).ReturnsAsync([_userId]);
         _chatRepoMock.Setup(r => r.GetByIdAsync(_chatId, It.IsAny<CancellationToken>())).ReturnsAsync(new Chat { Id = _chatId });

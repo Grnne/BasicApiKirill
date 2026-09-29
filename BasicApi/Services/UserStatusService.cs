@@ -19,17 +19,17 @@ public class UserStatusService(TimeProvider? timeProvider = null) : IUserStatusS
     private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
 
     /// <summary>
-    /// Соединения одного пользователя. Все изменения — под lock на этом объекте
-    /// (блокировка на пользователя: разные пользователи друг другу не мешают).
+    /// Connections of a single user. All changes are under a lock on this object
+    /// (a per-user lock: different users do not get in each other's way).
     /// </summary>
     private sealed class Connections
     {
         public readonly HashSet<string> Ids = [];
 
         /// <summary>
-        /// Набор уже вынут из словаря (ушло последнее соединение). Подключение,
-        /// успевшее взять ссылку на него, должно взять новый — иначе оно попало бы
-        /// в «осиротевший» набор, и пользователь выглядел бы офлайн, будучи на связи.
+        /// The set has already been removed from the dictionary (the last connection left). A connection
+        /// that managed to grab a reference to it must take a new one - otherwise it would end up
+        /// in an "orphaned" set, and the user would look offline while actually being connected.
         /// </summary>
         public bool Removed;
     }
@@ -52,8 +52,8 @@ public class UserStatusService(TimeProvider? timeProvider = null) : IUserStatusS
 
     public Task<Dictionary<Guid, HashSet<Guid>>> GetTypingStatusAsync(IReadOnlyCollection<Guid> chatIds)
     {
-        // Только запрошенные чаты: вызывающий передаёт чаты пользователя, и чужие
-        // не читаются вовсе (раньше перебиралась вся карта, фильтр был снаружи).
+        // Only the requested chats: the caller passes the user's chats, and others'
+        // are not read at all (previously the whole map was iterated and the filter was outside).
         var now = _time.GetUtcNow();
         var result = new Dictionary<Guid, HashSet<Guid>>();
         foreach (var chatId in chatIds)
@@ -67,7 +67,7 @@ public class UserStatusService(TimeProvider? timeProvider = null) : IUserStatusS
                 if (expiresAt > now)
                     typing.Add(userId);
                 else
-                    users.TryRemove(KeyValuePair.Create(userId, expiresAt)); // протухшее — чистим по пути
+                    users.TryRemove(KeyValuePair.Create(userId, expiresAt)); // expired - clean it up along the way
             }
 
             if (typing.Count > 0)
@@ -79,7 +79,7 @@ public class UserStatusService(TimeProvider? timeProvider = null) : IUserStatusS
     public Task<bool> SetUserOnlineStatusAsync(Guid userId, string connectionId, bool status)
         => Task.FromResult(status ? AddConnection(userId, connectionId) : RemoveConnection(userId, connectionId));
 
-    /// <returns>True, если это первое соединение пользователя (он стал онлайн).</returns>
+    /// <returns>True if this is the user's first connection (they came online).</returns>
     private bool AddConnection(Guid userId, string connectionId)
     {
         while (true)
@@ -88,7 +88,7 @@ public class UserStatusService(TimeProvider? timeProvider = null) : IUserStatusS
             lock (connections)
             {
                 if (connections.Removed)
-                    continue; // проиграли гонку последнему отключению — берём свежий набор
+                    continue; // lost the race to the last disconnect - take the fresh set
 
                 var isFirst = connections.Ids.Count == 0;
                 connections.Ids.Add(connectionId);
@@ -97,7 +97,7 @@ public class UserStatusService(TimeProvider? timeProvider = null) : IUserStatusS
         }
     }
 
-    /// <returns>True, если это было последнее соединение (пользователь ушёл в офлайн).</returns>
+    /// <returns>True if this was the last connection (the user went offline).</returns>
     private bool RemoveConnection(Guid userId, string connectionId)
     {
         if (!_onlineUsers.TryGetValue(userId, out var connections))
@@ -143,8 +143,8 @@ public class UserStatusService(TimeProvider? timeProvider = null) : IUserStatusS
         {
             users.TryRemove(userId, out _);
         }
-        // Пустые словари чатов не удаляем: гонка удаления с параллельным Set потеряла бы
-        // запись, а память ограничена числом чатов, где кто-то когда-то печатал.
+        // We do not remove empty chat dictionaries: a race between removal and a parallel Set would lose
+        // the entry, and memory is bounded by the number of chats where anyone has ever typed.
         return Task.CompletedTask;
     }
 

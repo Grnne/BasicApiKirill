@@ -7,9 +7,9 @@ using Npgsql;
 namespace BasicApi.IntegrationTests.Api;
 
 /// <summary>
-/// Время не зависит от часового пояса сессии базы. Пока колонки были timestamp без
-/// зоны, UTC-время из приложения при записи переводилось в пояс сессии, а читалось
-/// как есть — сообщения «уезжали» на смещение пояса.
+/// Time does not depend on the database session time zone. While the columns were timestamp without
+/// zone, UTC time from the application was converted to the session zone on write and read back
+/// as is — messages "drifted" by the zone offset.
 /// </summary>
 public class TimeZoneTests(PostgresFixture db) : DbTest(db)
 {
@@ -30,7 +30,7 @@ public class TimeZoneTests(PostgresFixture db) : DbTest(db)
         var history = JsonDocument.Parse(await client.GetStringAsync($"/api/chats/{chat}/messages/cursor")).RootElement;
         var createdAt = history.GetProperty("items")[0].GetProperty("createdAt").GetString()!;
 
-        // Время с признаком UTC и равно моменту отправки, а не сдвинуто на +3 часа.
+        // The time is marked as UTC and equals the send moment, not shifted by +3 hours.
         Assert.EndsWith("Z", createdAt);
         var stored = DateTimeOffset.Parse(createdAt);
         Assert.InRange(stored, before.AddSeconds(-5), DateTimeOffset.UtcNow.AddSeconds(5));

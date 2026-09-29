@@ -10,7 +10,7 @@ public class SecurityHeadersTests(PostgresFixture db)
     [Theory]
     [InlineData("/health/live")]
     [InlineData("/signalr-docs")]
-    [InlineData("/api/chats")] // 401 — заголовки нужны и на ответах с ошибкой
+    [InlineData("/api/chats")] // 401 — headers are needed on error responses too
     public async Task Responses_CarryContentSecurityPolicy(string path)
     {
         await using var factory = new ApiFactory(db.ConnectionString);
@@ -21,8 +21,8 @@ public class SecurityHeadersTests(PostgresFixture db)
         var csp = Assert.Single(response.Headers.GetValues("Content-Security-Policy"));
         Assert.Contains("default-src 'self'", csp);
         Assert.Contains("script-src 'self'", csp);
-        Assert.Contains("connect-src 'self'", csp);   // токен не уйдёт на чужой хост даже при XSS
-        Assert.Contains("frame-ancestors 'none'", csp); // в <meta> не работает — только заголовком
+        Assert.Contains("connect-src 'self'", csp);   // the token will not go to a foreign host even under XSS
+        Assert.Contains("frame-ancestors 'none'", csp); // does not work in <meta> — only as a header
         Assert.Contains("object-src 'none'", csp);
         Assert.Contains("base-uri 'none'", csp);
         Assert.DoesNotContain("unsafe-eval", csp);

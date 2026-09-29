@@ -3,12 +3,12 @@ using Microsoft.AspNetCore.SignalR;
 namespace BasicApi.Hubs;
 
 /// <summary>
-/// Ошибки методов хаба. Клиенту доходит только текст <see cref="HubException"/>,
-/// поэтому код ошибки — в начале сообщения: <c>"NOT_A_MEMBER: ..."</c>. Коды те же,
-/// что у REST: доменные ошибки сервисов переводит <see cref="HubErrorFilter"/>.
-/// SignalR на проводе добавляет свой префикс, и клиент получает
+/// Hub method errors. Only the text of <see cref="HubException"/> reaches the client,
+/// so the error code goes at the start of the message: <c>"NOT_A_MEMBER: ..."</c>. The codes are the same
+/// as in REST: domain errors from the services are translated by <see cref="HubErrorFilter"/>.
+/// SignalR adds its own prefix on the wire, and the client receives
 /// <c>"An unexpected error occurred invoking 'JoinChat' on the server. HubException: NOT_A_MEMBER: ..."</c>.
-/// Код — слово сразу после <c>"HubException: "</c> (проверено E2E-тестом по WebSocket).
+/// The code is the word right after <c>"HubException: "</c> (verified by an E2E test over WebSocket).
 /// </summary>
 public static class HubErrors
 {

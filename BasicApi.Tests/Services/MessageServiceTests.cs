@@ -12,7 +12,7 @@ using Moq;
 
 namespace BasicApi.Tests.Services;
 
-/// <summary>Отправка, прочитанность и «переход к дате».</summary>
+/// <summary>Sending, read state and "jump to date".</summary>
 public class MessageServiceTests
 {
     private readonly Mock<IChatRepository> _chatRepoMock = new();
@@ -35,7 +35,7 @@ public class MessageServiceTests
             .Setup(r => r.IsMemberAsync(_chatId, _userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
-        // Репозиторий возвращает то, что вставили, с номером и именем отправителя
+        // The repository returns what was inserted, with the number and the sender name
         _msgRepoMock
             .Setup(r => r.CreateAsync(It.IsAny<Message>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Message m, Guid? clientMessageId, CancellationToken _) => Stored(m.ChatId, m.Text, clientMessageId, m.Id));
@@ -118,7 +118,7 @@ public class MessageServiceTests
         Assert.Equal(text, result.Message.Text);
     }
 
-    // ========== Идемпотентность ==========
+    // ========== Idempotency ==========
 
     [Fact]
     public async Task Send_Retry_ReturnsTheFirstMessage_WithoutStoringOrAnnouncingAgain()
@@ -146,8 +146,8 @@ public class MessageServiceTests
         var winner = Stored(_chatId, "hello", clientMessageId);
         _msgRepoMock
             .SetupSequence(r => r.GetByClientMessageIdAsync(_userId, clientMessageId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((MessageWithSender?)null) // до вставки его ещё нет
-            .ReturnsAsync(winner);                   // после конфликта — есть
+            .ReturnsAsync((MessageWithSender?)null) // it does not exist before the insert
+            .ReturnsAsync(winner);                   // after the conflict it does
         _msgRepoMock
             .Setup(r => r.CreateAsync(It.IsAny<Message>(), clientMessageId, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new DuplicateKeyException("duplicate", new Exception()));
@@ -191,7 +191,7 @@ public class MessageServiceTests
     [Fact]
     public async Task MarkRead_OlderMessage_IsNotAnError()
     {
-        // Указатель назад не двигается, но для клиента это не ошибка: он уже прочитал дальше.
+        // The pointer does not move backwards, but for the client this is not an error: they have already read further.
         _msgRepoMock
             .Setup(r => r.MarkReadAsync(_chatId, _userId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ReadPointerUpdate.NotMoved);

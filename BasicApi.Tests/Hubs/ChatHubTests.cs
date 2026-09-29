@@ -11,9 +11,9 @@ using Moq;
 namespace BasicApi.Tests.Hubs;
 
 /// <summary>
-/// Хаб — адаптер: разбирает вызов и отдаёт его сервису. Правила (членство, текст,
-/// присутствие) проверяются в тестах сервисов; здесь — что вызов дошёл куда надо,
-/// и то, что остаётся за хабом: сессия при подключении, группы, лимит вызовов.
+/// The hub is an adapter: it parses a call and hands it to a service. The rules (membership, text,
+/// presence) are tested in the service tests; here — that the call got where it should,
+/// and what remains with the hub: the session on connect, groups, the call limit.
 /// </summary>
 public class ChatHubTests
 {
@@ -66,7 +66,7 @@ public class ChatHubTests
             Groups = _groupsMock.Object
         };
 
-    // ========== Подключение ==========
+    // ========== Connection ==========
 
     [Fact]
     public async Task OnConnected_LiveSession_ReportsConnectionToPresence()
@@ -79,7 +79,7 @@ public class ChatHubTests
     [Fact]
     public async Task OnConnected_RevokedSession_AbortsConnection_WithoutGoingOnline()
     {
-        // Access-токен ещё жив, но вход уже закрыт logout'ом.
+        // The access token is still alive, but the login is already closed by logout.
         _sessionsMock
             .Setup(s => s.IsSessionFamilyLiveAsync(_sessionFamilyId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
@@ -108,7 +108,7 @@ public class ChatHubTests
         _presenceMock.Verify(p => p.DisconnectedAsync(_userId, _connectionId), Times.Once);
     }
 
-    // ========== Группы чатов ==========
+    // ========== Chat groups ==========
 
     [Fact]
     public async Task JoinChat_Member_AddsConnectionToChatGroup()
@@ -149,7 +149,7 @@ public class ChatHubTests
             Times.Once);
     }
 
-    // ========== Команды ==========
+    // ========== Commands ==========
 
     [Fact]
     public async Task SendMessage_GoesToMessageService()

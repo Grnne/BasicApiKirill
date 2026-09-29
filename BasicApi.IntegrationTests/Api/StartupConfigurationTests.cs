@@ -46,7 +46,7 @@ public class StartupConfigurationTests(PostgresFixture db)
     [Fact]
     public async Task Production_DoesNotRedirectToHttps()
     {
-        // TLS снимает прокси; редирект внутри приложения давал бы петлю за ним.
+        // The proxy terminates TLS; a redirect inside the app would loop behind it.
         await using var factory = new ApiFactory(db.ConnectionString);
         using var client = factory.CreateClient(new() { AllowAutoRedirect = false });
 

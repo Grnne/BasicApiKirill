@@ -6,10 +6,10 @@ using BasicApi.Storage.Interfaces;
 namespace BasicApi.Services.Events;
 
 /// <summary>
-/// События через outbox: пишутся в текущую транзакцию вместе с изменением, которое их
-/// породило, и в журнал изменений получателей (для /sync). Рассылает их
-/// <see cref="OutboxDispatcher"/> в прежнем формате. «Печатает» и онлайн — эфемерные:
-/// уходят сразу и в журнал не пишутся.
+/// Events via the outbox: written into the current transaction together with the change that
+/// caused them, and into the recipients' change journal (for /sync). They are dispatched by
+/// <see cref="OutboxDispatcher"/> in the previous format. "Typing" and online are ephemeral:
+/// they go out immediately and are not written to the journal.
 /// </summary>
 public sealed class OutboxChatEventPublisher(
     IDbSession db,
@@ -49,14 +49,14 @@ public sealed class OutboxChatEventPublisher(
     private async Task EnqueueAsync(string type, CancellationToken ct, params HubSend[] sends)
     {
         await outbox.EnqueueAsync(type, new OutboxEnvelope(sends).Serialize(), ct);
-        // Диспетчер увидит событие только после коммита — тогда и будим.
+        // The dispatcher will see the event only after the commit — so we wake it then.
         db.OnCommitted(signal.Notify);
     }
 
     private static string Json<T>(T value) => System.Text.Json.JsonSerializer.Serialize(value, OutboxEnvelope.Json);
 }
 
-/// <summary>Типы записей журнала — те же имена, что у событий хаба.</summary>
+/// <summary>Journal entry types — the same names as the hub events.</summary>
 public static class UpdateTypes
 {
     public const string MessageCreated = "MessageCreated";

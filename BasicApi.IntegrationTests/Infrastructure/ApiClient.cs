@@ -11,10 +11,10 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace BasicApi.IntegrationTests.Infrastructure;
 
-/// <summary>Ответ регистрации/входа — только то, что нужно тестам.</summary>
+/// <summary>Registration/login response — only what the tests need.</summary>
 public sealed record AuthResult(Guid UserId, string Token, string RefreshToken);
 
-/// <summary>Вызовы API и хаба от имени тестового пользователя.</summary>
+/// <summary>API and hub calls on behalf of a test user.</summary>
 public static class ApiClient
 {
     public const string Password = "secret123";
@@ -47,8 +47,8 @@ public static class ApiClient
     }
 
     /// <summary>
-    /// Соединение с хабом через TestServer. Long polling: WebSocket TestServer
-    /// поддерживает хуже, а для проверок жизненного цикла соединения транспорт не важен.
+    /// Hub connection through TestServer. Long polling: TestServer supports WebSocket
+    /// less well, and for connection lifecycle checks the transport does not matter.
     /// </summary>
     public static HubConnection CreateHubConnection(this ApiFactory factory, string token) =>
         new HubConnectionBuilder()
@@ -60,7 +60,7 @@ public static class ApiClient
             })
             .Build();
 
-    /// <summary>Ждёт закрытия соединения; false — не закрылось за отведённое время.</summary>
+    /// <summary>Waits for the connection to close; false if it did not close in time.</summary>
     public static async Task<bool> WaitForCloseAsync(this HubConnection connection, TimeSpan timeout)
     {
         var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -73,8 +73,8 @@ public static class ApiClient
         return await Task.WhenAny(closed.Task, Task.Delay(timeout)) == closed.Task;
     }
 
-    /// <summary>Access-токен с заданным временем жизни, подписанный ключом тестового приложения.</summary>
-    /// <param name="sessionFamilyId">Вход, к которому относится токен (claim <c>sid</c>); без него — токен без сессии.</param>
+    /// <summary>Access token with a given lifetime, signed with the test application's key.</summary>
+    /// <param name="sessionFamilyId">The login the token belongs to (claim <c>sid</c>); without it, a token without a session.</param>
     public static string ShortLivedToken(Guid userId, TimeSpan lifetime, Guid? sessionFamilyId = null)
     {
         List<Claim> claims = [new(JwtRegisteredClaimNames.Sub, userId.ToString())];
@@ -95,7 +95,7 @@ public static class ApiClient
         return handler.WriteToken(token);
     }
 
-    /// <summary>Вход (claim <c>sid</c>), которому выдан access-токен.</summary>
+    /// <summary>The login (claim <c>sid</c>) the access token was issued to.</summary>
     public static Guid SessionFamilyOf(string token) =>
         Guid.Parse(new JwtSecurityTokenHandler().ReadJwtToken(token).Claims
             .First(c => c.Type == JwtRegisteredClaimNames.Sid).Value);

@@ -21,7 +21,7 @@ public class AddPrivateChatKey : Migration
     {
         Execute.Sql("ALTER TABLE chats ADD COLUMN private_key text NULL");
 
-        // Пары участников личных чатов (только корректные — ровно два участника).
+        // Participant pairs of private chats (valid ones only: exactly two participants).
         Execute.Sql(@"
             CREATE TEMP TABLE private_pairs ON COMMIT DROP AS
             SELECT c.id, c.created_at,
@@ -32,7 +32,7 @@ public class AddPrivateChatKey : Migration
             WHERE c.type = 'private'
               AND (SELECT COUNT(*) FROM chat_members x WHERE x.chat_id = c.id) = 2");
 
-        // Для каждой пары остаётся самый старый чат, остальные — дубли.
+        // For each pair the oldest chat stays; the rest are duplicates.
         Execute.Sql(@"
             CREATE TEMP TABLE private_dups ON COMMIT DROP AS
             SELECT id AS dup_id, keeper
@@ -48,7 +48,7 @@ public class AddPrivateChatKey : Migration
             FROM private_dups d
             WHERE m.chat_id = d.dup_id");
 
-        // Указатель прочитанного — самый поздний из указателей участника во всех дублях.
+        // The read pointer is the latest of the participant's pointers across all duplicates.
         Execute.Sql(@"
             UPDATE chat_members k
             SET last_read_message_id = (
@@ -75,7 +75,7 @@ public class AddPrivateChatKey : Migration
 
     public override void Down()
     {
-        // Слитые дубли не восстанавливаются — они и были ошибкой.
+        // Merged duplicates are not restored: they were the mistake in the first place.
         Execute.Sql("DROP INDEX IF EXISTS ux_chats_private_key");
         Execute.Sql("ALTER TABLE chats DROP COLUMN IF EXISTS private_key");
     }

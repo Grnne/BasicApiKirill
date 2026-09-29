@@ -9,7 +9,7 @@ using Npgsql;
 
 namespace BasicApi.IntegrationTests.Api;
 
-/// <summary>Номер сообщения в чате и идемпотентная отправка (план 1, 2.5).</summary>
+/// <summary>Per-chat message number and idempotent sending (plan 1, 2.5).</summary>
 public class MessageSeqTests(PostgresFixture db) : DbTest(db)
 {
     private static async Task<JsonElement> ReadJsonAsync(HttpResponseMessage response) =>
@@ -56,7 +56,7 @@ public class MessageSeqTests(PostgresFixture db) : DbTest(db)
         Assert.Equal(clientMessageId, repeated.GetProperty("clientMessageId").GetGuid());
         Assert.Equal(1, await CountMessagesAsync(chat));
 
-        // Событие — только от первой отправки. Отправим ещё одно, чтобы дождаться доставки.
+        // The event comes only from the first send. Send one more to wait for delivery.
         (await client.PostAsJsonAsync($"/api/chats/{chat}/messages", new { text = "marker" })).EnsureSuccessStatusCode();
         await WaitUntilAsync(() => Volatile.Read(ref events) >= 2);
         await Task.Delay(200);
@@ -82,7 +82,7 @@ public class MessageSeqTests(PostgresFixture db) : DbTest(db)
         Assert.Single(responses.Select(r => r.Id).Distinct());
         Assert.Equal(1, await CountMessagesAsync(chat));
 
-        // Проигравшие ретраи не оставили дыр в нумерации.
+        // The losing retries left no gaps in the numbering.
         using var check = factory.CreateClient(alice.Token);
         var next = await ReadJsonAsync(await check.PostAsJsonAsync($"/api/chats/{chat}/messages", new { text = "next" }));
         Assert.Equal(2, next.GetProperty("seq").GetInt64());
@@ -121,7 +121,7 @@ public class MessageSeqTests(PostgresFixture db) : DbTest(db)
 
         Assert.Equal(Enumerable.Range(1, 20).Select(i => (long)i), seqs.Order());
 
-        // История — строго по seq.
+        // History is strictly by seq.
         using var reader = factory.CreateClient(alice.Token);
         var page = await ReadJsonAsync(await reader.GetAsync($"/api/chats/{chat}/messages/cursor?limit=100"));
         Assert.Equal(Enumerable.Range(1, 20).Select(i => (long)i),
@@ -131,7 +131,7 @@ public class MessageSeqTests(PostgresFixture db) : DbTest(db)
     [Fact]
     public async Task CursorOfTheOldFormat_StillPagesFromTheSamePlace()
     {
-        // Клиент получил курсор до обновления и листает дальше после него.
+        // The client got a cursor before the update and pages on after it.
         var (factory, alice, bob, chat) = await ArrangeAsync();
         await using var _ = factory;
         var ids = new List<Guid>();
@@ -139,13 +139,13 @@ public class MessageSeqTests(PostgresFixture db) : DbTest(db)
             ids.Add(await Data.MessageAsync(chat, i % 2 == 0 ? alice.UserId : bob.UserId, $"m{i}", TestData.T0.AddMinutes(i)));
         using var client = factory.CreateClient(alice.Token);
 
-        // Старый курсор указывал на последнее сообщение страницы — m2.
+        // The old cursor pointed at the last message of the page — m2.
         var legacy = MessageCursor.EncodeLegacy(TestData.T0.AddMinutes(2), ids[2]);
         var page = await ReadJsonAsync(await client.GetAsync($"/api/chats/{chat}/messages/cursor?cursor={legacy}"));
 
         Assert.Equal(["m0", "m1"], page.GetProperty("items").EnumerateArray().Select(m => m.GetProperty("text").GetString()));
 
-        // Старый курсор на сообщение чужого чата — 400, а не страница.
+        // The old cursor pointing at a message of another chat — 400, not a page.
         var foreign = MessageCursor.EncodeLegacy(TestData.T0, Guid.NewGuid());
         var rejected = await client.GetAsync($"/api/chats/{chat}/messages/cursor?cursor={foreign}");
         Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);

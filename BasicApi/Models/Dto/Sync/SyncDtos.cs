@@ -3,31 +3,31 @@ using BasicApi.Models.Dto.Chat;
 
 namespace BasicApi.Models.Dto.Sync;
 
-/// <summary>Снимок: всё, что нужно клиенту, чтобы начать с чистого листа.</summary>
+/// <summary>Snapshot: everything the client needs to start from a clean slate.</summary>
 public class SyncStateDto
 {
-    /// <summary>Номер последнего изменения, учтённого в снимке. С него — <c>GET /api/sync?since=</c>.</summary>
+    /// <summary>Number of the last change included in the snapshot. From it — <c>GET /api/sync?since=</c>.</summary>
     public long Pts { get; set; }
 
-    /// <summary>Список чатов — как <c>GET /api/chats</c>, со счётчиками непрочитанных.</summary>
+    /// <summary>Chat list — like <c>GET /api/chats</c>, with unread counters.</summary>
     public List<ChatListItemDto> Chats { get; set; } = [];
 }
 
-/// <summary>Изменения после известного клиенту pts.</summary>
+/// <summary>Changes after the pts known to the client.</summary>
 public class SyncDifferenceDto
 {
-    /// <summary>Изменения по порядку pts.</summary>
+    /// <summary>Changes in pts order.</summary>
     public List<SyncUpdateDto> Updates { get; set; } = [];
 
-    /// <summary>pts, до которого клиент теперь в курсе: передать в следующий запрос как <c>since</c>.</summary>
+    /// <summary>The pts up to which the client is now up to date: pass it to the next request as <c>since</c>.</summary>
     public long Pts { get; set; }
 
-    /// <summary>Есть ещё изменения — повторить запрос с новым <c>since</c>.</summary>
+    /// <summary>There are more changes — repeat the request with the new <c>since</c>.</summary>
     public bool HasMore { get; set; }
 
     /// <summary>
-    /// Разницы нет: часть изменений уже удалена из журнала (клиент не заходил дольше
-    /// срока хранения) или <c>since</c> не из этого журнала. Нужно заново взять снимок
+    /// No diff available: part of the changes has already been removed from the journal (the client did not
+    /// sign in within the retention period) or <c>since</c> is not from this journal. Take a new snapshot via
     /// <c>GET /api/sync/state</c>.
     /// </summary>
     public bool SnapshotRequired { get; set; }
@@ -37,10 +37,10 @@ public class SyncUpdateDto
 {
     public long Pts { get; set; }
 
-    /// <summary>Имя события хаба: <c>MessageCreated</c>, <c>ChatCreated</c>.</summary>
+    /// <summary>Hub event name: <c>MessageCreated</c>, <c>ChatCreated</c>.</summary>
     public string Type { get; set; } = string.Empty;
 
-    /// <summary>Тот же объект, что приходит в событии хаба с этим именем.</summary>
+    /// <summary>The same object that arrives in the hub event with this name.</summary>
     public JsonElement Payload { get; set; }
 
     public DateTime CreatedAt { get; set; }
@@ -48,6 +48,6 @@ public class SyncUpdateDto
 
 public class SyncAckDto
 {
-    /// <summary>pts последнего изменения, которое устройство получило и обработало.</summary>
+    /// <summary>pts of the last change the device received and processed.</summary>
     public long Pts { get; set; }
 }

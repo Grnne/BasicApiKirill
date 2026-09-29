@@ -343,8 +343,8 @@ public class ExceptionHandlingMiddlewareTests
     [Fact]
     public async Task ResponseAlreadyStarted_LogsAndRethrows_WithoutWritingBody()
     {
-        // Заголовки уже ушли клиенту — писать ProblemDetails поверх нельзя,
-        // иначе вторичное исключение спрячет исходное.
+        // The headers have already gone to the client — writing ProblemDetails on top is not possible,
+        // otherwise the secondary exception would hide the original one.
         var logger = new FakeLogger<ExceptionHandlingMiddleware>();
         var exception = new InvalidOperationException("failed mid-stream");
         var middleware = CreateMiddleware(exception, out var bodyStream, out var context, logger: logger);
@@ -361,7 +361,7 @@ public class ExceptionHandlingMiddlewareTests
     [Fact]
     public async Task ClientAbortedRequest_IsNotLoggedAsError()
     {
-        // Клиент закрыл вкладку посреди запроса — это не ошибка сервера.
+        // The client closed the tab mid-request — this is not a server error.
         var logger = new FakeLogger<ExceptionHandlingMiddleware>();
         var middleware = CreateMiddleware(new OperationCanceledException(),
             out var bodyStream, out var context, logger: logger);
@@ -379,7 +379,7 @@ public class ExceptionHandlingMiddlewareTests
     [Fact]
     public async Task OperationCanceled_WithoutClientAbort_IsServerError()
     {
-        // Таймаут внутри сервера (например, команды БД) — настоящая ошибка.
+        // A timeout inside the server (e.g. a DB command) is a real error.
         var logger = new FakeLogger<ExceptionHandlingMiddleware>();
         var middleware = CreateMiddleware(new OperationCanceledException(),
             out _, out var context, logger: logger);

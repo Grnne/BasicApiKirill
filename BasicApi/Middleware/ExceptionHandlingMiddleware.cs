@@ -45,7 +45,7 @@ public class ExceptionHandlingMiddleware
         }
         catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
         {
-            // Клиент ушёл сам (закрыл вкладку, оборвалась сеть) — отвечать некому.
+            // The client left on its own (closed the tab, network dropped) — nobody to respond to.
             _logger.LogDebug("Request aborted by client: {Method} {Path}",
                 context.Request.Method, context.Request.Path);
 
@@ -54,8 +54,8 @@ public class ExceptionHandlingMiddleware
         }
         catch (Exception ex) when (context.Response.HasStarted)
         {
-            // Заголовки уже отправлены: ProblemDetails не записать. Логируем
-            // и пробрасываем — Kestrel оборвёт соединение, клиент увидит обрыв.
+            // Headers are already sent: ProblemDetails cannot be written. We log
+            // and rethrow — Kestrel will drop the connection, the client will see the drop.
             _logger.LogError(ex,
                 "Unhandled exception after response started: {Method} {Path}, traceId={TraceId}",
                 context.Request.Method, context.Request.Path, context.TraceIdentifier);

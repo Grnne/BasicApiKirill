@@ -7,8 +7,8 @@ using Microsoft.AspNetCore.SignalR.Client;
 namespace BasicApi.IntegrationTests.Api;
 
 /// <summary>
-/// Команды через REST (A8): те же сервисы и события, что у методов хаба.
-/// Хаб остаётся каналом событий.
+/// Commands over REST (A8): the same services and events as the hub methods.
+/// The hub remains the events channel.
 /// </summary>
 public class CommandsApiTests(PostgresFixture db) : DbTest(db)
 {
@@ -120,14 +120,14 @@ public class CommandsApiTests(PostgresFixture db) : DbTest(db)
             Assert.Equal(HttpStatusCode.Created,
                 (await alicePhone.PostAsJsonAsync($"/api/chats/{chat}/messages", new { text = $"m{i}" })).StatusCode);
 
-        // Второе устройство того же пользователя делит тот же бюджет — лимит на пользователя.
+        // A second device of the same user shares the same budget — the limit is per user.
         var alice2 = await factory.LoginAsync("alice");
         using var aliceLaptop = factory.CreateClient(alice2.Token);
         var limited = await aliceLaptop.PostAsJsonAsync($"/api/chats/{chat}/typing", new { isTyping = true });
         Assert.Equal(HttpStatusCode.TooManyRequests, limited.StatusCode);
         Assert.Equal("RATE_LIMITED", await ErrorCodeAsync(limited));
 
-        // У другого пользователя свой бюджет.
+        // Another user has their own budget.
         Assert.Equal(HttpStatusCode.Created,
             (await bobClient.PostAsJsonAsync($"/api/chats/{chat}/messages", new { text = "bob" })).StatusCode);
     }

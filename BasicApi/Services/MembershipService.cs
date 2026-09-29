@@ -3,21 +3,21 @@ using BasicApi.Storage.Interfaces;
 namespace BasicApi.Services;
 
 /// <summary>
-/// Кто в каком чате. Сейчас состав меняется только созданием личного чата;
-/// вступление, выход и роли в группах (план 2) появятся здесь же.
-/// Что участнику можно — решает <see cref="IChatPolicy"/>, не этот сервис.
+/// Who is in which chat. Currently membership changes only by creating a private chat;
+/// joining, leaving and roles in groups (plan 2) will appear here too.
+/// What a member is allowed to do is decided by <see cref="IChatPolicy"/>, not by this service.
 /// </summary>
 public interface IMembershipService
 {
     Task<bool> IsMemberAsync(Guid chatId, Guid userId, CancellationToken ct = default);
 
-    /// <summary>Участники чата — получатели его событий.</summary>
+    /// <summary>Chat participants: the recipients of its events.</summary>
     Task<IReadOnlyList<Guid>> GetMemberIdsAsync(Guid chatId, CancellationToken ct = default);
 
-    /// <summary>Чаты пользователя.</summary>
+    /// <summary>The user's chats.</summary>
     Task<IReadOnlyList<Guid>> GetChatIdsAsync(Guid userId, CancellationToken ct = default);
 
-    /// <summary>Все, с кем у пользователя есть общий чат (без него самого).</summary>
+    /// <summary>Everyone the user shares a chat with (excluding the user).</summary>
     Task<IReadOnlyList<Guid>> GetContactIdsAsync(Guid userId, CancellationToken ct = default);
 }
 

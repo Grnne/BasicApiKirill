@@ -31,9 +31,9 @@ public class MessageSeqMigrationTests(PostgresFixture db)
             INSERT INTO chat_members (chat_id, user_id) VALUES (@chat, @alice), (@chat, @bob), (@empty, @alice)",
             new { chat, empty, alice, bob });
 
-        // Вставляем не по порядку времени; два сообщения — с одинаковым временем.
+        // Inserting out of time order; two messages have the same time.
         var t0 = new DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
-        // Порядок uuid в Postgres и Guid в .NET различается — берём id, где они совпадают.
+        // uuid order in Postgres and Guid order in .NET differ — taking ids where they match.
         var ids = Enumerable.Range(1, 4).Select(i => Guid.Parse($"00000000-0000-0000-0000-00000000000{i}")).ToArray();
         var rows = new[] { (ids[3], t0.AddMinutes(2)), (ids[0], t0), (ids[2], t0.AddMinutes(1)), (ids[1], t0.AddMinutes(1)) };
         foreach (var (id, at) in rows)
@@ -48,7 +48,7 @@ public class MessageSeqMigrationTests(PostgresFixture db)
 
         PostgresFixture.WithRunner(connectionString, runner => runner.MigrateUp(9));
 
-        // Порядок — по (created_at, id), как отдавала пагинация до миграции.
+        // Order is by (created_at, id), as pagination returned before the migration.
         var seqs = (await connection.QueryAsync<Guid>(
             "SELECT id FROM messages WHERE chat_id = @chat ORDER BY seq", new { chat })).ToArray();
         Assert.Equal([ids[0], ids[1], ids[2], ids[3]], seqs);
@@ -56,13 +56,13 @@ public class MessageSeqMigrationTests(PostgresFixture db)
         Assert.Equal(4, await connection.ExecuteScalarAsync<long>("SELECT last_seq FROM chats WHERE id = @chat", new { chat }));
         Assert.Equal(0, await connection.ExecuteScalarAsync<long>("SELECT last_seq FROM chats WHERE id = @empty", new { empty }));
 
-        // Алиса прочитала до третьего сообщения; Боб — ничего.
+        // Alice read up to the third message; Bob read nothing.
         Assert.Equal(3, await connection.ExecuteScalarAsync<long>(
             "SELECT last_read_seq FROM chat_members WHERE chat_id = @chat AND user_id = @alice", new { chat, alice }));
         Assert.Equal(0, await connection.ExecuteScalarAsync<long>(
             "SELECT last_read_seq FROM chat_members WHERE chat_id = @chat AND user_id = @bob", new { chat, bob }));
 
-        // Откат возвращает указатель на то же сообщение.
+        // The rollback returns the pointer to the same message.
         PostgresFixture.WithRunner(connectionString, runner => runner.MigrateDown(8));
         Assert.Equal(ids[2], await connection.ExecuteScalarAsync<Guid>(
             "SELECT last_read_message_id FROM chat_members WHERE chat_id = @chat AND user_id = @alice", new { chat, alice }));

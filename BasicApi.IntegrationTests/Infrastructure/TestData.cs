@@ -4,12 +4,12 @@ using Dapper;
 namespace BasicApi.IntegrationTests.Infrastructure;
 
 /// <summary>
-/// Наполнение базы прямыми INSERT'ами: время и идентификаторы задаются явно,
-/// чтобы тесты могли строить граничные случаи (одинаковый created_at и т.п.).
+/// Database seeding with direct INSERTs: time and identifiers are set explicitly,
+/// so tests can build edge cases (identical created_at and the like).
 /// </summary>
 public sealed class TestData(IDbConnectionFactory connectionFactory)
 {
-    /// <summary>Опорная точка времени; округлена до микросекунд, как хранит Postgres.</summary>
+    /// <summary>Time anchor point; rounded to microseconds, as Postgres stores it.</summary>
     public static readonly DateTime T0 = new(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
 
     public async Task<Guid> UserAsync(string username, string? displayName = null, bool isActive = true)
@@ -62,7 +62,7 @@ public sealed class TestData(IDbConnectionFactory connectionFactory)
         return id;
     }
 
-    /// <summary>Сообщение со следующим seq чата — номера идут в порядке вызовов, как в приложении.</summary>
+    /// <summary>A message with the chat's next seq; numbers follow the call order, as in the app.</summary>
     public async Task<Guid> MessageAsync(
         Guid chatId, Guid senderId, string text, DateTime createdAt, Guid? id = null, bool isDeleted = false)
     {

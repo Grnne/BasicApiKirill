@@ -8,15 +8,15 @@ using Npgsql;
 namespace BasicApi.IntegrationTests.Api;
 
 /// <summary>
-/// Соединение с хабом живёт часами, а access-токен — минуты. Соединение живёт, пока
-/// жив вход (сессия), с которого оно открыто: отозванный или истёкший вход обрывает
-/// и уже открытые соединения, а истечение одного access-токена — нет.
+/// A hub connection lives for hours, an access token for minutes. The connection lives as long as
+/// the sign-in (session) it was opened from is alive: a revoked or expired sign-in drops
+/// already open connections too, while the expiry of a single access token does not.
 /// </summary>
 public class HubAccessTests(PostgresFixture db) : DbTest(db)
 {
     private static readonly TimeSpan CloseTimeout = TimeSpan.FromSeconds(15);
 
-    /// <summary>Проверка сессий открытых соединений — раз в секунду, а не в минуту.</summary>
+    /// <summary>Sessions of open connections are checked once a second, not once a minute.</summary>
     private static readonly Dictionary<string, string?> FastSessionCheck = new()
     {
         ["Hub:SessionCheckIntervalSeconds"] = "1",
@@ -25,9 +25,9 @@ public class HubAccessTests(PostgresFixture db) : DbTest(db)
     [Fact]
     public async Task Connection_OutlivesAccessToken_WhileSessionIsLive()
     {
-        // Текущий веб-клиент при переподключении отдаёт тот же токен, пока не получит
-        // 401 на REST-запросе. Закрытие соединения по истечении токена оставляло его
-        // без событий до перезагрузки страницы (найдено ручной проверкой клиента).
+        // On reconnect the current web client sends the same token until it gets
+        // 401 on a REST request. Closing the connection on token expiry left it
+        // without events until the page was reloaded (found by manual client testing).
         await using var factory = new ApiFactory(Db.ConnectionString, FastSessionCheck);
         var user = await factory.RegisterAsync("alice");
         await using var hub = factory.CreateHubConnection(ApiClient.ShortLivedToken(
@@ -41,7 +41,7 @@ public class HubAccessTests(PostgresFixture db) : DbTest(db)
     [Fact]
     public async Task Connection_WithoutSession_IsClosed_WhenAccessTokenExpires()
     {
-        // Токен без sid не привязан ко входу — нечем проверить, что доступ ещё есть.
+        // A token without sid is not bound to a sign-in - there is no way to check that access still exists.
         await using var factory = new ApiFactory(Db.ConnectionString, FastSessionCheck);
         var user = await factory.RegisterAsync("alice");
         await using var hub = factory.CreateHubConnection(
@@ -54,8 +54,8 @@ public class HubAccessTests(PostgresFixture db) : DbTest(db)
     [Fact]
     public async Task Connection_IsClosed_WhenRefreshTokenReuseRevokesTheSession()
     {
-        // Повтор уже использованного refresh-токена гасит всю цепочку входа (кража).
-        // Соединение, открытое с этого входа, должно закрыться, хотя access-токен жив.
+        // Reuse of an already used refresh token kills the whole sign-in chain (theft).
+        // The connection opened from this sign-in must close even though the access token is still alive.
         await using var factory = new ApiFactory(Db.ConnectionString, new Dictionary<string, string?>(FastSessionCheck)
         {
             ["Jwt:RefreshGraceSeconds"] = "0",
@@ -129,8 +129,8 @@ public class HubAccessTests(PostgresFixture db) : DbTest(db)
     [Fact]
     public async Task Reconnect_WithTokenOfRevokedSession_IsRejected()
     {
-        // Access-токен ещё не истёк, но сессия уже закрыта: переподключиться нельзя,
-        // иначе logout-all обходится простым реконнектом.
+        // The access token has not expired yet, but the session is already closed: reconnecting is impossible,
+        // otherwise logout-all would be bypassed by a simple reconnect.
         await using var factory = new ApiFactory(Db.ConnectionString);
         var user = await factory.RegisterAsync("alice");
         using var client = factory.CreateClient(user.Token);
@@ -143,7 +143,7 @@ public class HubAccessTests(PostgresFixture db) : DbTest(db)
         }
         catch (Exception)
         {
-            // отказ прямо на старте — тоже правильный исход
+            // a refusal right at startup is also a correct outcome
         }
 
         Assert.True(await hub.WaitForCloseAsync(CloseTimeout));

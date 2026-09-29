@@ -1,14 +1,14 @@
 namespace BasicApi.Storage.Dto;
 
-/// <summary>Исход попытки сдвинуть указатель прочитанного.</summary>
+/// <summary>Outcome of an attempt to move the read pointer.</summary>
 public enum ReadPointerUpdate
 {
-    /// <summary>Сообщения нет в этом чате — указатель не тронут.</summary>
+    /// <summary>The message is not in this chat — the pointer is untouched.</summary>
     MessageNotFound,
 
-    /// <summary>Указатель сдвинут вперёд.</summary>
+    /// <summary>The pointer moved forward.</summary>
     Moved,
 
-    /// <summary>Указатель уже на этом сообщении или дальше — назад не двигаем.</summary>
+    /// <summary>The pointer is already at this message or beyond — we do not move it back.</summary>
     NotMoved
 }

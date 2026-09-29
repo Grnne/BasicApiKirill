@@ -16,7 +16,7 @@ public class ReadStateTests(PostgresFixture db) : DbTest(db)
     private async Task<int> UnreadAsync(Guid chatId, Guid userId) =>
         (await Chats.GetChatListItemAsync(chatId, userId))!.UnreadCount;
 
-    /// <summary>Указатель прочитанного — seq последнего прочитанного сообщения.</summary>
+    /// <summary>The read pointer is the seq of the last read message.</summary>
     private async Task<long> PointerAsync(Guid chatId, Guid userId)
     {
         await using var connection = new NpgsqlConnection(Db.ConnectionString);
@@ -28,7 +28,7 @@ public class ReadStateTests(PostgresFixture db) : DbTest(db)
     [Fact]
     public async Task OwnMessages_AreNotCountedAsUnread()
     {
-        // Раньше отправитель видел у себя «непрочитанные» — свои же сообщения.
+        // Previously the sender saw their own messages as "unread".
         var alice = await Data.UserAsync("alice");
         var bob = await Data.UserAsync("bob");
         var chat = await Data.PrivateChatAsync(alice, bob);
@@ -49,7 +49,7 @@ public class ReadStateTests(PostgresFixture db) : DbTest(db)
         var chat = await Data.PrivateChatAsync(alice, bob);
         var ids = new List<Guid>();
         for (var i = 0; i < 3; i++)
-            ids.Add(await Data.MessageAsync(chat, bob, $"m{i}", TestData.T0)); // порядок — по seq, не по времени
+            ids.Add(await Data.MessageAsync(chat, bob, $"m{i}", TestData.T0)); // order is by seq, not by time
 
         Assert.Equal(ReadPointerUpdate.Moved, await Messages.MarkReadAsync(chat, alice, ids[1]));
 
@@ -77,7 +77,7 @@ public class ReadStateTests(PostgresFixture db) : DbTest(db)
     [Fact]
     public async Task MarkRead_OlderMessage_DoesNotMovePointerBack()
     {
-        // Два устройства: старое отчиталось позже нового — прочитанное не должно «откатиться».
+        // Two devices: the old one reported later than the new one — what is read must not "roll back".
         var alice = await Data.UserAsync("alice");
         var bob = await Data.UserAsync("bob");
         var chat = await Data.PrivateChatAsync(alice, bob);

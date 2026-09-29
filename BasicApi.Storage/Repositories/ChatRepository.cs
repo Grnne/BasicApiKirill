@@ -26,7 +26,7 @@ public class ChatRepository(IDbSession db) : IChatRepository
         return db.QueryFirstOrDefaultAsync<Chat>(sql, new { chatId }, ct);
     }
 
-    /// <summary>Ключ пары для личного чата; порядок участников не важен.</summary>
+    /// <summary>Pair key for a private chat; participant order does not matter.</summary>
     private const string PrivateKeySql =
         "LEAST(@userId, @otherUserId)::text || ':' || GREATEST(@userId, @otherUserId)::text";
 
@@ -34,8 +34,8 @@ public class ChatRepository(IDbSession db) : IChatRepository
         Guid userId, Guid otherUserId, CancellationToken ct = default) =>
         db.InTransactionAsync(async ct =>
         {
-            // Уникальный индекс по private_key решает гонку: параллельная вставка той же
-            // пары ждёт коммита первой и получает DO NOTHING, а не второй чат.
+            // The unique index on private_key resolves the race: a parallel insert of the same
+            // pair waits for the first one to commit and gets DO NOTHING instead of a second chat.
             var chatId = Guid.NewGuid();
             var now = DateTime.UtcNow;
             var inserted = await db.QueryFirstOrDefaultAsync<Guid?>($@"
@@ -106,7 +106,7 @@ public class ChatRepository(IDbSession db) : IChatRepository
             comp.display_name AS CompanionName,
             comp.username AS CompanionUsername,
 
-            -- Непрочитанные: чужие сообщения после указателя прочитанного. Свои не считаются.
+            -- Unread: other members' messages after the read pointer. Own messages do not count.
             (
                 SELECT COUNT(*)
                 FROM messages m_unread

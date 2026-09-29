@@ -3,12 +3,12 @@ using System.Buffers.Binary;
 namespace BasicApi.Storage.Dto;
 
 /// <summary>
-/// Курсор пагинации сообщений — непрозрачная для клиента строка (base64url).
+/// Message pagination cursor — a string opaque to the client (base64url).
 ///
-/// v2 (текущий): байт версии 2 и seq последнего сообщения страницы (int64 LE).
-/// v1 (до seq, без байта версии): 32 байта — ticks created_at, 8 нулевых байт, id
-/// сообщения. Такие курсоры клиенты могли получить до обновления; они продолжают
-/// работать — по id находится seq того же сообщения.
+/// v2 (current): version byte 2 and the seq of the page's last message (int64 LE).
+/// v1 (before seq, no version byte): 32 bytes — created_at ticks, 8 zero bytes, the message
+/// id. Clients may have received such cursors before the update; they keep
+/// working — the seq of the same message is found by id.
 /// </summary>
 public readonly record struct MessageCursor
 {
@@ -16,10 +16,10 @@ public readonly record struct MessageCursor
     private const int Version2Length = 9;
     private const int Version1Length = 32;
 
-    /// <summary>Страница — сообщения строго раньше этого номера. Null — курсор v1.</summary>
+    /// <summary>The page — messages strictly earlier than this number. Null — a v1 cursor.</summary>
     public long? BeforeSeq { get; private init; }
 
-    /// <summary>Курсор v1: id последнего сообщения предыдущей страницы.</summary>
+    /// <summary>v1 cursor: id of the last message of the previous page.</summary>
     public Guid? LegacyMessageId { get; private init; }
 
     public static MessageCursor BeforeSeqOf(long seq) => new() { BeforeSeq = seq };
@@ -35,7 +35,7 @@ public readonly record struct MessageCursor
         return ToBase64Url(bytes);
     }
 
-    /// <summary>Курсор v1, как его выдавали до seq. Только для проверки совместимости.</summary>
+    /// <summary>A v1 cursor as it was issued before seq. Only for compatibility checks.</summary>
     public static string EncodeLegacy(DateTime createdAt, Guid messageId)
     {
         Span<byte> bytes = stackalloc byte[Version1Length];
@@ -45,8 +45,8 @@ public readonly record struct MessageCursor
     }
 
     /// <summary>
-    /// Разбирает курсор от клиента. Никогда не бросает: подделанный или обрезанный
-    /// курсор — ошибка клиента (400), а не 500.
+    /// Parses a cursor from the client. Never throws: a forged or truncated
+    /// cursor is a client error (400), not a 500.
     /// </summary>
     public static bool TryDecode(string? cursor, out MessageCursor result)
     {

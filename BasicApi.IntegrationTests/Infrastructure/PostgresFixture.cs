@@ -11,13 +11,13 @@ using Testcontainers.PostgreSql;
 namespace BasicApi.IntegrationTests.Infrastructure;
 
 /// <summary>
-/// Один контейнер Postgres на весь прогон. Схема создаётся теми же миграциями,
-/// что и в проде, — поэтому тесты заодно проверяют, что миграции применяются с нуля.
-/// Требуется запущенный Docker.
+/// One Postgres container for the whole run. The schema is created by the same
+/// migrations as in production, so the tests also verify that migrations apply from scratch.
+/// Requires a running Docker.
 /// </summary>
 public sealed class PostgresFixture : IAsyncLifetime
 {
-    // Та же мажорная версия, что в docker-compose.prod.yml.
+    // The same major version as in docker-compose.prod.yml.
     public const string Image = "postgres:17-alpine";
 
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder(Image)
@@ -36,7 +36,7 @@ public sealed class PostgresFixture : IAsyncLifetime
 
     public Task DisposeAsync() => _container.DisposeAsync().AsTask();
 
-    /// <summary>Применяет все миграции к указанной базе.</summary>
+    /// <summary>Applies all migrations to the given database.</summary>
     public static void MigrateUp(string connectionString) =>
         WithRunner(connectionString, runner => runner.MigrateUp());
 
@@ -54,7 +54,7 @@ public sealed class PostgresFixture : IAsyncLifetime
         action(scope.ServiceProvider.GetRequiredService<IMigrationRunner>());
     }
 
-    /// <summary>Создаёт пустую базу в том же контейнере и возвращает строку подключения к ней.</summary>
+    /// <summary>Creates an empty database in the same container and returns a connection string to it.</summary>
     public async Task<string> CreateEmptyDatabaseAsync(string name)
     {
         await using (var connection = new NpgsqlConnection(ConnectionString))
@@ -66,7 +66,7 @@ public sealed class PostgresFixture : IAsyncLifetime
         return new NpgsqlConnectionStringBuilder(ConnectionString) { Database = name }.ToString();
     }
 
-    /// <summary>Удаляет все данные, схема остаётся.</summary>
+    /// <summary>Deletes all data; the schema stays.</summary>
     public async Task ResetAsync()
     {
         await using var connection = new NpgsqlConnection(ConnectionString);
@@ -82,8 +82,8 @@ public sealed class PostgresCollection : ICollectionFixture<PostgresFixture>
 }
 
 /// <summary>
-/// Базовый класс: каждый тест начинается с пустой базы. Все тесты с общей базой
-/// живут в одной коллекции, поэтому xUnit гоняет их последовательно.
+/// Base class: every test starts with an empty database. All tests sharing the database
+/// live in one collection, so xUnit runs them sequentially.
 /// </summary>
 [Collection(PostgresCollection.Name)]
 public abstract class DbTest(PostgresFixture db) : IAsyncLifetime
@@ -91,7 +91,7 @@ public abstract class DbTest(PostgresFixture db) : IAsyncLifetime
     protected PostgresFixture Db { get; } = db;
     protected TestData Data { get; } = new(db.ConnectionFactory);
 
-    /// <summary>Своя сессия на каждый вызов — как отдельный запрос в API.</summary>
+    /// <summary>A separate session per call, like a separate request to the API.</summary>
     protected DbSession NewSession() => new(Db.ConnectionFactory);
 
     public virtual Task InitializeAsync() => Db.ResetAsync();

@@ -10,8 +10,8 @@ using Moq;
 namespace BasicApi.Tests.Services;
 
 /// <summary>
-/// Тесты на получение одного элемента списка чатов (GET /api/chats/{chatId}/item)
-/// и на то, что маппинг companion-полей не теряется в поиске чатов.
+/// Tests for fetching a single chat list item (GET /api/chats/{chatId}/item)
+/// and for companion fields not being lost in chat search.
 /// </summary>
 public class ChatServiceChatItemTests
 {
@@ -108,7 +108,7 @@ public class ChatServiceChatItemTests
         _chatRepoMock.Verify(r => r.GetChatListItemAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    // ========== SearchChatsAsync: companion-поля не должны теряться ==========
+    // ========== SearchChatsAsync: companion fields must not be lost ==========
 
     [Fact]
     public async Task SearchChatsAsync_PrivateChat_KeepsCompanionIdAndUsername()
@@ -139,7 +139,7 @@ public class ChatServiceChatItemTests
         // Act
         var result = await _service.SearchChatsAsync(userId, "ali", "private", 20);
 
-        // Assert — регрессия: раньше маппер поиска терял CompanionId/CompanionUsername
+        // Assert - regression: the search mapper used to lose CompanionId/CompanionUsername
         var item = Assert.Single(result.Items);
         Assert.Equal(companionId, item.CompanionId);
         Assert.Equal("alice", item.CompanionUsername);

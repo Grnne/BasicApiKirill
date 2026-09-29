@@ -15,7 +15,7 @@ public class UserStatusServiceTypingTests
     [Fact]
     public async Task Typing_ExpiresAfterTtl_WhenClientNeverSendsStop()
     {
-        // Клиент закрыл вкладку посреди набора — «печатает» не должно висеть вечно.
+        // The client closed the tab mid-typing — "typing" must not hang forever.
         await _service.SetTypingAsync(_chat, _user, true);
 
         _time.Advance(UserStatusService.TypingTtl - TimeSpan.FromSeconds(1));

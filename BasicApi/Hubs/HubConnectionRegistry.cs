@@ -4,14 +4,14 @@ using Microsoft.AspNetCore.SignalR;
 namespace BasicApi.Hubs;
 
 /// <summary>
-/// Живые соединения хаба с привязкой к пользователю и сессии. Нужен, чтобы
-/// отзыв доступа (logout, logout-all) обрывал и уже открытые соединения:
-/// сами по себе они живут часами, независимо от судьбы refresh-токена.
-/// Остальные концы входа (отзыв цепочки при краже токена, истечение сессии)
-/// ловит <see cref="HubSessionMonitor"/>.
+/// Live hub connections tied to a user and a session. Needed so that
+/// revoking access (logout, logout-all) also drops connections that are already open:
+/// on their own they live for hours, regardless of the fate of the refresh token.
+/// The other ways a sign-in ends (chain revocation on token theft, session expiry)
+/// are caught by <see cref="HubSessionMonitor"/>.
 ///
-/// В памяти процесса — как и presence. При горизонтальном масштабировании
-/// понадобится рассылка команды «оборвать» между узлами (backplane).
+/// Held in process memory, like presence. With horizontal scaling
+/// a "drop" command broadcast between nodes (backplane) will be needed.
 /// </summary>
 public sealed class HubConnectionRegistry
 {
@@ -24,23 +24,23 @@ public sealed class HubConnectionRegistry
 
     public void Remove(string connectionId) => _connections.TryRemove(connectionId, out _);
 
-    /// <summary>Обрывает все соединения пользователя; возвращает их число.</summary>
+    /// <summary>Drops all connections of a user; returns their count.</summary>
     public int AbortUser(Guid userId) => Abort(e => e.UserId == userId);
 
-    /// <summary>Обрывает соединения, открытые с токенами одной цепочки сессий (одного входа).</summary>
+    /// <summary>Drops connections opened with tokens of one session chain (one sign-in).</summary>
     public int AbortSessionFamily(Guid sessionFamilyId) => Abort(e => e.SessionFamilyId == sessionFamilyId);
 
-    /// <summary>Входы, с которых сейчас открыты соединения.</summary>
+    /// <summary>Sign-ins that currently have open connections.</summary>
     public IReadOnlyCollection<Guid> SessionFamilies() =>
         _connections.Values.Select(e => e.SessionFamilyId).OfType<Guid>().Distinct().ToList();
 
-    /// <summary>Обрывает соединения этих входов; возвращает их число.</summary>
+    /// <summary>Drops the connections of these sign-ins; returns their count.</summary>
     public int AbortSessionFamilies(IReadOnlySet<Guid> sessionFamilyIds) =>
         Abort(e => e.SessionFamilyId is { } id && sessionFamilyIds.Contains(id));
 
     /// <summary>
-    /// Обрывает соединения, открытые с токеном без входа (<c>sid</c>), чей срок истёк:
-    /// проверить, что доступ у них ещё есть, нечем.
+    /// Drops connections opened with a token without a sign-in (<c>sid</c>) whose lifetime has
+    /// expired: there is nothing to check that they still have access.
     /// </summary>
     public int AbortExpiredWithoutSession(DateTimeOffset now) =>
         Abort(e => e.SessionFamilyId is null && e.TokenExpiresAt <= now);

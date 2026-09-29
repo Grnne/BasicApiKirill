@@ -28,8 +28,8 @@ public class MessagesApiTests(PostgresFixture db) : DbTest(db)
     [Fact]
     public async Task JumpToDate_ReturnsHistoryUpToThatMoment_IncludingThePivotMessage()
     {
-        // Раньше «переход к дате» возвращал пустую страницу: опорное сообщение
-        // читалось без маппинга колонок, и курсор строился от 0001-01-01.
+        // Previously "jump to date" returned an empty page: the anchor message was read
+        // without column mapping, and the cursor was built from 0001-01-01.
         var (factory, client, chat, alice, bob) = await ArrangeAsync();
         await using var _ = factory;
         using var __ = client;
@@ -51,7 +51,7 @@ public class MessagesApiTests(PostgresFixture db) : DbTest(db)
         await Data.MessageAsync(chat, alice, "first", TestData.T0);
         await Data.MessageAsync(chat, alice, "second", TestData.T0.AddHours(1));
 
-        // 12:00Z, записанное как 15:00+03:00 — тот же момент.
+        // 12:00Z stored as 15:00+03:00 is the same instant.
         var page = await GetJsonAsync(client,
             $"/api/chats/{chat}/messages/at?date={Uri.EscapeDataString("2026-01-01T15:00:00+03:00")}&limit=10");
 
@@ -112,7 +112,7 @@ public class MessagesApiTests(PostgresFixture db) : DbTest(db)
     [Fact]
     public async Task Search_TotalCount_IsTheSameOnEveryPage()
     {
-        // Раньше на второй и следующих страницах totalCount был 0.
+        // Previously totalCount was 0 on the second and following pages.
         var (factory, client, chat, alice, _) = await ArrangeAsync();
         await using var _f = factory;
         using var _c = client;

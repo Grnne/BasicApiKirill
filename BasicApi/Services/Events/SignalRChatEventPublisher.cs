@@ -6,13 +6,13 @@ using Microsoft.AspNetCore.SignalR;
 namespace BasicApi.Services.Events;
 
 /// <summary>
-/// Рассылка событий через SignalR сразу, в прежнем формате: имена событий и аргументы
-/// те же, что клиент получал от хаба. Для эфемерных событий; остальные идут через
+/// Broadcasts events through SignalR immediately, in the former format: event names and arguments
+/// are the same as the client received from the hub. For ephemeral events; the rest go through
 /// <see cref="OutboxChatEventPublisher"/>.
 /// </summary>
 public sealed class SignalRChatEventPublisher(IHubContext<ChatHub> hub) : IChatEventPublisher
 {
-    /// <summary>Длина текста в превью списка чатов.</summary>
+    /// <summary>Text length in the chat list preview.</summary>
     public const int PreviewLength = 100;
 
     public async Task MessageCreatedAsync(
@@ -39,7 +39,7 @@ public sealed class SignalRChatEventPublisher(IHubContext<ChatHub> hub) : IChatE
             ? Task.CompletedTask
             : hub.Clients.Users(ToStrings(recipientIds)).SendAsync("TypingChanged", chatId, userId, isTyping, ct);
 
-    /// <summary>Сообщение для строки списка чатов: текст обрезан.</summary>
+    /// <summary>Message for a chat list row: the text is truncated.</summary>
     public static MessageDto Preview(MessageDto message) => new()
     {
         Id = message.Id,

@@ -166,7 +166,7 @@ public class PresenceServiceStatusTests
         // Act
         var result = await _service.GetTypingAsync(userId);
 
-        // Assert — сервис спрашивают только про чаты пользователя, чужие даже не читаются
+        // Assert - the service is asked only about the user's chats, others' are not even read
         Assert.Equal([userChat], requested);
         Assert.DoesNotContain(otherChat, requested!);
         var dto = result;
@@ -193,7 +193,7 @@ public class PresenceServiceStatusTests
         Assert.Empty(dto.Items);
     }
 
-    // ========== GetUserStatusAsync (точечный статус одного пользователя) ==========
+    // ========== GetUserStatusAsync (point status of a single user) ==========
 
     [Fact]
     public async Task GetUserStatusAsync_SharedChatAndOnline_ReturnsOnlineTrue()
@@ -237,7 +237,7 @@ public class PresenceServiceStatusTests
         // Act
         var result = await _service.GetUserStatusAsync(userId, target);
 
-        // Assert — оффлайн отдаётся явным false, а не отсутствием записи
+        // Assert - offline is returned as an explicit false, not as a missing entry
         var dto = result;
         Assert.Equal(target, dto.UserId);
         Assert.False(dto.IsOnline);
@@ -276,7 +276,7 @@ public class PresenceServiceStatusTests
             .Setup(r => r.GetAllChatMembersAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([Guid.NewGuid()]);
 
-        // Act & Assert — статус видно только по участникам общих чатов
+        // Act & Assert - the status is visible only to members of shared chats
         var ex = await Assert.ThrowsAsync<NotFoundException>(() =>
             _service.GetUserStatusAsync(userId, stranger));
 
@@ -284,7 +284,7 @@ public class PresenceServiceStatusTests
         _statusServiceMock.Verify(s => s.GetOnlineUserIdsAsync(It.IsAny<IReadOnlySet<Guid>>()), Times.Never);
     }
 
-    // ========== GetUsersStatusAsync (батч по списку id) ==========
+    // ========== GetUsersStatusAsync (batch by id list) ==========
 
     [Fact]
     public async Task GetUsersStatusAsync_ReturnsBothOnlineAndOfflineForRequestedIds()
@@ -331,7 +331,7 @@ public class PresenceServiceStatusTests
         // Act
         var result = await _service.GetUsersStatusAsync(userId, [member, stranger]);
 
-        // Assert — чужие id молча выпадают из ответа
+        // Assert - ids of others silently drop out of the response
         var dto = result;
         Assert.Equal(member, Assert.Single(dto.Items).UserId);
     }
@@ -372,7 +372,7 @@ public class PresenceServiceStatusTests
     [Fact]
     public async Task GetUsersStatusAsync_TooManyIds_ThrowsBadRequest()
     {
-        // Arrange — лимит батча 200 id
+        // Arrange - the batch limit is 200 ids
         var ids = Enumerable.Range(0, 201).Select(_ => Guid.NewGuid()).ToList();
 
         // Act & Assert

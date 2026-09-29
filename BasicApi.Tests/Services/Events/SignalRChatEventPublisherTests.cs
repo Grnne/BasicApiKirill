@@ -6,8 +6,8 @@ using BasicApi.Tests.TestDoubles;
 namespace BasicApi.Tests.Services.Events;
 
 /// <summary>
-/// Формат событий на проводе — контракт с фронтом: имена, адресаты и аргументы
-/// те же, что раньше рассылал хаб.
+/// The event format on the wire is a contract with the frontend: names, recipients and arguments
+/// are the same as the hub used to send.
 /// </summary>
 public class SignalRChatEventPublisherTests
 {

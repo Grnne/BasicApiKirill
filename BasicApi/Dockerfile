@@ -2,27 +2,27 @@
 WORKDIR /app
 EXPOSE 8080
 
-# ── Фронтенд ──
-# Отдельная стадия: node нужен только для сборки, в финальный образ он не попадёт.
+# ── Frontend ──
+# A separate stage: node is needed only for the build and does not reach the final image.
 FROM node:22-alpine AS client
 WORKDIR /client
 
-# Сначала манифесты — тогда слой с npm ci переиспользуется, пока зависимости
-# не поменялись, и пересборка после правки кода занимает секунды.
+# Manifests first: the npm ci layer is reused while dependencies stay the same,
+# so a rebuild after a code change takes seconds.
 COPY BasicWebClient/package.json BasicWebClient/package-lock.json ./
 RUN npm ci
 
 COPY BasicWebClient/ ./
-# Сборка включает проверку типов (vue-tsc): битые типы валят сборку образа,
-# а не всплывают в проде. --outDir переопределяет путь из vite.config,
-# который рассчитан на локальную разработку.
+# The build includes type checking (vue-tsc): broken types fail the image build
+# instead of surfacing in production. --outDir overrides the path from vite.config,
+# which is meant for local development.
 RUN npm run build -- --outDir dist
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 
-# ✅ Копируем оба csproj до restore
+# ✅ Copy both csproj files before restore
 COPY ["BasicApi/BasicApi.csproj", "BasicApi/"]
 COPY ["BasicApi.Storage/BasicApi.Storage.csproj", "BasicApi.Storage/"]
 RUN dotnet restore "./BasicApi/BasicApi.csproj"
@@ -35,7 +35,7 @@ FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
 RUN dotnet publish "./BasicApi.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
 
-# Собранный фронтенд кладём в статику API — раздаёт его Kestrel.
+# The built frontend goes into the API's static files; Kestrel serves it.
 COPY --from=client /client/dist /app/publish/wwwroot/client
 
 FROM base AS final

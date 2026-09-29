@@ -33,7 +33,7 @@ public class MessageServicePageTests
             Text = msg.Text,
             CreatedAt = msg.CreatedAt,
             IsDeleted = msg.IsDeleted,
-            Seq = msg.CreatedAt.Ticks, // порядок номеров совпадает со временем, как у настоящих сообщений
+            Seq = msg.CreatedAt.Ticks, // sequence numbers follow the time order, as with real messages
             SenderName = senderName
         };
 
@@ -158,7 +158,7 @@ public class MessageServicePageTests
         // Act
         var result = await _service.GetPageAsync(chatId, userId, null, 20);
 
-        // Assert — следующей страницы нет, значит и курсора на неё нет
+        // Assert — there is no next page, so there is no cursor for it either
         Assert.False(result.HasMore);
         Assert.Null(result.NextCursor);
     }

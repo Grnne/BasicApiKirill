@@ -36,7 +36,7 @@ public class MigrationTests(PostgresFixture db)
     [Fact]
     public async Task MigrateDownToZero_ThenUp_Succeeds()
     {
-        // Откат нужен при неудачном деплое: Down() каждой миграции должен работать.
+        // Rollback is needed after a failed deploy: Down() of every migration must work.
         var connectionString = await db.CreateEmptyDatabaseAsync("migrations_roundtrip");
         PostgresFixture.MigrateUp(connectionString);
 
@@ -57,8 +57,8 @@ public class MigrationTests(PostgresFixture db)
     [InlineData("chat_members", "ix_chat_members_user_id")]
     public async Task Schema_HasIndex(string table, string index)
     {
-        // «Все чаты пользователя» — самый частый запрос; PK (chat_id, user_id)
-        // по user_id не помогает, без отдельного индекса — полный скан.
+        // "All chats of a user" is the most frequent query; the PK (chat_id, user_id)
+        // does not help with user_id - without a separate index it is a full scan.
         await using var connection = new NpgsqlConnection(db.ConnectionString);
         var exists = await connection.ExecuteScalarAsync<bool>(
             "SELECT EXISTS (SELECT 1 FROM pg_indexes WHERE tablename = @table AND indexname = @index)",
@@ -70,7 +70,7 @@ public class MigrationTests(PostgresFixture db)
     [Fact]
     public async Task Schema_HasNoTimestampsWithoutTimeZone()
     {
-        // timestamp без зоны зависит от часового пояса сессии базы (см. миграцию 8).
+        // timestamp without zone depends on the database session time zone (see migration 8).
         await using var connection = new NpgsqlConnection(db.ConnectionString);
         var columns = await connection.QueryAsync<string>(@"
             SELECT table_name || '.' || column_name FROM information_schema.columns

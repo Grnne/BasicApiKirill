@@ -6,12 +6,12 @@ using Dapper;
 namespace BasicApi.Storage;
 
 /// <summary>
-/// Доступ к базе для репозиториев одного запроса (или вызова хаба).
-/// Вне транзакции каждый запрос берёт соединение из пула и сразу возвращает его —
-/// поэтому независимые запросы можно запускать параллельно. Внутри
-/// <see cref="InTransactionAsync{T}"/> все запросы всех репозиториев идут в одной
-/// транзакции на одном соединении: так доменное изменение и его событие (outbox)
-/// фиксируются вместе. Параллельных запросов внутри транзакции быть не должно.
+/// Database access for the repositories of a single request (or hub call).
+/// Outside a transaction each query takes a connection from the pool and returns it immediately —
+/// so independent queries can run in parallel. Inside
+/// <see cref="InTransactionAsync{T}"/> all queries of all repositories go in a single
+/// transaction on a single connection: this way a domain change and its event (outbox)
+/// are committed together. There must be no parallel queries inside a transaction.
 /// </summary>
 public interface IDbSession
 {
@@ -24,15 +24,15 @@ public interface IDbSession
     Task<T?> ExecuteScalarAsync<T>(string sql, object? param = null, CancellationToken ct = default);
 
     /// <summary>
-    /// Действие после коммита текущей транзакции (при откате — не выполняется);
-    /// вне транзакции — сразу. Например, разбудить рассылку событий: до коммита
-    /// она их ещё не увидит.
+    /// An action after the current transaction commits (not run on rollback);
+    /// outside a transaction — immediately. For example, to wake up the event dispatcher: before the commit
+    /// it would not see the events yet.
     /// </summary>
     void OnCommitted(Action action);
 
     /// <summary>
-    /// Выполняет работу в транзакции: успех — коммит, исключение — откат.
-    /// Вложенный вызов присоединяется к уже открытой транзакции.
+    /// Runs work in a transaction: success — commit, exception — rollback.
+    /// A nested call joins the already open transaction.
     /// </summary>
     Task<T> InTransactionAsync<T>(
         Func<CancellationToken, Task<T>> work,
@@ -69,7 +69,7 @@ public sealed class DbSession(IDbConnectionFactory connectionFactory) : IDbSessi
         if (_transaction is not null)
             return await query(_connection!, new CommandDefinition(sql, param, _transaction, cancellationToken: ct));
 
-        // Dapper сам откроет и закроет соединение; в пул оно вернётся при Dispose.
+        // Dapper opens and closes the connection itself; it goes back to the pool on Dispose.
         using var connection = connectionFactory.CreateConnection();
         return await query(connection, new CommandDefinition(sql, param, cancellationToken: ct));
     }
@@ -99,15 +99,15 @@ public sealed class DbSession(IDbConnectionFactory connectionFactory) : IDbSessi
 
             var result = await work(ct);
 
-            // Коммит не отменяем: запрос мог оборваться уже после того, как работа
-            // сделана, и откатывать её из-за ушедшего клиента нельзя.
+            // We do not cancel the commit: the request may have been aborted after the work
+            // was already done, and it must not be rolled back because the client left.
             await _transaction.CommitAsync(CancellationToken.None);
             committed = [.. _onCommitted];
             return result;
         }
         finally
         {
-            // Без коммита Dispose транзакции откатывает её.
+            // Without a commit, disposing the transaction rolls it back.
             if (_transaction is not null)
                 await _transaction.DisposeAsync();
             await _connection.DisposeAsync();

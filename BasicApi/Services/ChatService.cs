@@ -64,13 +64,13 @@ public sealed class ChatService(
         if (userId == otherUserId)
             throw new BadRequestException("Cannot create chat with yourself", "SELF_CHAT");
 
-        // Без этой проверки несуществующий собеседник ронял вставку на внешнем ключе (500).
-        // Деактивированный — тоже 404: писать ему некому.
+        // Without this check a nonexistent counterpart broke the insert on the foreign key (500).
+        // A deactivated one is also 404: there is nobody to write to.
         var other = await userRepository.GetByIdAsync(otherUserId, ct);
         if (other is null || !other.IsActive)
             throw new NotFoundException("User not found", "USER_NOT_FOUND");
 
-        // Чат и события о нём — одна транзакция.
+        // The chat and its events are one transaction.
         var result = await db.InTransactionAsync(async ct =>
         {
             var (chatId, created) = await chatRepository.GetOrCreatePrivateChatAsync(userId, otherUserId, ct);
@@ -80,7 +80,7 @@ public sealed class ChatService(
 
             if (created)
             {
-                // Карточка для второго участника своя: собеседник в ней — создатель чата.
+                // The second participant gets their own card: the counterpart in it is the chat creator.
                 var theirs = ChatListItemMapper.Map(await chatRepository.GetChatListItemAsync(chatId, otherUserId, ct)
                     ?? throw ChatNotFound());
                 await events.ChatCreatedAsync(otherUserId, theirs, ct: ct);
@@ -104,7 +104,7 @@ public sealed class ChatService(
 
         var typeFilter = type?.ToLowerInvariant();
 
-        // Вне транзакции каждый запрос берёт своё соединение — можно параллельно.
+        // Outside a transaction each query takes its own connection — can run in parallel.
         var rowsTask = chatRepository.SearchChatsBatchedAsync(userId, query, typeFilter, limit, ct);
         var countTask = chatRepository.CountChatsByQueryAsync(userId, query, typeFilter, ct);
 

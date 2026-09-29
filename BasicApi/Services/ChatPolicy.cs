@@ -3,8 +3,8 @@ using BasicApi.Middleware.Exceptions;
 namespace BasicApi.Services;
 
 /// <summary>
-/// Решение политики: разрешено или нет, и почему — код уходит клиенту как есть
-/// (REST — 403 с этим errorCode, хаб — <c>"CODE: message"</c>).
+/// A policy decision: allowed or not, and why — the code goes to the client as is
+/// (REST — 403 with this errorCode, hub — <c>"CODE: message"</c>).
 /// </summary>
 public sealed record PolicyDecision(bool Allowed, string? Code = null, string? Reason = null)
 {
@@ -13,24 +13,24 @@ public sealed record PolicyDecision(bool Allowed, string? Code = null, string? R
 }
 
 /// <summary>
-/// Единственное место, где решается, кто что может в чате. Сервисы спрашивают
-/// политику и не проверяют членство сами. Сейчас правило одно — «участник чата»;
-/// права в группах, блокировки и настройки приватности (план 2) встанут сюда,
-/// не трогая вызывающий код. Права на правку сообщений и управление участниками
-/// появятся вместе с этими функциями.
+/// The single place that decides who may do what in a chat. Services ask the
+/// policy and do not check membership themselves. For now there is one rule — "chat member";
+/// group permissions, blocks and privacy settings (plan 2) will go here
+/// without touching the calling code. Permissions for editing messages and managing members
+/// will appear together with those features.
 /// </summary>
 public interface IChatPolicy
 {
-    /// <summary>Читать историю, искать, видеть состав, подписываться на события чата, отмечать прочитанное.</summary>
+    /// <summary>Read history, search, see the member list, subscribe to chat events, mark as read.</summary>
     Task<PolicyDecision> CanReadAsync(Guid userId, Guid chatId, CancellationToken ct = default);
 
-    /// <summary>Писать сообщения и показывать «печатает».</summary>
+    /// <summary>Write messages and show "typing".</summary>
     Task<PolicyDecision> CanPostAsync(Guid userId, Guid chatId, CancellationToken ct = default);
 
-    /// <summary>Кто видит онлайн-статус пользователя — им рассылаются его изменения.</summary>
+    /// <summary>Who sees a user's online status — their changes are broadcast to them.</summary>
     Task<IReadOnlyCollection<Guid>> GetPresenceAudienceAsync(Guid userId, CancellationToken ct = default);
 
-    /// <summary>Чей онлайн-статус из <paramref name="userIds"/> виден <paramref name="viewerId"/>.</summary>
+    /// <summary>Whose online status from <paramref name="userIds"/> is visible to <paramref name="viewerId"/>.</summary>
     Task<IReadOnlySet<Guid>> FilterPresenceVisibleAsync(
         Guid viewerId, IReadOnlyCollection<Guid> userIds, CancellationToken ct = default);
 }
@@ -52,7 +52,7 @@ public sealed class ChatPolicy(IMembershipService membership) : IChatPolicy
     public async Task<IReadOnlySet<Guid>> FilterPresenceVisibleAsync(
         Guid viewerId, IReadOnlyCollection<Guid> userIds, CancellationToken ct = default)
     {
-        // Свой статус виден всегда; чужой — если есть общий чат.
+        // Your own status is always visible; someone else's — if there is a shared chat.
         var visible = (await membership.GetContactIdsAsync(viewerId, ct)).ToHashSet();
         visible.Add(viewerId);
         return userIds.Where(visible.Contains).ToHashSet();
@@ -66,11 +66,11 @@ public sealed class ChatPolicy(IMembershipService membership) : IChatPolicy
 
 public static class ChatPolicyExtensions
 {
-    /// <summary>Бросает 403 с кодом из решения политики, если чтение запрещено.</summary>
+    /// <summary>Throws 403 with the code from the policy decision if reading is not allowed.</summary>
     public static async Task DemandReadAsync(this IChatPolicy policy, Guid userId, Guid chatId, CancellationToken ct = default) =>
         Demand(await policy.CanReadAsync(userId, chatId, ct));
 
-    /// <summary>Бросает 403 с кодом из решения политики, если писать запрещено.</summary>
+    /// <summary>Throws 403 with the code from the policy decision if writing is not allowed.</summary>
     public static async Task DemandPostAsync(this IChatPolicy policy, Guid userId, Guid chatId, CancellationToken ct = default) =>
         Demand(await policy.CanPostAsync(userId, chatId, ct));
 

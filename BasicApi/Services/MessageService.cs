@@ -12,40 +12,40 @@ namespace BasicApi.Services;
 
 public interface IMessageService
 {
-    /// <summary>Страница истории: от новых к старым по курсору, внутри страницы — по порядку (seq).</summary>
+    /// <summary>A history page: newest to oldest by cursor, within a page - in order (seq).</summary>
     Task<CursorPaginatedResponse<MessageDto>> GetPageAsync(
         Guid chatId, Guid userId, string? cursor, int limit, CancellationToken ct = default);
 
     /// <summary>
-    /// «Переход к дате»: страница, которая заканчивается последним сообщением
-    /// в этот момент или раньше; дальше в прошлое — по <c>nextCursor</c>.
+    /// "Jump to date": a page that ends with the last message
+    /// at that moment or earlier; further into the past - via <c>nextCursor</c>.
     /// </summary>
     Task<CursorPaginatedResponse<MessageDto>> GetPageAtAsync(
         Guid chatId, Guid userId, DateTime date, int limit, CancellationToken ct = default);
 
-    /// <summary>Полнотекстовый поиск в чате с курсорной пагинацией.</summary>
+    /// <summary>Full-text search in a chat with cursor pagination.</summary>
     Task<SearchMessagesResponseDto> SearchAsync(
         Guid chatId, Guid userId, string query, string? cursor, int limit, CancellationToken ct = default);
 
     /// <summary>
-    /// Отправка: текст обрезается по краям и проверяется; участникам уходит событие.
-    /// С <paramref name="clientMessageId"/> отправка идемпотентна: повтор возвращает уже
-    /// созданное сообщение (<c>Created = false</c>) и ничего не рассылает.
-    /// Ошибки: 400 <c>MESSAGE_EMPTY</c>/<c>MESSAGE_TOO_LONG</c>, 403 <c>NOT_A_MEMBER</c>,
-    /// 409 <c>CLIENT_MESSAGE_ID_CONFLICT</c> — этот id уже занят сообщением в другом чате.
+    /// Send: the text is trimmed at the edges and validated; an event goes to the members.
+    /// With <paramref name="clientMessageId"/> sending is idempotent: a repeat returns the already
+    /// created message (<c>Created = false</c>) and broadcasts nothing.
+    /// Errors: 400 <c>MESSAGE_EMPTY</c>/<c>MESSAGE_TOO_LONG</c>, 403 <c>NOT_A_MEMBER</c>,
+    /// 409 <c>CLIENT_MESSAGE_ID_CONFLICT</c> - this id is already taken by a message in another chat.
     /// </summary>
     Task<SendResult> SendAsync(
         Guid chatId, Guid senderId, string? text, Guid? clientMessageId = null, CancellationToken ct = default);
 
     /// <summary>
-    /// Двигает указатель прочитанного вперёд. Сообщение не из этого чата — 404
-    /// <c>MESSAGE_NOT_FOUND</c>; попытка отмотать назад — не ошибка, ничего не меняется.
+    /// Moves the read pointer forward. A message not from this chat - 404
+    /// <c>MESSAGE_NOT_FOUND</c>; an attempt to move it back is not an error, nothing changes.
     /// </summary>
     Task MarkReadAsync(Guid chatId, Guid userId, Guid messageId, CancellationToken ct = default);
 }
 
-/// <param name="Message">Сообщение — новое или найденное по clientMessageId.</param>
-/// <param name="Created">false — это повтор уже выполненной отправки.</param>
+/// <param name="Message">The message - new or found by clientMessageId.</param>
+/// <param name="Created">false - this is a repeat of an already performed send.</param>
 public sealed record SendResult(MessageDto Message, bool Created);
 
 public sealed class MessageService(
@@ -67,10 +67,10 @@ public sealed class MessageService(
     public async Task<CursorPaginatedResponse<MessageDto>> GetPageAtAsync(
         Guid chatId, Guid userId, DateTime date, int limit, CancellationToken ct = default)
     {
-        // Доступ — до любых запросов к сообщениям чата.
+        // Access check - before any queries for the chat's messages.
         await policy.DemandReadAsync(userId, chatId, ct);
 
-        // Дата с любым смещением (…Z, …+03:00) — один и тот же момент; в базе — UTC.
+        // A date with any offset (...Z, ...+03:00) is one and the same moment; in the DB it is UTC.
         var utcDate = date.Kind switch
         {
             DateTimeKind.Local => date.ToUniversalTime(),
@@ -78,9 +78,9 @@ public sealed class MessageService(
             _ => date
         };
 
-        // Курсор исключающий, поэтому берём первое сообщение ПОСЛЕ даты: страница перед
-        // ним заканчивается последним сообщением до даты включительно. Сообщений после
-        // даты нет — это просто последняя страница.
+        // The cursor is exclusive, so we take the first message AFTER the date: the page before
+        // it ends with the last message up to and including the date. If there are no messages after
+        // the date, it is simply the last page.
         var firstAfter = await messageRepository.GetFirstSeqAfterAsync(chatId, utcDate, ct);
         return await PageAsync(chatId, firstAfter, limit, ct);
     }
@@ -125,7 +125,7 @@ public sealed class MessageService(
     public async Task<SendResult> SendAsync(
         Guid chatId, Guid senderId, string? text, Guid? clientMessageId = null, CancellationToken ct = default)
     {
-        // Текст проверяем до похода в базу: это бесплатно.
+        // Validate the text before going to the DB: it is free.
         var textError = MessageText.Normalize(text, out var normalized);
         if (textError == MessageText.EmptyCode)
             throw new BadRequestException("Message text is empty", textError);
@@ -134,7 +134,7 @@ public sealed class MessageService(
 
         await policy.DemandPostAsync(senderId, chatId, ct);
 
-        // Повтор отправки (ретрай после обрыва сети) — то же сообщение, без второго события.
+        // A repeated send (retry after a network drop) - the same message, without a second event.
         if (clientMessageId is { } retryId &&
             await messageRepository.GetByClientMessageIdAsync(senderId, retryId, ct) is { } sent)
         {
@@ -145,7 +145,7 @@ public sealed class MessageService(
 
         try
         {
-            // Сообщение и событие о нём — одна транзакция: сохранено одно — сохранено и другое.
+            // The message and its event are one transaction: one saved means the other is saved too.
             var message = await db.InTransactionAsync(async ct =>
             {
                 var created = Map(await messageRepository.CreateAsync(new Message
@@ -166,7 +166,7 @@ public sealed class MessageService(
         }
         catch (DuplicateKeyException)
         {
-            // Параллельный повтор той же отправки успел раньше — отдаём его результат.
+            // A parallel repeat of the same send got there first - return its result.
             var winner = await messageRepository.GetByClientMessageIdAsync(senderId, clientMessageId!.Value, CancellationToken.None)
                 ?? throw new InvalidOperationException("Duplicate clientMessageId, but the message is not found");
             return AlreadySent(winner, chatId);
@@ -183,8 +183,8 @@ public sealed class MessageService(
     {
         await policy.DemandReadAsync(userId, chatId, ct);
 
-        // Сообщение из чужого чата — 404: иначе указатель мог бы встать на чужое
-        // сообщение, и счётчик непрочитанных сломался бы.
+        // A message from another chat - 404: otherwise the pointer could land on someone else's
+        // message, and the unread counter would break.
         var update = await messageRepository.MarkReadAsync(chatId, userId, messageId, ct);
         if (update == ReadPointerUpdate.MessageNotFound)
             throw new NotFoundException("Message not found in this chat", "MESSAGE_NOT_FOUND");
@@ -198,19 +198,19 @@ public sealed class MessageService(
         SenderName = m.SenderName,
         Text = m.Text,
         CreatedAt = m.CreatedAt,
-        IsRead = false, // TODO: статус прочтения собеседником — план 2
+        IsRead = false, // TODO: read status by the companion - plan 2
         Seq = m.Seq,
         ClientMessageId = m.ClientMessageId
     };
 
     /// <summary>
-    /// Курсор на следующую (более старую) страницу — от последнего сообщения страницы
-    /// (страница пришла от новых к старым). Нет следующей страницы — нет и курсора.
+    /// A cursor to the next (older) page - from the last message of the page
+    /// (the page came newest to oldest). No next page - no cursor either.
     /// </summary>
     private static string? NextCursor(List<MessageDto> newestFirst, bool hasMore) =>
         hasMore && newestFirst.Count > 0 ? MessageCursor.BeforeSeqOf(newestFirst[^1].Seq).Encode() : null;
 
-    /// <summary>Формат курсора проверяется до всего остального: битый курсор — 400.</summary>
+    /// <summary>The cursor format is validated before anything else: a malformed cursor is 400.</summary>
     private static MessageCursor? ParseCursor(string? cursor)
     {
         if (string.IsNullOrEmpty(cursor))
@@ -218,7 +218,7 @@ public sealed class MessageService(
         return MessageCursor.TryDecode(cursor, out var parsed) ? parsed : throw InvalidCursor();
     }
 
-    /// <summary>Курсор старого формата указывает на сообщение по id — берём его seq.</summary>
+    /// <summary>A cursor in the old format points to a message by id - take its seq.</summary>
     private async Task<long?> ResolveCursorAsync(Guid chatId, MessageCursor? cursor, CancellationToken ct)
     {
         if (cursor is not { } c)

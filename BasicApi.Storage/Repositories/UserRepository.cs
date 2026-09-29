@@ -20,7 +20,7 @@ public class UserRepository(IDbSession db) : IUserRepository
                 last_login_at as LastLoginAt, 
                 is_active as IsActive
             FROM users 
-            -- Регистр и пробелы по краям не важны: Alice, alice и ' alice ' — один логин.
+            -- Case and surrounding spaces do not matter: Alice, alice and ' alice ' are one login.
             WHERE username_normalized = lower(trim(@Value)) OR email_normalized = lower(trim(@Value))
             LIMIT 1";
 
@@ -40,9 +40,9 @@ public class UserRepository(IDbSession db) : IUserRepository
         }
         catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation)
         {
-            // Две параллельные регистрации на один username/email: проверки в хендлере
-            // не атомарны, ловит уникальный индекс. Переводим в доменную ошибку,
-            // чтобы клиент получил 409, а не 500.
+            // Two parallel registrations for the same username/email: the handler's checks
+            // are not atomic, the unique index catches it. Translate it into a domain error
+            // so that the client gets 409, not 500.
             throw new DuplicateKeyException("User with this username or email already exists", ex);
         }
     }
@@ -56,7 +56,7 @@ public class UserRepository(IDbSession db) : IUserRepository
 
     public async Task<Guid?> GetIdByUsernameAsync(string username, CancellationToken ct = default)
     {
-        // Только логин и только активные: по почте искать нельзя — это приватные данные.
+        // Login only and active users only: lookup by email is not allowed - it is private data.
         const string sql = @"
             SELECT id
             FROM users

@@ -1,14 +1,14 @@
-# Обратный прокси перед API: TLS (сертификат Let's Encrypt выпускается и
-# продлевается автоматически), HTTP → HTTPS, WebSocket для SignalR.
-# Переменные DOMAIN и ACME_EMAIL приходят из .env.prod через docker-compose.prod.yml.
+# Reverse proxy in front of the API: TLS (the Let's Encrypt certificate is issued
+# and renewed automatically), HTTP → HTTPS, WebSocket for SignalR.
+# DOMAIN and ACME_EMAIL come from .env.prod via docker-compose.prod.yml.
 
 {
 	email {$ACME_EMAIL}
 }
 
 {$DOMAIN} {
-	# Caddy сам выставляет X-Forwarded-For/-Proto и не доверяет таким же
-	# заголовкам от клиента — подделать IP через прокси нельзя.
+	# Caddy sets X-Forwarded-For/-Proto itself and does not trust the same headers
+	# from the client, so the client IP cannot be spoofed through the proxy.
 	reverse_proxy basicapi:8080
 
 	header {

@@ -4,30 +4,30 @@ using BasicApi.Models.Dto.Message;
 namespace BasicApi.Services.Events;
 
 /// <summary>
-/// События для клиентов. Доменные сервисы сообщают, что произошло, и не знают,
-/// как это доставляется: названия событий хаба, группы и формат полезной нагрузки —
-/// забота реализации.
+/// Events for clients. Domain services report what happened and do not know
+/// how it is delivered: hub event names, groups and the payload format are
+/// the implementation's concern.
 /// </summary>
 public interface IChatEventPublisher
 {
     /// <summary>
-    /// Новое сообщение: <c>MessageCreated</c> открытым чатам (группа хаба) и
-    /// <c>ChatListUpdated</c> с превью — всем участникам.
+    /// New message: <c>MessageCreated</c> to open chats (hub group) and
+    /// <c>ChatListUpdated</c> with a preview to all participants.
     /// </summary>
     Task MessageCreatedAsync(MessageDto message, IReadOnlyCollection<Guid> memberIds, CancellationToken ct = default);
 
     /// <summary>
-    /// Новый чат у пользователя; карточка собрана для него. <paramref name="live"/> —
-    /// прислать ли <c>ChatCreated</c> сразу: создателю чата не шлём, он получил карточку
-    /// в ответе, а его другие устройства узнают о чате через синхронизацию.
+    /// A new chat for a user; the card is built for them. <paramref name="live"/> —
+    /// whether to send <c>ChatCreated</c> right away: the chat creator does not get it, they got the card
+    /// in the response, and their other devices learn about the chat through sync.
     /// </summary>
     Task ChatCreatedAsync(Guid recipientId, ChatListItemDto item, bool live = true, CancellationToken ct = default);
 
-    /// <summary><c>UserOnlineChanged</c> — эфемерное событие, в журнал не пишется.</summary>
+    /// <summary><c>UserOnlineChanged</c> is an ephemeral event, not written to the journal.</summary>
     Task UserOnlineChangedAsync(
         Guid userId, bool isOnline, IReadOnlyCollection<Guid> recipientIds, CancellationToken ct = default);
 
-    /// <summary><c>TypingChanged</c> — эфемерное событие, в журнал не пишется.</summary>
+    /// <summary><c>TypingChanged</c> is an ephemeral event, not written to the journal.</summary>
     Task TypingChangedAsync(
         Guid chatId, Guid userId, bool isTyping, IReadOnlyCollection<Guid> recipientIds, CancellationToken ct = default);
 }

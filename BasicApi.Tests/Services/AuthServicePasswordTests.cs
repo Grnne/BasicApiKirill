@@ -28,12 +28,12 @@ public class AuthServicePasswordTests
         new() { Username = "alice", Email = "alice@test.local", Password = password };
 
     [Theory]
-    [InlineData(73, 'a')]   // ASCII: 73 байта
-    [InlineData(37, 'ж')]   // кириллица: 37 символов = 74 байта
+    [InlineData(73, 'a')]   // ASCII: 73 bytes
+    [InlineData(37, 'ж')]   // Cyrillic: 37 characters = 74 bytes
     public async Task Register_PasswordLongerThan72Bytes_IsRejected(int length, char ch)
     {
-        // bcrypt молча обрезает пароль до 72 байт: два разных длинных пароля
-        // с общим началом оказались бы одним и тем же паролем.
+        // bcrypt silently truncates a password to 72 bytes: two different long passwords
+        // with a common beginning would turn out to be the same password.
         var ex = await Assert.ThrowsAsync<BadRequestException>(() =>
             _service.RegisterAsync(Register(new string(ch, length))));
 
@@ -52,9 +52,8 @@ public class AuthServicePasswordTests
     [Fact]
     public async Task Login_UnknownUser_StillSpendsTimeOnPasswordHashing()
     {
-        // Без проверки хеша ответ «нет такого пользователя» приходил мгновенно,
-        // а «неверный пароль» — через ~100 мс bcrypt: по времени можно было
-        // перебирать существующие логины.
+        // Without a hash check, the "no such user" response came instantly, while "wrong password"
+        // took ~100 ms of bcrypt: timing made it possible to enumerate existing logins.
         _users.Setup(r => r.GetByUsernameOrEmailAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((User?)null);
         await Assert.ThrowsAsync<UnauthorizedException>(() =>

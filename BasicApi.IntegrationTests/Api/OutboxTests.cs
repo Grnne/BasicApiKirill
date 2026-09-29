@@ -12,7 +12,7 @@ using Npgsql;
 
 namespace BasicApi.IntegrationTests.Api;
 
-/// <summary>Outbox: событие сохраняется вместе с изменением и не теряется (план 1, 2.6).</summary>
+/// <summary>Outbox: the event is saved together with the change and is not lost (plan 1, 2.6).</summary>
 public class OutboxTests(PostgresFixture db) : DbTest(db)
 {
     private static readonly Dictionary<string, string?> NoDispatcher = new() { ["Outbox:DispatcherEnabled"] = "false" };
@@ -29,7 +29,7 @@ public class OutboxTests(PostgresFixture db) : DbTest(db)
         Guid chat, messageId;
         string bobToken;
 
-        // Процесс сохранил сообщение и «упал», не успев разослать событие.
+        // The process saved the message and "crashed" before it could dispatch the event.
         await using (var crashed = new ApiFactory(Db.ConnectionString, NoDispatcher))
         {
             var alice = await crashed.RegisterAsync("alice");
@@ -45,7 +45,7 @@ public class OutboxTests(PostgresFixture db) : DbTest(db)
 
         Assert.Equal(1, await CountAsync("SELECT COUNT(*) FROM outbox WHERE processed_at IS NULL"));
 
-        // После перезапуска событие уходит при первой же рассылке.
+        // After a restart the event goes out on the very first dispatch.
         await using var restarted = new ApiFactory(Db.ConnectionString, NoDispatcher);
         var created = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
         var listUpdated = new TaskCompletionSource<Guid>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -64,7 +64,7 @@ public class OutboxTests(PostgresFixture db) : DbTest(db)
         Assert.Equal(chat, await listUpdated.Task.WaitAsync(TimeSpan.FromSeconds(10)));
         Assert.Equal(0, await CountAsync("SELECT COUNT(*) FROM outbox WHERE processed_at IS NULL"));
 
-        // Повторная рассылка ничего не шлёт.
+        // A repeated dispatch sends nothing.
         Assert.Equal(new DispatchResult(0, Failed: false),
             await restarted.Services.GetRequiredService<OutboxDispatcher>().DispatchPendingAsync());
     }
@@ -72,7 +72,7 @@ public class OutboxTests(PostgresFixture db) : DbTest(db)
     [Fact]
     public async Task MessageAndItsEvent_AreSavedTogether_OrNotAtAll()
     {
-        // Запись события сломана — сообщение не должно остаться без события.
+        // Writing the event is broken - the message must not be left without an event.
         await using var factory = new ApiFactory(Db.ConnectionString,
             services: s => s.AddScoped<IOutboxRepository, FailingOutbox>());
         var alice = await factory.RegisterAsync("alice");

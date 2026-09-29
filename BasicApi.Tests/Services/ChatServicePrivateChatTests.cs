@@ -20,7 +20,7 @@ public class ChatServicePrivateChatTests
 
     public ChatServicePrivateChatTests()
     {
-        // По умолчанию любой собеседник существует и активен
+        // By default any companion exists and is active
         _userRepoMock
             .Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid id, CancellationToken _) => new User { Id = id, IsActive = true });
@@ -30,8 +30,8 @@ public class ChatServicePrivateChatTests
     }
 
     /// <summary>
-    /// Строка list-item'а приватного чата так, как её вернул бы репозиторий
-    /// для конкретного зрителя (companion — всегда «тот, другой» участник).
+    /// A private chat list-item row as the repository would return it
+    /// for a specific viewer (companion is always "the other" participant).
     /// </summary>
     private static ChatListResult PrivateRow(Guid chatId, Guid companionId, string companionName, string companionUsername) => new()
     {
@@ -43,7 +43,7 @@ public class ChatServicePrivateChatTests
         CreatedAt = DateTime.UtcNow
     };
 
-    /// <summary>Репозиторий отдаёт разные карточки создателю и получателю (у каждого свой собеседник).</summary>
+    /// <summary>The repository returns different cards to the creator and the recipient (each has their own companion).</summary>
     private Guid ArrangeChat(Guid creatorId, Guid recipientId, bool created)
     {
         var chatId = Guid.NewGuid();
@@ -68,7 +68,7 @@ public class ChatServicePrivateChatTests
 
         var result = await _service.GetOrCreatePrivateChatAsync(userId, otherUserId);
 
-        // Полноценный элемент списка, а не голый chatId
+        // A full list item, not a bare chatId
         Assert.False(result.Created);
         Assert.Equal(chatId, result.Chat.ChatId);
         Assert.Equal(otherUserId, result.Chat.CompanionId);
@@ -104,13 +104,13 @@ public class ChatServicePrivateChatTests
 
         await _service.GetOrCreatePrivateChatAsync(userId, otherUserId);
 
-        // Регрессия: получателю нельзя слать его самого в качестве собеседника
+        // Regression: the recipient must not be sent themselves as the companion
         _eventsMock.Verify(e => e.ChatCreatedAsync(otherUserId,
             It.Is<ChatListItemDto>(i => i.ChatId == chatId && i.CompanionId == userId && i.CompanionName == "Bob"),
             true, It.IsAny<CancellationToken>()), Times.Once);
 
-        // Создателю — только запись в журнал (для его других устройств), без живого события:
-        // карточку он получил в ответе.
+        // For the creator - only a journal entry (for their other devices), no live event:
+        // they got the card in the response.
         _eventsMock.Verify(e => e.ChatCreatedAsync(userId,
             It.Is<ChatListItemDto>(i => i.ChatId == chatId && i.CompanionId == otherUserId),
             false, It.IsAny<CancellationToken>()), Times.Once);
@@ -119,8 +119,8 @@ public class ChatServicePrivateChatTests
     [Fact]
     public async Task NewChat_BothLearnEachOthersPresence()
     {
-        // Раньше UserOnlineChanged рассылался только при подключении и только тем,
-        // с кем уже был общий чат: в новом чате оба видели друг друга «не в сети».
+        // UserOnlineChanged used to be broadcast only on connect and only to those
+        // who already shared a chat: in a new chat both saw each other as "offline".
         var userId = Guid.NewGuid();
         var otherUserId = Guid.NewGuid();
         ArrangeChat(userId, otherUserId, created: true);
@@ -133,7 +133,7 @@ public class ChatServicePrivateChatTests
     [Fact]
     public async Task UnknownCompanion_Is404_InsteadOf500()
     {
-        // Раньше вставка падала на внешнем ключе и клиент получал 500.
+        // The insert used to fail on a foreign key and the client got 500.
         var otherUserId = Guid.NewGuid();
         _userRepoMock
             .Setup(r => r.GetByIdAsync(otherUserId, It.IsAny<CancellationToken>()))

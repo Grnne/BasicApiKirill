@@ -3,8 +3,8 @@ using FluentMigrator;
 namespace BasicApi.Storage.Migrations;
 
 /// <summary>
-/// До какого pts журнала дошло каждое устройство пользователя. Устройство — это вход
-/// (цепочка сессий, sid в токене). На этом в плане 2 строится статус «доставлено».
+/// The journal pts each user device has reached. A device is a sign-in
+/// (a session chain, sid in the token). Plan 2 builds the "delivered" status on this.
 /// </summary>
 [Migration(11)]
 public class AddUserSyncState : Migration

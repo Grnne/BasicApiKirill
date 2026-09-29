@@ -1,26 +1,26 @@
 ﻿<#
 .SYNOPSIS
-    Сквозные тесты против развёрнутого стека (Caddy → API → Postgres).
+    End-to-end tests against a deployed stack (Caddy → API → Postgres).
 
 .DESCRIPTION
-    Ходит в стек по настоящему HTTPS и WebSocket: здоровье и заголовки,
-    регистрация, личный чат, сообщения в реальном времени, непрочитанные,
-    история, поиск, ошибки хаба, выход с обрывом соединения.
+    Talks to the stack over real HTTPS and WebSocket: health and headers,
+    registration, a private chat, real-time messages, unread counts,
+    history, search, hub errors, logout closing the connection.
 
-    Создаёт двух пользователей с уникальными именами (E2E_Alice_xxxx, e2e_bob_xxxx)
-    — на проде они останутся; удалять их не обязательно.
+    Creates two users with unique names (E2E_Alice_xxxx, e2e_bob_xxxx);
+    in production they stay, there is no need to delete them.
 
-    Делает 3 регистрации/входа: лимит auth-политики — 5 в минуту с IP, поэтому
-    между повторными прогонами нужна минута.
+    Makes 3 registrations/logins: the auth policy allows 5 per minute per IP,
+    so wait a minute between runs.
 
 .EXAMPLE
-    ./scripts/e2e.ps1                                        # локальный прод-стек (см. docs/deploy.md)
-    ./scripts/e2e.ps1 -BaseUrl https://chat.example.com      # после деплоя
+    ./scripts/e2e.ps1                                        # local prod stack (see docs/deploy.md)
+    ./scripts/e2e.ps1 -BaseUrl https://chat.example.com      # after a deploy
 #>
 [CmdletBinding()]
 param(
     [string]$BaseUrl = 'https://localhost:8443',
-    # Доверять самоподписанному сертификату (локальный Caddy для localhost).
+    # Trust a self-signed certificate (local Caddy for localhost).
     [switch]$Insecure
 )
 

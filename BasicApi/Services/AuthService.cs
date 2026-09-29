@@ -9,19 +9,19 @@ using BasicApi.Storage.Interfaces;
 
 namespace BasicApi.Services;
 
-/// <summary>Вход, регистрация, обновление и отзыв сессий.</summary>
+/// <summary>Sign-in, registration, refresh and revocation of sessions.</summary>
 public sealed class AuthService(
     IUserRepository userRepository,
     IJwtService jwtService,
     ISessionService sessionService,
     HubConnectionRegistry hubConnections)
 {
-    /// <summary>Предел bcrypt: всё, что дальше, им игнорируется.</summary>
+    /// <summary>bcrypt limit: anything beyond it is ignored.</summary>
     public const int MaxPasswordBytes = 72;
 
     /// <summary>
-    /// Хеш случайного пароля с той же стоимостью, что и у настоящих: на него проверяется
-    /// пароль несуществующего пользователя, чтобы время ответа не выдавало, есть ли логин.
+    /// Hash of a random password with the same cost as real ones: the password of a nonexistent
+    /// user is checked against it, so that response time does not reveal whether the login exists.
     /// </summary>
     private static readonly string DummyPasswordHash = BCrypt.Net.BCrypt.HashPassword(Guid.NewGuid().ToString());
 
@@ -30,15 +30,15 @@ public sealed class AuthService(
     {
         var user = await userRepository.GetByUsernameOrEmailAsync(request.UsernameOrEmail, ct);
 
-        // Хеш проверяем всегда, даже если пользователя нет: иначе «нет такого» отвечало
-        // бы мгновенно, а «неверный пароль» — через ~100 мс bcrypt, и по времени ответа
-        // можно было бы перебирать существующие логины.
+        // We always check the hash, even if the user does not exist: otherwise "no such user" would answer
+        // instantly, and "wrong password" only after ~100 ms of bcrypt, and response time
+        // could be used to enumerate existing logins.
         var passwordMatches = BCrypt.Net.BCrypt.Verify(request.Password, user?.PasswordHash ?? DummyPasswordHash);
 
         if (user == null || !passwordMatches)
             throw new UnauthorizedException("Invalid username/email or password", "INVALID_CREDENTIALS");
 
-        // Деактивированный аккаунт не должен входить, даже зная правильный пароль.
+        // A deactivated account must not sign in even with the correct password.
         if (!user.IsActive)
             throw new UnauthorizedException("Account is deactivated", "USER_INACTIVE");
 
@@ -50,14 +50,14 @@ public sealed class AuthService(
     public async Task<AuthResponseDto> RegisterAsync(
         RegisterRequestDto request, string? userAgent = null, string? ip = null, CancellationToken ct = default)
     {
-        // Пробелы по краям — случайность ввода, в логин и почту они не попадают.
-        // Регистр сохраняем как ввёл пользователь (для отображения), а уникальность
-        // и вход — без учёта регистра (нормализованные колонки в базе).
+        // Edge whitespace is a typing accident, it does not go into the login or email.
+        // Case is kept as the user typed it (for display), while uniqueness
+        // and sign-in are case-insensitive (normalized columns in the database).
         request.Username = request.Username.Trim();
         request.Email = request.Email.Trim();
 
-        // bcrypt учитывает только первые 72 байта: длиннее — и два разных пароля
-        // с общим началом совпали бы. Считаем байты UTF-8, а не символы.
+        // bcrypt considers only the first 72 bytes: with longer ones, two different passwords
+        // sharing a prefix would match. We count UTF-8 bytes, not characters.
         if (Encoding.UTF8.GetByteCount(request.Password) > MaxPasswordBytes)
             throw new BadRequestException(
                 $"Password must be at most {MaxPasswordBytes} bytes in UTF-8", "PASSWORD_TOO_LONG");
@@ -67,7 +67,7 @@ public sealed class AuthService(
         if (existingUser != null)
             throw new ConflictException("Username already exists", "USERNAME_TAKEN");
 
-        // Проверка уникальности email
+        // Email uniqueness check
         existingUser = await userRepository.GetByUsernameOrEmailAsync(request.Email, ct);
 
         if (existingUser != null)
@@ -90,8 +90,8 @@ public sealed class AuthService(
         }
         catch (DuplicateKeyException)
         {
-            // Проверки выше не атомарны — параллельная регистрация могла успеть
-            // раньше. Уникальный индекс поймал, отвечаем 409, а не 500.
+            // The checks above are not atomic — a parallel registration could get in
+            // first. The unique index caught it; we answer 409, not 500.
             throw new ConflictException("Username or email already exists", "USER_ALREADY_EXISTS");
         }
 
@@ -112,8 +112,8 @@ public sealed class AuthService(
     /// </summary>
     public async Task LogoutAsync(string? refreshToken, CancellationToken ct = default)
     {
-        // Соединения хаба этого входа тоже закрываем: иначе «вышедшее» устройство
-        // продолжало бы получать сообщения, пока держит соединение.
+        // We also close this sign-in's hub connections: otherwise the "signed-out" device
+        // would keep receiving messages as long as it holds the connection.
         var familyId = await sessionService.RevokeAsync(refreshToken, ct);
         if (familyId is not null)
             hubConnections.AbortSessionFamily(familyId.Value);

@@ -7,7 +7,7 @@ using Moq;
 
 namespace BasicApi.Tests.Services;
 
-/// <summary>Подключение, отключение, «печатает» и знакомство в новом чате.</summary>
+/// <summary>Connect, disconnect, "typing" and getting acquainted in a new chat.</summary>
 public class PresenceServiceTests
 {
     private readonly UserStatusService _status = new();
@@ -129,7 +129,7 @@ public class PresenceServiceTests
     [Fact]
     public async Task Introduce_OfflineUser_IsNotAnnounced()
     {
-        // «Не в сети» клиент и так считает по умолчанию.
+        // The client already treats "offline" as the default.
         await _status.SetUserOnlineStatusAsync(_userId, "c1", true);
 
         await _service.IntroduceAsync(_userId, _contactA);

@@ -24,8 +24,8 @@ public class UserLookupTests(PostgresFixture db) : DbTest(db)
     [Fact]
     public async Task GetUserId_ByEmail_IsNotFound()
     {
-        // Почта — приватные данные: по ней нельзя узнать, есть ли у человека
-        // аккаунт, и получить его id.
+        // The email is private data: it must not reveal whether a person has an
+        // account, nor give away their id.
         await using var factory = new ApiFactory(Db.ConnectionString);
         await factory.RegisterAsync("alice", "alice.private@test.local");
         var bob = await factory.RegisterAsync("bob");

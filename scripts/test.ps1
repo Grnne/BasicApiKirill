@@ -1,21 +1,21 @@
 ﻿<#
 .SYNOPSIS
-    Полный прогон проверок перед мёржем (замена CI до последнего этапа плана 2).
+    Full pre-merge check run (stands in for CI until the last stage of plan 2).
 
 .DESCRIPTION
-    1. Сборка решения (Release).
-    2. Юнит-тесты (BasicApi.Tests).
-    3. Интеграционные тесты (BasicApi.IntegrationTests) — нужен запущенный Docker.
-    4. Аудит NuGet-пакетов на известные уязвимости, включая транзитивные.
-    5. По флагу -Image — сборка docker-образа, как в проде.
+    1. Solution build (Release).
+    2. Unit tests (BasicApi.Tests).
+    3. Integration tests (BasicApi.IntegrationTests) — Docker must be running.
+    4. Audit of NuGet packages for known vulnerabilities, transitive ones included.
+    5. With -Image — the docker image build, as in production.
 
-    В конце печатает строку-итог: её нужно вставить в описание PR или коммита.
-    Код возврата 0 — всё прошло; иначе — первая упавшая стадия.
+    Prints a summary line at the end: paste it into the PR or commit description.
+    Exit code 0 — everything passed; otherwise — the first failed stage.
 
 .EXAMPLE
     ./scripts/test.ps1
-    ./scripts/test.ps1 -SkipIntegration     # быстрый прогон без Docker
-    ./scripts/test.ps1 -Image               # плюс сборка docker-образа
+    ./scripts/test.ps1 -SkipIntegration     # quick run without Docker
+    ./scripts/test.ps1 -Image               # plus the docker image build
 #>
 [CmdletBinding()]
 param(
@@ -39,7 +39,7 @@ function Step([string]$name, [scriptblock]$action) {
     }
 }
 
-# Итог по тестам берём из trx: вывод dotnet test локализован и неудобен для разбора.
+# Test totals come from trx: dotnet test output is localized and awkward to parse.
 function TestCounts([string]$dir) {
     $trx = Get-ChildItem $dir -Filter *.trx | Sort-Object LastWriteTime | Select-Object -Last 1
     if (-not $trx) { return 'no results' }
@@ -50,7 +50,7 @@ function TestCounts([string]$dir) {
 function RunTests([string]$project, [string]$key) {
     $dir = Join-Path $results $key
     if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
-    # E2E идут отдельно (scripts/e2e.ps1) — им нужен развёрнутый стек.
+    # E2E runs separately (scripts/e2e.ps1): it needs a deployed stack.
     dotnet test (Join-Path $root "$project/$project.csproj") -c Release --no-build `
         --filter "Category!=E2E" `
         --logger "trx" --logger "console;verbosity=minimal" --results-directory $dir
@@ -73,14 +73,14 @@ try {
         Step 'Docker check' {
             docker version --format '{{.Server.Version}}' | Out-Null
             if ($LASTEXITCODE -ne 0) {
-                Write-Host 'Docker не запущен. Запустите Docker Desktop или используйте -SkipIntegration.' -ForegroundColor Yellow
+                Write-Host 'Docker is not running. Start Docker Desktop or use -SkipIntegration.' -ForegroundColor Yellow
             }
         }
         Step 'Integration tests' { RunTests 'BasicApi.IntegrationTests' 'integration' }
     }
 
     Step 'Vulnerable packages' {
-        # По проектам, а не по решению: docker-compose.dcproj в решении роняет команду.
+        # Per project, not per solution: docker-compose.dcproj in the solution breaks the command.
         $found = @()
         $projects = Get-ChildItem $root -Filter *.csproj -Recurse -Depth 1
         foreach ($csproj in $projects) {

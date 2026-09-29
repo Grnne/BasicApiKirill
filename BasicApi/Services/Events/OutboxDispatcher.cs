@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.SignalR;
 
 namespace BasicApi.Services.Events;
 
-/// <summary>Будильник диспетчера: событие закоммичено — рассылай, не дожидаясь опроса.</summary>
+/// <summary>Dispatcher alarm: an event is committed — dispatch it without waiting for the poll.</summary>
 public sealed class OutboxSignal
 {
     private readonly SemaphoreSlim _signal = new(0, 1);
@@ -14,19 +14,19 @@ public sealed class OutboxSignal
     public void Notify()
     {
         try { _signal.Release(); }
-        catch (SemaphoreFullException) { } // уже разбужен
+        catch (SemaphoreFullException) { } // already woken
     }
 
     public Task<bool> WaitAsync(TimeSpan timeout, CancellationToken ct) => _signal.WaitAsync(timeout, ct);
 }
 
 /// <summary>
-/// Рассылает события из outbox по порядку. Будится после каждого коммита с событием,
-/// а на случай пропущенного сигнала (или события от другого экземпляра) ещё и
-/// опрашивает outbox раз в <c>Outbox:PollIntervalMs</c>.
+/// Dispatches events from the outbox in order. Woken after every commit that has an event,
+/// and in case of a missed signal (or an event from another instance) it also
+/// polls the outbox every <c>Outbox:PollIntervalMs</c>.
 ///
-/// Доставка «хотя бы раз»: если процесс упадёт между рассылкой и отметкой, событие
-/// уйдёт повторно — клиенты узнают повтор по id сообщения или чата.
+/// "At least once" delivery: if the process crashes between dispatch and marking, the event
+/// is sent again — clients recognize a repeat by the message or chat id.
 /// </summary>
 public sealed class OutboxDispatcher(
     IServiceScopeFactory scopes,
@@ -37,7 +37,7 @@ public sealed class OutboxDispatcher(
 {
     public const int BatchSize = 100;
 
-    /// <summary>После стольких неудачных попыток событие снимается с рассылки (и пишется в лог).</summary>
+    /// <summary>After this many failed attempts the event is taken off dispatch (and logged).</summary>
     public const int MaxAttempts = 10;
 
     private readonly TimeSpan _pollInterval =
@@ -65,7 +65,7 @@ public sealed class OutboxDispatcher(
             }
             catch (Exception ex)
             {
-                // База недоступна и т.п. — попробуем на следующем круге.
+                // The database is unavailable, etc. — we'll try on the next round.
                 logger.LogError(ex, "Outbox dispatch failed");
             }
 
@@ -81,8 +81,8 @@ public sealed class OutboxDispatcher(
     }
 
     /// <summary>
-    /// Рассылает одну пачку неразосланных событий. На первой неудаче останавливается,
-    /// чтобы не нарушить порядок: событие повторится на следующем круге.
+    /// Dispatches one batch of undispatched events. Stops at the first failure
+    /// to keep the order: the event will be retried on the next round.
     /// </summary>
     public async Task<DispatchResult> DispatchPendingAsync(CancellationToken ct = default)
     {
@@ -135,6 +135,6 @@ public sealed class OutboxDispatcher(
     }
 }
 
-/// <param name="Sent">Сколько событий разослано.</param>
-/// <param name="Failed">Была неудача — пачка прервана.</param>
+/// <param name="Sent">How many events were dispatched.</param>
+/// <param name="Failed">There was a failure — the batch was interrupted.</param>
 public sealed record DispatchResult(int Sent, bool Failed);

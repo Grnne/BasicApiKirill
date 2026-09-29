@@ -4,12 +4,12 @@ using Moq;
 
 namespace BasicApi.Tests.TestDoubles;
 
-/// <summary>Одна отправка через SignalR: кому (вид адресата и id) и что.</summary>
+/// <summary>One SignalR send: to whom (recipient kind and id) and what.</summary>
 public sealed record SentEvent(string Target, IReadOnlyList<string> Ids, string Method, object?[] Args);
 
 /// <summary>
-/// Клиенты хаба, которые запоминают отправки вместе с адресатом.
-/// SendAsync — метод расширения, Moq его не проверит; здесь видно и кому, и что.
+/// Hub clients that remember sends together with the recipient.
+/// SendAsync is an extension method, Moq will not verify it; here both recipient and payload are visible.
 /// </summary>
 public sealed class RecordingHubClients : IHubClients
 {

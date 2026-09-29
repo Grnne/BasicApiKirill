@@ -21,7 +21,7 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
         COALESCE(u.display_name, 'Unknown') AS SenderName";
 
     /// <summary>
-    /// Страница от новых к старым по seq; с запасом в одну строку — признак следующей страницы.
+    /// Page from newest to oldest by seq; with one extra row — the sign of a next page.
     /// </summary>
     public async Task<CursorResult<MessageWithSender>> GetMessagesWithSenderCursorAsync(
         Guid chatId, long? beforeSeq, int limit, CancellationToken ct = default)
@@ -44,9 +44,9 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
         Message message, Guid? clientMessageId = null, CancellationToken ct = default) =>
         db.InTransactionAsync(async ct =>
         {
-            // Номер из счётчика чата. UPDATE блокирует строку чата до конца транзакции:
-            // параллельные отправки в один чат получают номера по очереди, без дыр и повторов.
-            // Имя отправителя — тем же запросом: оно нужно в событии о новом сообщении.
+            // The number comes from the chat counter. UPDATE locks the chat row until the transaction ends:
+            // concurrent sends to one chat get numbers in turn, with no gaps or repeats.
+            // The sender name comes from the same query: it is needed in the new-message event.
             const string sql = $@"
                 WITH next AS (
                     UPDATE chats SET last_seq = last_seq + 1 WHERE id = @ChatId RETURNING last_seq
@@ -76,8 +76,8 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
             catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation &&
                                                ex.ConstraintName == "ux_messages_sender_id_client_message_id")
             {
-                // Параллельный повтор той же отправки успел раньше. Транзакция откатится
-                // вместе с выданным номером; вызывающий найдёт то сообщение.
+                // A concurrent retry of the same send got there first. The transaction will roll back
+                // together with the issued number; the caller will find that message.
                 throw new DuplicateKeyException("Message with this clientMessageId already exists", ex);
             }
         }, ct: ct);
@@ -98,9 +98,9 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
     public async Task<ReadPointerUpdate> MarkReadAsync(
         Guid chatId, Guid userId, Guid messageId, CancellationToken ct = default)
     {
-        // Одним запросом: сообщение должно быть из этого чата, а указатель движется
-        // только вперёд — два устройства, отчитавшиеся не по порядку, не откатят
-        // прочитанное назад.
+        // In one query: the message must belong to this chat, and the pointer moves
+        // only forward — two devices reporting out of order will not roll back
+        // what has been read.
         const string sql = @"
             WITH target AS (
                 SELECT seq FROM messages WHERE id = @messageId AND chat_id = @chatId
@@ -121,9 +121,9 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
     }
 
     /// <summary>
-    /// Номер самого раннего сообщения строго после момента. «Переход к дате» строит от
-    /// него исключающий курсор: страница перед ним заканчивается последним сообщением
-    /// на этот момент или раньше.
+    /// Number of the earliest message strictly after the moment. "Jump to date" builds an exclusive
+    /// cursor from it: the page before it ends with the last message
+    /// at that moment or earlier.
     /// </summary>
     public Task<long?> GetFirstSeqAfterAsync(Guid chatId, DateTime date, CancellationToken ct = default) =>
         db.QueryFirstOrDefaultAsync<long?>(@"
@@ -155,8 +155,8 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
 
         var rows = await db.QueryAsync<MessageWithSender>(sql, new { chatId, prefixQuery, beforeSeq, fetchSize = limit + 1 }, ct);
 
-        // Всего совпадений — на каждой странице: клиент показывает «N результатов»
-        // независимо от того, какую страницу загрузил.
+        // Total matches — on every page: the client shows "N results"
+        // regardless of which page it loaded.
         var totalCount = await db.ExecuteScalarAsync<int>($@"
             SELECT COUNT(*) FROM messages m
             WHERE m.chat_id = @chatId AND m.is_deleted = false AND {match}",
@@ -166,10 +166,10 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
     }
 
     /// <summary>
-    /// Слова запроса — как начала слов: «запуск» находит и «запускаем», и «до запуска»
-    /// (русский стеммер сводит их к разным основам), а запрос работает по мере набора.
-    /// Из ввода берутся только буквы и цифры, поэтому операторы tsquery в него не пройдут.
-    /// Служебные слова («и», «в», «the») словарь отбрасывает сам.
+    /// Query words are matched as word prefixes: "запуск" finds both "запускаем" and "до запуска"
+    /// (the Russian stemmer reduces them to different stems), and the query works as you type.
+    /// Only letters and digits are taken from the input, so tsquery operators cannot get through.
+    /// Stop words ("и", "в", "the") are dropped by the dictionary itself.
     /// </summary>
     internal static string ToPrefixQuery(string query) =>
         string.Join(" & ", WordPattern().Matches(query).Select(m => m.Value + ":*"));

@@ -10,8 +10,8 @@ public sealed class UpdateJournalRepository(IDbSession db) : IUpdateJournal
         if (userIds.Count == 0)
             return Task.CompletedTask;
 
-        // Счётчики берутся по порядку user_id: две транзакции, пишущие в журналы одних
-        // и тех же людей, блокируют их строки в одном порядке и не ждут друг друга по кругу.
+        // Counters are taken in user_id order: two transactions writing to the journals of the same
+        // people lock their rows in the same order and do not wait on each other in a cycle.
         return db.ExecuteAsync(@"
             WITH pts AS (
                 INSERT INTO user_pts (user_id, last_pts)

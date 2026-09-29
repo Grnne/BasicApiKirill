@@ -4,10 +4,10 @@ using Microsoft.AspNetCore.SignalR;
 namespace BasicApi.Hubs;
 
 /// <summary>
-/// Ошибки хаба в одном месте — аналог ExceptionHandlingMiddleware для REST.
-/// Доменная ошибка сервиса становится <see cref="HubException"/> с кодом
-/// (<see cref="HubErrors"/>): клиент получает тот же код, что вернул бы REST.
-/// Остальное логируется как Error и уходит клиенту без подробностей.
+/// Hub errors in one place, the analogue of ExceptionHandlingMiddleware for REST.
+/// A domain error from a service becomes a <see cref="HubException"/> with a code
+/// (<see cref="HubErrors"/>): the client gets the same code REST would return.
+/// Everything else is logged as Error and reaches the client without details.
 /// </summary>
 public sealed class HubErrorFilter(ILogger<HubErrorFilter> logger) : IHubFilter
 {
@@ -24,7 +24,7 @@ public sealed class HubErrorFilter(ILogger<HubErrorFilter> logger) : IHubFilter
         }
         catch (OperationCanceledException) when (invocationContext.Context.ConnectionAborted.IsCancellationRequested)
         {
-            throw; // клиент ушёл — это не ошибка сервера
+            throw; // the client left, this is not a server error
         }
         catch (Exception ex) when (ex is not HubException)
         {

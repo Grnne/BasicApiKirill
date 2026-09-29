@@ -3,19 +3,19 @@ using FluentMigrator;
 namespace BasicApi.Storage.Migrations;
 
 /// <summary>
-/// Все временные колонки — timestamptz (в sessions так было с самого начала).
+/// All time columns are timestamptz (in sessions it was like that from the start).
 ///
-/// В timestamp без зоны приложение писало UTC, но Npgsql передаёт UTC-время как
-/// timestamptz, и при записи Postgres переводил его в часовой пояс сессии. При поясе
-/// сервера не UTC время сообщений сдвигалось; клиенту оно уходило без признака зоны,
-/// и браузер читал его как местное.
+/// The app wrote UTC into timestamp without zone, but Npgsql passes UTC time as
+/// timestamptz, and on write Postgres converted it to the session time zone. When the
+/// server zone is not UTC, message times were shifted; they reached the client without a zone marker,
+/// and the browser read them as local time.
 ///
-/// Существующие значения считаются UTC — так их и писало приложение. ALTER TYPE
-/// переписывает таблицы и держит на них эксклюзивную блокировку: на большой базе —
-/// окно обслуживания (см. docs/deploy.md).
+/// Existing values are treated as UTC - that is how the app wrote them. ALTER TYPE
+/// rewrites the tables and holds an exclusive lock on them: on a large database it is
+/// a maintenance window (see docs/deploy.md).
 ///
-/// Значения по умолчанию — now(): прежнее (now() at time zone 'utc') даёт timestamp
-/// без зоны и после смены типа снова зависело бы от пояса сессии.
+/// Default values are now(): the previous (now() at time zone 'utc') yields timestamp
+/// without zone and, after the type change, would again depend on the session time zone.
 /// </summary>
 [Migration(8)]
 public class ConvertTimestampsToTimestamptz : Migration

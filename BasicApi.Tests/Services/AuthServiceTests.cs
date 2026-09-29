@@ -20,8 +20,8 @@ public class AuthServiceTests
         _jwtServiceMock = new Mock<IJwtService>();
         _sessionServiceMock = new Mock<ISessionService>();
 
-        // Сессии проверяются отдельно в SessionServiceTests; здесь достаточно,
-        // чтобы выдача пары повторяла данные пользователя и токены из IJwtService.
+        // Sessions are tested separately in SessionServiceTests; here it is enough
+        // that the issued pair repeats the user data and the tokens from IJwtService.
         _sessionServiceMock
             .Setup(s => s.IssueForUserAsync(
                 It.IsAny<User>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
@@ -280,7 +280,7 @@ public class AuthServiceTests
     [Fact]
     public async Task LoginAsync_InactiveUser_ThrowsUnauthorized()
     {
-        // Arrange — правильный пароль не должен пускать заблокированный аккаунт
+        // Arrange — the correct password must not let a blocked account in
         var password = "correct-password";
         var user = new User
         {
@@ -334,7 +334,7 @@ public class AuthServiceTests
     [Fact]
     public async Task RegisterAsync_DuplicateKeyFromDatabase_ThrowsConflictNotServerError()
     {
-        // Arrange — гонка двух регистраций: проверки прошли, уникальный индекс поймал
+        // Arrange — a race of two registrations: the checks passed, the unique index caught it
         _userRepoMock
             .Setup(r => r.GetByUsernameOrEmailAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((User?)null);

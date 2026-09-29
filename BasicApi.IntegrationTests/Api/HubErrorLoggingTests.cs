@@ -8,9 +8,9 @@ using Microsoft.Extensions.Logging;
 namespace BasicApi.IntegrationTests.Api;
 
 /// <summary>
-/// Ошибка клиента в хабе (чужой чат, пустое сообщение) — не ошибка сервера: как и 4xx
-/// в REST, она не должна попадать в лог уровнем Error. Найдено E2E-прогоном: SignalR
-/// сам пишет Error на каждый HubException.
+/// A client error in the hub (someone else's chat, empty message) is not a server error: like a 4xx
+/// in REST, it must not be logged at Error level. Found by an E2E run: SignalR itself
+/// writes Error for every HubException.
 /// </summary>
 public class HubErrorLoggingTests(PostgresFixture db) : DbTest(db)
 {

@@ -9,7 +9,7 @@ using Npgsql;
 
 namespace BasicApi.IntegrationTests.Api;
 
-/// <summary>Синхронизация после обрыва связи (план 1, 2.7).</summary>
+/// <summary>Sync after a connection drop (plan 1, 2.7).</summary>
 public class SyncTests(PostgresFixture db) : DbTest(db)
 {
     private static async Task<JsonElement> GetJsonAsync(HttpClient client, string url)
@@ -40,18 +40,18 @@ public class SyncTests(PostgresFixture db) : DbTest(db)
         using var aliceApi = factory.CreateClient(alice.Token);
         using var bobApi = factory.CreateClient(bob.Token);
 
-        // Боб взял снимок и ушёл в офлайн.
+        // Bob took a snapshot and went offline.
         var state = await GetJsonAsync(bobApi, "/api/sync/state");
         var pts = state.GetProperty("pts").GetInt64();
         Assert.Empty(state.GetProperty("chats").EnumerateArray());
 
-        // Пока его нет: Алиса создаёт чат и пишет пять сообщений.
+        // While he is away: Alice creates a chat and writes five messages.
         var chat = (await (await aliceApi.PostAsync($"/api/chats/private/{bob.UserId}", null))
             .Content.ReadFromJsonAsync<JsonElement>()).GetProperty("chatId").GetGuid();
         for (var i = 0; i < 5; i++)
             (await aliceApi.PostAsJsonAsync($"/api/chats/{chat}/messages", new { text = $"m{i}" })).EnsureSuccessStatusCode();
 
-        // Вернулся — догоняет.
+        // He is back — catching up.
         var diff = await GetJsonAsync(bobApi, $"/api/sync?since={pts}");
 
         Assert.False(diff.GetProperty("snapshotRequired").GetBoolean());
@@ -65,7 +65,7 @@ public class SyncTests(PostgresFixture db) : DbTest(db)
         Assert.All(updates.Skip(1), u => Assert.Equal("MessageCreated", u.GetProperty("type").GetString()));
         Assert.Equal(pts + 6, diff.GetProperty("pts").GetInt64());
 
-        // Повторный запрос с новым pts — пусто.
+        // A repeat request with the new pts — empty.
         var again = await GetJsonAsync(bobApi, $"/api/sync?since={diff.GetProperty("pts").GetInt64()}");
         Assert.Empty(again.GetProperty("updates").EnumerateArray());
         Assert.False(again.GetProperty("snapshotRequired").GetBoolean());
@@ -129,17 +129,17 @@ public class SyncTests(PostgresFixture db) : DbTest(db)
         for (var i = 0; i < 3; i++)
             (await aliceApi.PostAsJsonAsync($"/api/chats/{chat}/messages", new { text = $"m{i}" })).EnsureSuccessStatusCode();
 
-        // Начало журнала вычищено по сроку хранения.
+        // The start of the journal was purged by retention.
         await ExecuteAsync("DELETE FROM user_updates WHERE user_id = @bob AND pts = 1", new { bob = bob.UserId });
 
         var purged = await GetJsonAsync(bobApi, "/api/sync?since=0");
         Assert.True(purged.GetProperty("snapshotRequired").GetBoolean());
         Assert.Empty(purged.GetProperty("updates").EnumerateArray());
 
-        // Дальше вычищенного — как обычно.
+        // Beyond the purged part — as usual.
         Assert.Equal(2, (await GetJsonAsync(bobApi, "/api/sync?since=1")).GetProperty("updates").GetArrayLength());
 
-        // pts из будущего (другая база, чужой журнал) — тоже снимок.
+        // pts from the future (another database, someone else's journal) — also a snapshot.
         Assert.True((await GetJsonAsync(bobApi, "/api/sync?since=100")).GetProperty("snapshotRequired").GetBoolean());
 
         var negative = await bobApi.GetAsync("/api/sync?since=-1");
@@ -171,7 +171,7 @@ public class SyncTests(PostgresFixture db) : DbTest(db)
         await using var connection = new NpgsqlConnection(Db.ConnectionString);
         var acked = (await connection.QueryAsync<long>(
             "SELECT acked_pts FROM user_sync_state WHERE user_id = @bob ORDER BY acked_pts", new { bob = bob.UserId })).ToList();
-        Assert.Equal([2L, 3L], acked); // два устройства; телефон не откатился с 3 на 1
+        Assert.Equal([2L, 3L], acked); // two devices; the phone did not roll back from 3 to 1
     }
 
     [Fact]
@@ -185,17 +185,17 @@ public class SyncTests(PostgresFixture db) : DbTest(db)
             (await aliceApi.PostAsJsonAsync($"/api/chats/{chat}/messages", new { text = $"m{i}" })).EnsureSuccessStatusCode();
         await factory.Services.GetRequiredService<OutboxDispatcher>().DispatchPendingAsync();
 
-        // Первое сообщение — старше срока хранения журнала, его событие разослано давно.
+        // The first message is older than the journal retention, its event was dispatched long ago.
         await ExecuteAsync("UPDATE user_updates SET created_at = now() - interval '31 days' WHERE pts = 1");
         await ExecuteAsync("UPDATE outbox SET processed_at = now() - interval '8 days' WHERE id = (SELECT MIN(id) FROM outbox)");
         await ExecuteAsync("INSERT INTO outbox (type, payload, created_at) VALUES ('Pending', '{}', now() - interval '60 days')");
 
         var (updates, events) = await factory.Services.GetRequiredService<JournalCleanup>().CleanupAsync();
 
-        Assert.Equal((2, 1), (updates, events)); // по записи у Алисы и у Боба; одно событие
+        Assert.Equal((2, 1), (updates, events)); // one entry each for Alice and Bob; one event
         await using var connection = new NpgsqlConnection(Db.ConnectionString);
         Assert.Equal(4, await connection.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM user_updates"));
         Assert.Equal(1, await connection.ExecuteScalarAsync<long>(
-            "SELECT COUNT(*) FROM outbox WHERE processed_at IS NULL")); // неразосланное не трогаем
+            "SELECT COUNT(*) FROM outbox WHERE processed_at IS NULL")); // we do not touch what has not been dispatched
     }
 }

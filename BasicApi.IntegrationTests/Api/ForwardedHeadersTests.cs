@@ -48,7 +48,7 @@ public class ForwardedHeadersTests(PostgresFixture db) : DbTest(db)
     [Fact]
     public async Task FromUntrustedAddress_XForwardedForIsIgnored()
     {
-        // Иначе любой клиент подделал бы свой IP заголовком и обошёл лимиты по IP.
+        // Otherwise any client could spoof its IP with a header and bypass the per-IP limits.
         await using var factory = Factory("198.51.100.9");
 
         Assert.Equal("198.51.100.9", await RegisterAndGetSessionIpAsync(factory, "direct"));

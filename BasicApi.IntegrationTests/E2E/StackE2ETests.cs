@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.SignalR.Client;
 
 namespace BasicApi.IntegrationTests.E2E;
 
-/// <summary>Ждёт событий хаба по условию — события приходят асинхронно.</summary>
+/// <summary>Waits for hub events by a condition — events arrive asynchronously.</summary>
 internal sealed class HubEvents
 {
     private readonly ConcurrentQueue<(string Name, object?[] Args)> _events = new();
@@ -56,7 +56,7 @@ public class StackE2ETests(E2EUsers users)
         Assert.Equal(HttpStatusCode.OK, page.StatusCode);
         Assert.Contains("<div id=\"app\">", await page.Content.ReadAsStringAsync());
         Assert.Contains("frame-ancestors 'none'", page.Headers.GetValues("Content-Security-Policy").Single());
-        Assert.StartsWith("max-age=", page.Headers.GetValues("Strict-Transport-Security").Single()); // от Caddy
+        Assert.StartsWith("max-age=", page.Headers.GetValues("Strict-Transport-Security").Single()); // from Caddy
         Assert.False(page.Headers.Contains("Server"));
     }
 
@@ -97,11 +97,11 @@ public class StackE2ETests(E2EUsers users)
         await aliceHub.StartAsync();
         await bobHub.StartAsync();
 
-        // Логин без учёта регистра находит Боба
+        // Login is case-insensitive and finds Bob
         var lookup = await aliceApi.GetAsync($"api/users/GetUserId/{bob.Username.ToUpperInvariant()}");
         Assert.Equal(bob.UserId, (await lookup.ReadAsync<JsonElement>()).GetProperty("userId").GetGuid());
 
-        // Новый личный чат: Бобу — ChatCreated, обоим — онлайн-статус собеседника
+        // New personal chat: Bob gets ChatCreated, both get the counterpart's online status
         var created = await aliceApi.PostAsync($"api/chats/private/{bob.UserId}", null);
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var chatId = (await created.ReadAsync<JsonElement>()).GetProperty("chatId").GetGuid();
@@ -109,7 +109,7 @@ public class StackE2ETests(E2EUsers users)
         await aliceEvents.WaitAsync("UserOnlineChanged", a => (Guid)a[0]! == bob.UserId && (bool)a[1]!);
         await bobEvents.WaitAsync("UserOnlineChanged", a => (Guid)a[0]! == alice.UserId && (bool)a[1]!);
 
-        // Повторное создание — тот же чат
+        // Creating it again — the same chat
         var again = await bobApi.PostAsync($"api/chats/private/{alice.UserId}", null);
         Assert.Equal(HttpStatusCode.OK, again.StatusCode);
         Assert.Equal(chatId, (await again.ReadAsync<JsonElement>()).GetProperty("chatId").GetGuid());
@@ -117,29 +117,29 @@ public class StackE2ETests(E2EUsers users)
         await aliceHub.InvokeAsync("JoinChat", chatId);
         await bobHub.InvokeAsync("JoinChat", chatId);
 
-        // Печатает…
+        // Typing…
         await bobHub.InvokeAsync("Typing", chatId, true);
         await aliceEvents.WaitAsync("TypingChanged", a => (Guid)a[1]! == bob.UserId && (bool)a[2]!);
 
-        // Сообщения: обрезка пробелов, доставка в реальном времени
+        // Messages: whitespace trimming, real-time delivery
         await aliceHub.InvokeAsync("SendMessage", chatId, "   hello from alice   ");
         var delivered = (JsonElement)(await bobEvents.WaitAsync("MessageCreated"))[0]!;
         Assert.Equal("hello from alice", delivered.GetProperty("text").GetString());
         await bobEvents.WaitAsync("ChatListUpdated", a => (Guid)a[0]! == chatId);
 
-        // Та же отправка командой REST — событие приходит так же
+        // The same send via the REST command — the event arrives the same way
         var sent = await bobApi.PostAsJsonAsync($"api/chats/{chatId}/messages", new { text = "hello back" });
         Assert.Equal(HttpStatusCode.Created, sent.StatusCode);
         await aliceEvents.WaitAsync("MessageCreated", a => ((JsonElement)a[0]!).GetProperty("text").GetString() == "hello back");
 
-        // Непрочитанные: свои не считаются
+        // Unread: own messages don't count
         async Task<int> UnreadAsync(HttpClient api) =>
             (await (await api.GetAsync("api/chats")).ReadAsync<JsonElement>()).EnumerateArray()
                 .Single(c => c.GetProperty("chatId").GetGuid() == chatId).GetProperty("unreadCount").GetInt32();
         Assert.Equal(1, await UnreadAsync(aliceApi));
         Assert.Equal(1, await UnreadAsync(bobApi));
 
-        // Прочитано — вперёд; назад не откатывается
+        // Read moves forward; it does not roll back
         var history = await (await bobApi.GetAsync($"api/chats/{chatId}/messages/cursor?limit=10")).ReadAsync<JsonElement>();
         var items = history.GetProperty("items").EnumerateArray().ToList();
         Assert.Equal(["hello from alice", "hello back"], items.Select(m => m.GetProperty("text").GetString()));
@@ -149,21 +149,21 @@ public class StackE2ETests(E2EUsers users)
         (await bobApi.PostAsJsonAsync($"api/chats/{chatId}/read", new { lastMessageId = aliceMessageId })).EnsureSuccessStatusCode();
         Assert.Equal(0, await UnreadAsync(bobApi));
 
-        // Переход к дате: последний момент — вся история, включая последнее сообщение
+        // Jump to date: the last moment — the whole history, including the last message
         var at = await (await bobApi.GetAsync(
             $"api/chats/{chatId}/messages/at?date={Uri.EscapeDataString(DateTime.UtcNow.AddMinutes(1).ToString("O"))}&limit=10"))
             .ReadAsync<JsonElement>();
         Assert.Equal(2, at.GetProperty("items").GetArrayLength());
 
-        // Поиск по сообщениям
+        // Message search
         var search = await (await aliceApi.GetAsync($"api/chats/{chatId}/messages/search?q=hello")).ReadAsync<JsonElement>();
         Assert.Equal(2, search.GetProperty("totalCount").GetInt32());
 
-        // Битый курсор — 400, не 500
+        // Broken cursor — 400, not 500
         var broken = await aliceApi.GetAsync($"api/chats/{chatId}/messages/cursor?cursor=garbage!!");
         Assert.Equal(HttpStatusCode.BadRequest, broken.StatusCode);
 
-        // Синхронизация: в журнале Боба — новый чат и два сообщения, по порядку
+        // Sync: Bob's journal has the new chat and two messages, in order
         var state = await (await bobApi.GetAsync("api/sync/state")).ReadAsync<JsonElement>();
         Assert.Equal(3, state.GetProperty("pts").GetInt64());
         var missed = await (await bobApi.GetAsync("api/sync?since=1")).ReadAsync<JsonElement>();
@@ -177,7 +177,7 @@ public class StackE2ETests(E2EUsers users)
         await using var hub = E2EEnvironment.CreateHub(users.Alice.Token);
         await hub.StartAsync();
 
-        // На проводе SignalR добавляет свой префикс — код извлекаем так же, как клиент.
+        // On the wire SignalR adds its own prefix — the code is extracted the same way as in the client.
         static string Code(HubException ex) =>
             System.Text.RegularExpressions.Regex.Match(ex.Message, "HubException: ([A-Z_]+):").Groups[1].Value;
 
@@ -191,7 +191,7 @@ public class StackE2ETests(E2EUsers users)
     [E2EFact]
     public async Task Logout_ClosesThatDevicesConnection_OnlyIt()
     {
-        var laptop = await E2EUsers.LoginAsync(users.Alice.Username.ToLowerInvariant()); // вход без учёта регистра
+        var laptop = await E2EUsers.LoginAsync(users.Alice.Username.ToLowerInvariant()); // case-insensitive login
         await using var laptopHub = E2EEnvironment.CreateHub(laptop.Token);
         await using var phoneHub = E2EEnvironment.CreateHub(users.Alice.Token);
         var laptopClosed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -209,7 +209,7 @@ public class StackE2ETests(E2EUsers users)
         await laptopClosed.Task.WaitAsync(Timeout);
         Assert.Equal(HubConnectionState.Connected, phoneHub.State);
 
-        // Старым токеном вышедшего устройства обратно не подключиться
+        // The old token of the logged-out device cannot reconnect
         await using var retry = E2EEnvironment.CreateHub(laptop.Token);
         var retryClosed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         retry.Closed += _ =>
@@ -224,7 +224,7 @@ public class StackE2ETests(E2EUsers users)
         }
         catch (Exception ex) when (ex is not TimeoutException)
         {
-            // отказ прямо на старте — тоже верно
+            // failing right at startup is also correct
         }
         Assert.NotEqual(HubConnectionState.Connected, retry.State);
     }

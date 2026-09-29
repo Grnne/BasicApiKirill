@@ -10,8 +10,8 @@ public class MessagePaginationTests(PostgresFixture db) : DbTest(db)
     [Fact]
     public async Task Pagination_WithIdenticalCreatedAt_ReturnsEveryMessageOnce()
     {
-        // Сообщения с одинаковым временем — обычное дело при пакетной вставке.
-        // Курсор по seq обязан пройти их все без пропусков и повторов.
+        // Messages with identical timestamps are common with batch inserts.
+        // A seq cursor must go through all of them with no gaps or repeats.
         var alice = await Data.UserAsync("alice");
         var bob = await Data.UserAsync("bob");
         var chat = await Data.PrivateChatAsync(alice, bob);
@@ -33,7 +33,7 @@ public class MessagePaginationTests(PostgresFixture db) : DbTest(db)
 
         Assert.Equal(3, pages);
         Assert.Equal(expected.Count, seen.Distinct().Count());
-        Assert.Equal(Enumerable.Reverse(expected), seen); // от новых к старым — по порядку отправки
+        Assert.Equal(Enumerable.Reverse(expected), seen); // newest to oldest — in send order
     }
 
     [Fact]

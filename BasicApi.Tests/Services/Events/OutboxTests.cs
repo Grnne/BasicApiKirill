@@ -14,7 +14,7 @@ using Moq;
 
 namespace BasicApi.Tests.Services.Events;
 
-/// <summary>Outbox в памяти: то, что публикатор кладёт, диспетчер забирает.</summary>
+/// <summary>In-memory outbox: what the publisher puts in, the dispatcher picks up.</summary>
 internal sealed class InMemoryOutbox : IOutboxRepository
 {
     public List<(long Id, string Type, string Payload, int Attempts, bool Processed)> Rows { get; } = [];
@@ -102,7 +102,7 @@ public class OutboxTests
     [Fact]
     public async Task Dispatched_Events_AreTheSameOnTheWire_AsDirectSends()
     {
-        // Клиент не должен заметить, что события теперь идут через outbox.
+        // The client must not notice that events now go through the outbox.
         var message = Message(new string('x', 150));
         Guid[] members = [message.SenderId, Guid.NewGuid()];
         var recipient = Guid.NewGuid();
@@ -156,7 +156,7 @@ public class OutboxTests
         await _db.InTransactionAsync(async ct =>
         {
             await _publisher.MessageCreatedAsync(Message(), [Guid.NewGuid()], ct);
-            Assert.False(await _signal.WaitAsync(TimeSpan.Zero, CancellationToken.None)); // ещё не закоммичено
+            Assert.False(await _signal.WaitAsync(TimeSpan.Zero, CancellationToken.None)); // not committed yet
             return true;
         });
 

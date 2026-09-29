@@ -8,20 +8,20 @@ using BasicApi.Storage.Interfaces;
 namespace BasicApi.Services;
 
 /// <summary>
-/// Синхронизация после обрыва связи. Клиент держит pts — номер последнего известного
-/// ему изменения из своего журнала. После переподключения спрашивает «что после pts»
-/// и догоняет пропущенное; если журнал уже не помнит так далеко — берёт снимок.
+/// Sync after a connection drop. The client keeps pts — the number of the last change
+/// it knows of from its journal. After reconnecting it asks "what is after pts"
+/// and catches up on what it missed; if the journal no longer remembers that far — takes a snapshot.
 /// </summary>
 public interface ISyncService
 {
     Task<SyncStateDto> GetStateAsync(Guid userId, CancellationToken ct = default);
 
-    /// <summary>Ошибки: 400 <c>INVALID_PTS</c> — отрицательный since.</summary>
+    /// <summary>Errors: 400 <c>INVALID_PTS</c> — negative since.</summary>
     Task<SyncDifferenceDto> GetDifferenceAsync(Guid userId, long since, int limit, CancellationToken ct = default);
 
     /// <summary>
-    /// Устройство получило журнал до pts. Ошибки: 400 <c>INVALID_PTS</c> — отрицательный
-    /// или больше последнего pts пользователя.
+    /// The device has received the journal up to pts. Errors: 400 <c>INVALID_PTS</c> — negative
+    /// or greater than the user's last pts.
     /// </summary>
     Task AckAsync(Guid userId, Guid sessionFamilyId, long pts, CancellationToken ct = default);
 }
@@ -29,8 +29,8 @@ public interface ISyncService
 public sealed class SyncService(IDbSession db, IUpdateJournal journal, IChatService chats) : ISyncService
 {
     public Task<SyncStateDto> GetStateAsync(Guid userId, CancellationToken ct = default) =>
-        // Один снимок базы на pts и список чатов: изменение, вошедшее в список, вошло и в pts,
-        // и наоборот — ничего не теряется и не учитывается дважды.
+        // One database snapshot for pts and the chat list: a change that made it into the list also made it into pts,
+        // and vice versa — nothing is lost or counted twice.
         db.InTransactionAsync(async ct => new SyncStateDto
         {
             Pts = await journal.GetPtsAsync(userId, ct),
@@ -50,7 +50,7 @@ public sealed class SyncService(IDbSession db, IUpdateJournal journal, IChatServ
 
         var updates = await journal.GetSinceAsync(userId, since, limit, ct);
 
-        // Номера в журнале идут подряд; первый не since + 1 — начало уже вычищено.
+        // Journal numbers are consecutive; a first one that is not since + 1 means the start was already purged.
         if (updates.Count == 0 || updates[0].Pts != since + 1)
             return new SyncDifferenceDto { Pts = current, SnapshotRequired = true };
 

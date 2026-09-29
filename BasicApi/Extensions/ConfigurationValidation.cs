@@ -3,16 +3,16 @@ using System.Text;
 namespace BasicApi.Extensions;
 
 /// <summary>
-/// Проверка конфигурации до старта. Приложение с дефолтным JWT-ключом в проде —
-/// это возможность подделать токен любого пользователя, поэтому такой старт
-/// должен падать сразу и громко, а не работать «как-нибудь».
+/// Configuration check before startup. An application with the default JWT key in prod
+/// makes it possible to forge any user's token, so such a startup
+/// must fail immediately and loudly, not work "somehow".
 /// </summary>
 public static class ConfigurationValidation
 {
-    /// <summary>HS256 требует ключ не короче 256 бит.</summary>
+    /// <summary>HS256 requires a key of at least 256 bits.</summary>
     public const int MinJwtKeyBytes = 32;
 
-    /// <summary>Ключи, которые когда-либо лежали в репозитории или шаблонах.</summary>
+    /// <summary>Keys that have ever been in the repository or templates.</summary>
     private static readonly string[] KnownPlaceholderKeys =
     [
         "your-super-secret-key-with-at-least-32-characters-long",

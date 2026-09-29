@@ -73,11 +73,11 @@ public class SearchTests(PostgresFixture db) : DbTest(db)
     [Theory]
     [InlineData("запуск")]
     [InlineData("Запуск")]
-    [InlineData("запу")] // по мере набора
+    [InlineData("запу")] // as you type
     public async Task SearchMessages_MatchesRussianWordForms(string query)
     {
-        // С английским словарём русские слова совпадали только в точности:
-        // «запуск» не находил «запускаем» и «до запуска».
+        // With the English dictionary, Russian words matched only exactly:
+        // "запуск" did not find "запускаем" or "до запуска".
         var repository = new MessageRepository(NewSession());
         var alice = await Data.UserAsync("alice");
         var bob = await Data.UserAsync("bob");
@@ -96,7 +96,7 @@ public class SearchTests(PostgresFixture db) : DbTest(db)
     [Fact]
     public async Task SearchMessages_QueryOperatorsAreNotInterpreted()
     {
-        // Ввод пользователя — только слова: символы tsquery не ломают запрос и не дают 500.
+        // User input is words only: tsquery symbols do not break the query or cause a 500.
         var repository = new MessageRepository(NewSession());
         var alice = await Data.UserAsync("alice");
         var bob = await Data.UserAsync("bob");
@@ -125,7 +125,7 @@ public class SearchTests(PostgresFixture db) : DbTest(db)
         Assert.Equal([mixed], (await repository.SearchMessagesCursorAsync(chat, "builds", null, 10)).Result.Items.Select(m => m.Id));
         Assert.Equal([mixed], (await repository.SearchMessagesCursorAsync(chat, "новые", null, 10)).Result.Items.Select(m => m.Id));
 
-        // Только стоп-слова — пустой запрос, а не ошибка.
+        // Only stop words — an empty result, not an error.
         var (none, total) = await repository.SearchMessagesCursorAsync(chat, "и в на", null, 10);
         Assert.Empty(none.Items);
         Assert.Equal(0, total);

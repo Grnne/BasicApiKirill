@@ -9,8 +9,8 @@ using Microsoft.AspNetCore.SignalR;
 namespace BasicApi.Hubs;
 
 /// <summary>
-/// Адаптер SignalR: разбирает вызов, отдаёт его доменному сервису. Правила — в сервисах,
-/// перевод доменных ошибок в <see cref="HubException"/> с кодом — в <see cref="HubErrorFilter"/>.
+/// SignalR adapter: parses the call and hands it to the domain service. The rules live in the services,
+/// translating domain errors into <see cref="HubException"/> with a code is done by <see cref="HubErrorFilter"/>.
 /// </summary>
 [Authorize]
 public class ChatHub(
@@ -21,8 +21,8 @@ public class ChatHub(
     HubConnectionRegistry connectionRegistry,
     ILogger<ChatHub> logger) : Hub
 {
-    // Троттлинг вызовов на соединение — защита от спама SendMessage/Typing,
-    // которые дороже обычного REST-запроса (пишут в БД и рассылают всем участникам чата).
+    // Per-connection call throttling - protection against SendMessage/Typing spam,
+    // which are more expensive than a regular REST request (they write to the DB and broadcast to all chat members).
     private static readonly ConcurrentDictionary<string, RateLimiter> ConnectionLimiters = new();
 
     private bool TryAcquireCallSlot()
@@ -45,15 +45,15 @@ public class ChatHub(
     {
         if (UserId is { } userId)
         {
-            // Сначала регистрируем, потом проверяем сессию: logout между этими
-            // шагами либо найдёт соединение в реестре, либо проверка увидит отзыв.
+            // Register first, then check the session: a logout between these
+            // steps will either find the connection in the registry, or the check will see the revocation.
             var sessionFamilyId = Context.User?.GetSessionFamilyId();
             connectionRegistry.Add(Context, userId, sessionFamilyId, Context.User?.GetTokenExpiry());
 
             if (sessionFamilyId is not null &&
                 !await sessions.IsSessionFamilyLiveAsync(sessionFamilyId.Value, Context.ConnectionAborted))
             {
-                // Access-токен ещё не истёк, но вход уже закрыт (logout, logout-all).
+                // The access token has not expired yet, but the sign-in is already closed (logout, logout-all).
                 logger.LogDebug("Rejected hub connection of revoked session: userId={UserId}", userId);
                 connectionRegistry.Remove(Context.ConnectionId);
                 Context.Abort();
@@ -97,7 +97,7 @@ public class ChatHub(
         await Groups.AddToGroupAsync(Context.ConnectionId, chatId.ToString());
     }
 
-    /// <summary>Выход из группы чата безвреден и без проверки членства.</summary>
+    /// <summary>Leaving a chat group is harmless even without a membership check.</summary>
     public Task LeaveChat(Guid chatId) =>
         UserId is null ? Task.CompletedTask : Groups.RemoveFromGroupAsync(Context.ConnectionId, chatId.ToString());
 
@@ -129,7 +129,7 @@ public class ChatHub(
     public async Task Typing(Guid chatId, bool isTyping)
     {
         if (!TryAcquireCallSlot())
-            return; // Typing — не критично, просто тихо игнорируем лишние вызовы.
+            return; // Typing is not critical, just silently ignore the extra calls.
 
         if (UserId is not { } userId) return;
 

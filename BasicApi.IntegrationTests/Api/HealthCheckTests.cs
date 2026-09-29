@@ -34,9 +34,9 @@ public class HealthCheckTests(PostgresFixture db)
     public async Task Ready_WhenDatabaseUnreachable_Returns503_AndLiveStillOk()
     {
         await using var factory = new ApiFactory(db.ConnectionString);
-        using var client = factory.CreateClient(); // старт приложения — с живой базой (миграции)
+        using var client = factory.CreateClient(); // app startup - with a live database (migrations)
 
-        // Базу «роняем», подменяя пароль: пул соединений не поможет, новые не откроются.
+        // Take the database "down" by swapping the password: the connection pool will not help, new ones will not open.
         NpgsqlConnection.ClearAllPools();
         await using (var connection = new NpgsqlConnection(db.ConnectionString))
         {
@@ -73,7 +73,7 @@ public class HealthCheckTests(PostgresFixture db)
     [Fact]
     public async Task HealthEndpoints_AreNotRateLimited()
     {
-        // Проверки compose/балансировщика не должны съедать лимит и получать 429.
+        // Compose/load-balancer checks must not eat the limit and get 429.
         await using var factory = new ApiFactory(db.ConnectionString);
         using var client = factory.CreateClient();
 

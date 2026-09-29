@@ -7,9 +7,9 @@ public class UserStatusServicePresenceTests
     [Fact]
     public async Task ConcurrentLastDisconnectAndNewConnect_NeverLosesTheNewConnection()
     {
-        // Вкладка перезагружается: старое соединение закрывается, новое открывается
-        // одновременно. Раньше новое могло попасть в набор, который как раз удалялся
-        // из словаря, — и пользователь «уходил в офлайн», оставаясь на связи.
+        // The tab reloads: the old connection closes and the new one opens
+        // at the same time. Previously the new one could end up in a set that was just being removed
+        // from the dictionary — and the user "went offline" while still connected.
         var failures = new List<string>();
 
         for (var i = 0; i < 5_000; i++)
@@ -35,8 +35,8 @@ public class UserStatusServicePresenceTests
             var count = await service.GetConnectionCountAsync(user);
             var online = (await service.GetOnlineUserIdsAsync(new HashSet<Guid> { user })).Contains(user);
 
-            // Итог обязан быть «онлайн, одно соединение», а события — парными:
-            // либо «ушёл» + «пришёл», либо ни одного.
+            // The result must be "online, one connection", and the events must be paired:
+            // either "went offline" + "came online", or none.
             if (!online || count != 1 || wentOffline != cameOnline)
                 failures.Add($"#{i}: online={online} count={count} wentOffline={wentOffline} cameOnline={cameOnline}");
         }

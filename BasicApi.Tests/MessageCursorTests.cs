@@ -24,7 +24,7 @@ public class MessageCursorTests
     [Fact]
     public void OldFormat_IsStillAccepted_AsAPointerToTheMessage()
     {
-        // Курсоры, выданные до seq, остаются у клиентов после обновления.
+        // Cursors issued before seq remain with clients after the update.
         var id = Guid.NewGuid();
         var legacy = MessageCursor.EncodeLegacy(new DateTime(2024, 6, 15, 10, 30, 0, DateTimeKind.Utc), id);
 

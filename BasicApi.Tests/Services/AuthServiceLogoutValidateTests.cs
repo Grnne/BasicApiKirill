@@ -19,8 +19,8 @@ public class AuthServiceLogoutValidateTests
         _jwtServiceMock = new Mock<IJwtService>();
         _sessionServiceMock = new Mock<ISessionService>();
 
-        // Сессии проверяются отдельно в SessionServiceTests; здесь достаточно,
-        // чтобы выдача пары повторяла данные пользователя и токены из IJwtService.
+        // Sessions are checked separately in SessionServiceTests; here it is enough that
+        // the issued pair repeats the user data and tokens from IJwtService.
         _sessionServiceMock
             .Setup(s => s.IssueForUserAsync(
                 It.IsAny<User>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
@@ -56,8 +56,8 @@ public class AuthServiceLogoutValidateTests
     [Fact]
     public async Task LogoutAsync_WithoutRefreshToken_StillReturnsOk()
     {
-        // Arrange — клиент может не прислать токен; отвечать ошибкой не за что,
-        // но и гасить тогда нечего.
+        // Arrange - the client may not send a token; there is nothing to fail with an error,
+        // but nothing to revoke either.
         // Act
         await _service.LogoutAsync(null);
 
@@ -69,8 +69,8 @@ public class AuthServiceLogoutValidateTests
     [Fact]
     public async Task LogoutAsync_UnknownToken_ReturnsOk()
     {
-        // Arrange — logout идемпотентен и не должен работать оракулом
-        // «существует ли такой токен».
+        // Arrange - logout is idempotent and must not work as an oracle for
+        // "does such a token exist".
         _sessionServiceMock
             .Setup(s => s.RevokeAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid?)null);

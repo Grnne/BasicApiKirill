@@ -5,8 +5,8 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 namespace BasicApi.Services;
 
 /// <summary>
-/// Готовность к работе: без базы приложение бесполезно, поэтому /health/ready
-/// падает вместе с ней. Детали ошибки в ответ не попадают — только в лог.
+/// Readiness: without the database the application is useless, so /health/ready
+/// fails together with it. Error details do not go into the response — only into the log.
 /// </summary>
 public sealed class PostgresHealthCheck(IDbConnectionFactory connectionFactory) : IHealthCheck
 {

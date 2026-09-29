@@ -6,8 +6,8 @@ using Microsoft.Extensions.DependencyInjection;
 namespace BasicApi.IntegrationTests.Infrastructure;
 
 /// <summary>
-/// Приложение целиком, в памяти, поверх тестового Postgres. Окружение — Production:
-/// тесты должны видеть то же поведение, что и прод (скрытые детали ошибок и т.п.).
+/// The whole application, in memory, on top of the test Postgres. The environment is Production:
+/// tests must see the same behavior as prod (hidden error details, etc.).
 /// </summary>
 public sealed class ApiFactory(
     string connectionString,

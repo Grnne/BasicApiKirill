@@ -7,15 +7,15 @@ using Microsoft.AspNetCore.SignalR.Client;
 namespace BasicApi.IntegrationTests.E2E;
 
 /// <summary>
-/// Сквозные тесты против развёрнутого стека (Caddy → API → Postgres) по настоящему
-/// HTTPS и WebSocket. Запуск: scripts/e2e.ps1 -BaseUrl https://host.
-/// Без E2E_BASE_URL тесты пропускаются — в обычном прогоне их нет.
+/// End-to-end tests against a deployed stack (Caddy -> API -> Postgres) over real
+/// HTTPS and WebSocket. Run with: scripts/e2e.ps1 -BaseUrl https://host.
+/// Without E2E_BASE_URL the tests are skipped, so they are not part of a regular run.
 /// </summary>
 public static class E2EEnvironment
 {
     public static string? BaseUrl => Environment.GetEnvironmentVariable("E2E_BASE_URL")?.TrimEnd('/');
 
-    /// <summary>Доверять любому сертификату — для локального стека с самоподписанным.</summary>
+    /// <summary>Trust any certificate, for a local stack with a self-signed one.</summary>
     public static bool Insecure => Environment.GetEnvironmentVariable("E2E_INSECURE") == "1";
 
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -36,7 +36,7 @@ public static class E2EEnvironment
         return client;
     }
 
-    /// <summary>Соединение с хабом по WebSocket — тем же транспортом, что у браузера.</summary>
+    /// <summary>Hub connection over WebSocket, the same transport a browser uses.</summary>
     public static HubConnection CreateHub(string token) =>
         new HubConnectionBuilder()
             .WithUrl(BaseUrl + "/hubs/chat", options =>
@@ -57,7 +57,7 @@ public static class E2EEnvironment
         (await response.Content.ReadFromJsonAsync<T>(Json))!;
 }
 
-/// <summary>Тест, который выполняется только при заданном E2E_BASE_URL.</summary>
+/// <summary>A test that runs only when E2E_BASE_URL is set.</summary>
 public sealed class E2EFactAttribute : FactAttribute
 {
     public E2EFactAttribute()
@@ -70,8 +70,9 @@ public sealed class E2EFactAttribute : FactAttribute
 public sealed record E2EUser(Guid UserId, string Username, string Token, string RefreshToken);
 
 /// <summary>
-/// Два пользователя на весь прогон. Имена уникальны, поэтому прогон не зависит от
-/// данных в базе. Входов/регистраций — не больше лимита auth-политики (5/мин с IP).
+/// Two users for the whole run. Names are unique, so the run does not depend on
+/// the data already in the database. Sign-ins/registrations stay within the auth policy limit
+/// (5/min per IP).
 /// </summary>
 public sealed class E2EUsers : IAsyncLifetime
 {

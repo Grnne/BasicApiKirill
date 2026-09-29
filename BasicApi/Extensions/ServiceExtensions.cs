@@ -27,7 +27,7 @@ public static class ServiceExtensions
 {
     public const string ReadyTag = "ready";
 
-    /// <summary>Лимит на команды (отправка, «печатает») — как у хаба на соединение, но на пользователя.</summary>
+    /// <summary>Limit on commands (send, "typing") — same as the hub's per-connection limit, but per user.</summary>
     public const string CommandsRateLimitPolicy = "commands";
 
     public static IServiceCollection AddApiServices(
@@ -77,18 +77,18 @@ public static class ServiceExtensions
         services.AddApiRateLimiting(configuration);
         services.AddSignalR(options =>
         {
-            // Доменные ошибки → HubException с кодом; остальное — в лог.
+            // Domain errors → HubException with a code; anything else goes to the log.
             options.AddFilter<HubErrorFilter>();
-            // Разрешаем параллельную обработку вызовов
+            // Allow parallel handling of calls
             options.MaximumParallelInvocationsPerClient = 2;
-            // Текст исключений клиенту — только при разработке: в проде он
-            // раскрывает внутренности (SQL, пути, имена классов).
+            // Exception text goes to the client only in development: in production it
+            // reveals internals (SQL, paths, class names).
             options.EnableDetailedErrors = environment.IsDevelopment();
-            // Максимальный размер входящего сообщения. Команды переезжают в REST
-            // (POST /api/chats/{id}/messages, /typing); когда фронт переедет, хабу
-            // хватит нескольких КБ — тогда снизить.
+            // Maximum size of an incoming message. Commands are moving to REST
+            // (POST /api/chats/{id}/messages, /typing); once the front end moves over, the hub
+            // will only need a few KB — then lower this.
             options.MaximumReceiveMessageSize = 128 * 1024;
-            // Ограничиваем буфер для команд, чтобы избежать накопления зависших вызовов
+            // Limit the buffer for commands to avoid piling up hung calls
             options.StreamBufferCapacity = 10;
         });
 
@@ -97,7 +97,7 @@ public static class ServiceExtensions
 
         services.AddSingleton<IDbConnectionFactory>(new NpgsqlConnectionFactory(connectionString));
 
-        // Одна сессия БД на запрос (вызов хаба): репозитории делят её транзакцию.
+        // One DB session per request (hub call): repositories share its transaction.
         services.AddScoped<IDbSession, DbSession>();
         services.AddScoped<IChatRepository, ChatRepository>();
         services.AddScoped<IMessageRepository, MessageRepository>();
@@ -106,7 +106,7 @@ public static class ServiceExtensions
         services.AddScoped<IOutboxRepository, OutboxRepository>();
         services.AddScoped<IUpdateJournal, UpdateJournalRepository>();
 
-        // Доменные сервисы: контроллеры и хаб — только адаптеры над ними.
+        // Domain services: controllers and the hub are only adapters over them.
         services.AddScoped<IMembershipService, MembershipService>();
         services.AddScoped<IChatPolicy, ChatPolicy>();
         services.AddScoped<IChatService, ChatService>();
@@ -116,8 +116,8 @@ public static class ServiceExtensions
         services.AddScoped<ISyncService, SyncService>();
         services.AddScoped<AuthService>();
         services.AddScoped<ISessionService, SessionService>();
-        // События: сообщения и новые чаты — через outbox в транзакции изменения,
-        // «печатает» и онлайн — сразу (эфемерные).
+        // Events: messages and new chats go through the outbox in the transaction of the change,
+        // "typing" and online go out immediately (ephemeral).
         services.AddScoped<SignalRChatEventPublisher>();
         services.AddScoped<IChatEventPublisher, OutboxChatEventPublisher>();
         services.AddSingleton<OutboxSignal>();
@@ -133,9 +133,9 @@ public static class ServiceExtensions
         // JWT
         services.AddScoped<IJwtService, JwtService>();
 
-        // За обратным прокси адрес соединения — это адрес прокси. Настоящий IP
-        // клиента (для лимитов и сессий) берём из X-Forwarded-For, но только если
-        // запрос пришёл из доверенной сети прокси: иначе заголовок подделает кто угодно.
+        // Behind a reverse proxy the connection address is the proxy's address. The real
+        // client IP (for limits and sessions) is taken from X-Forwarded-For, but only if the
+        // request came from a trusted proxy network: otherwise anyone could forge the header.
         services.Configure<ForwardedHeadersOptions>(options =>
         {
             options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
@@ -146,7 +146,7 @@ public static class ServiceExtensions
             }
         });
 
-        // Health checks: /health/live — процесс жив; /health/ready — ещё и база доступна.
+        // Health checks: /health/live — the process is alive; /health/ready — the database is reachable too.
         services.AddHealthChecks()
             .AddCheck<PostgresHealthCheck>("postgres", tags: [ReadyTag], timeout: TimeSpan.FromSeconds(3));
 
@@ -157,8 +157,8 @@ public static class ServiceExtensions
                 .WithGlobalConnectionString(connectionString)
                 .ScanIn(typeof(InitialCreate).Assembly).For.Migrations());
 
-        // CORS — только явно разрешённые origin'ы (wildcard + AllowCredentials
-        // означал бы, что любой сайт может делать запросы от имени пользователя).
+        // CORS — only explicitly allowed origins (wildcard + AllowCredentials
+        // would mean any site could make requests on behalf of the user).
         var allowedOrigins = (configuration["Cors:AllowedOrigins"] ?? string.Empty)
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
@@ -236,10 +236,10 @@ public static class ServiceExtensions
 
     public static IServiceCollection AddApiRateLimiting(this IServiceCollection services, IConfiguration configuration)
     {
-        // Реальный клиент при открытии и листании чатов делает десятки запросов в минуту,
-        // поэтому лимит на пользователя щедрый. Анонимам (вход, регистрация, запросы без
-        // токена) — отдельный, по IP. Лимит только по IP не годится: вся команда за
-        // офисным NAT делила бы один бюджет.
+        // A real client makes dozens of requests per minute when opening and scrolling chats,
+        // so the per-user limit is generous. Anonymous callers (login, registration, requests without a
+        // token) get a separate per-IP limit. A per-IP-only limit will not do: a whole team behind
+        // an office NAT would share a single budget.
         var perUser = configuration.GetValue("RateLimiting:PerUserPerMinute", 300);
         var perIp = configuration.GetValue("RateLimiting:PerIpPerMinute", 100);
         var commandsPer10Seconds = configuration.GetValue("RateLimiting:CommandsPer10Seconds", 20);
@@ -259,8 +259,8 @@ public static class ServiceExtensions
                         _ => PerMinute(perIp));
             });
 
-            // Брутфорс-защита: 5 попыток логина/регистрации в минуту с одного IP
-            // (действует ДОПОЛНИТЕЛЬНО к глобальному лимиту, оба должны пройти).
+            // Brute-force protection: 5 login/registration attempts per minute from one IP
+            // (applies IN ADDITION to the global limit, both must pass).
             options.AddPolicy("auth", context =>
                 RateLimitPartition.GetFixedWindowLimiter(
                     partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
@@ -271,8 +271,8 @@ public static class ServiceExtensions
                         QueueLimit = 0
                     }));
 
-            // Отправка и «печатает» пишут в базу и рассылают всем участникам — отдельный
-            // лимит на пользователя (дополнительно к общему), как у хаба на соединение.
+            // Sending and "typing" write to the database and fan out to all participants — a separate
+            // per-user limit (in addition to the general one), like the hub's per-connection one.
             options.AddPolicy(CommandsRateLimitPolicy, context =>
                 RateLimitPartition.GetFixedWindowLimiter(
                     partitionKey: RateLimitUserId(context) is { } userId
@@ -326,7 +326,7 @@ public static class ServiceExtensions
               ?? context.User.FindFirstValue(JwtRegisteredClaimNames.Sub)
             : null;
 
-    /// <summary>Скользящее окно в минуту из 6 сегментов: без двойного всплеска на стыке окон.</summary>
+    /// <summary>Sliding window of one minute in 6 segments: no double burst at the window boundary.</summary>
     private static SlidingWindowRateLimiterOptions PerMinute(int permits) => new()
     {
         PermitLimit = permits,

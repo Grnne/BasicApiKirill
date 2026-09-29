@@ -102,7 +102,7 @@ public class SessionServiceTests
         // Act
         var result = await _service.IssueForUserAsync(_user, "android", "1.2.3.4");
 
-        // Assert — плейнтекст токена в БД попасть не должен
+        // Assert - the plaintext token must not end up in the DB
         Assert.NotNull(stored);
         Assert.NotEqual(result.RefreshToken, stored!.RefreshTokenHash);
         Assert.Equal(SessionService.HashRefreshToken(result.RefreshToken), stored.RefreshTokenHash);
@@ -145,7 +145,7 @@ public class SessionServiceTests
 
         // Assert
         Assert.Equal("access-token", result.Token);
-        Assert.NotEqual(token, result.RefreshToken); // ротация обязательна
+        Assert.NotEqual(token, result.RefreshToken); // rotation is mandatory
         Assert.Equal(_user.Id, result.UserId);
     }
 
@@ -169,7 +169,7 @@ public class SessionServiceTests
         // Act
         var result = await _service.RefreshAsync(token, "android", null);
 
-        // Assert — преемник в той же семье, с хешем нового токена
+        // Assert - the successor is in the same family, with the new token hash
         Assert.NotNull(replacement);
         Assert.Equal(familyId, replacement!.FamilyId);
         Assert.Equal(_user.Id, replacement.UserId);
@@ -214,7 +214,7 @@ public class SessionServiceTests
     [Fact]
     public async Task RefreshAsync_SessionRevokedByLogout_ThrowsUnauthorized()
     {
-        // Arrange — revoked без ReplacedBySessionId = осознанный logout, не ротация
+        // Arrange - revoked without ReplacedBySessionId = deliberate logout, not rotation
         const string token = "logged-out";
         var session = ActiveSession(token);
         session.RevokedAt = DateTime.UtcNow.AddMinutes(-1);
@@ -237,8 +237,8 @@ public class SessionServiceTests
     [Fact]
     public async Task RefreshAsync_RotatedWithinGraceWindow_SucceedsWithoutRevokingFamily()
     {
-        // Arrange — токен уже ротирован 5 секунд назад: это гонка двух параллельных
-        // запросов клиента, а не кража. Проигравший запрос должен получить рабочую пару.
+        // Arrange - the token was already rotated 5 seconds ago: this is a race of two parallel
+        // client requests, not theft. The losing request must get a working pair.
         const string token = "raced";
         var session = ActiveSession(token);
         session.RevokedAt = DateTime.UtcNow.AddSeconds(-5);
@@ -261,8 +261,8 @@ public class SessionServiceTests
     [Fact]
     public async Task RefreshAsync_RotatedAfterGraceWindow_RevokesFamilyAndThrows()
     {
-        // Arrange — тот же сценарий, но спустя минуту: это переиспользование
-        // украденного токена, гасим всю цепочку.
+        // Arrange - the same scenario, but a minute later: this is reuse of a stolen
+        // token, so the whole chain is revoked.
         const string token = "stolen";
         var familyId = Guid.NewGuid();
         var session = ActiveSession(token, familyId);
@@ -285,8 +285,8 @@ public class SessionServiceTests
     [Fact]
     public async Task RefreshAsync_LostTheRotationRace_StillReturnsWorkingPair()
     {
-        // Arrange — сессия выглядела активной, но параллельный запрос успел
-        // ротировать её между SELECT и UPDATE. Клиента выкидывать нельзя.
+        // Arrange - the session looked active, but a parallel request managed to rotate
+        // it between SELECT and UPDATE. The client must not be kicked out.
         const string token = "raced-2";
         var session = ActiveSession(token);
         _sessionRepoMock
@@ -310,9 +310,9 @@ public class SessionServiceTests
     [Fact]
     public async Task RefreshAsync_GraceWindowButFamilyLoggedOut_ThrowsRevoked()
     {
-        // Arrange — токен ротирован секунду назад, но затем пользователь вышел
-        // (logout / logout-all) и всю цепочку погасили. Grace-окно не должно
-        // становиться лазейкой в обход выхода из аккаунта.
+        // Arrange - the token was rotated a second ago, but then the user logged out
+        // (logout / logout-all) and the whole chain was revoked. The grace window must not
+        // become a loophole around signing out of the account.
         const string token = "raced-but-logged-out";
         var session = ActiveSession(token);
         session.RevokedAt = DateTime.UtcNow.AddSeconds(-1);
@@ -400,7 +400,7 @@ public class SessionServiceTests
     [Fact]
     public async Task RevokeAsync_UnknownToken_DoesNotThrow()
     {
-        // Arrange — logout должен быть идемпотентным и не сообщать, существует ли токен
+        // Arrange - logout must be idempotent and must not reveal whether the token exists
         _sessionRepoMock
             .Setup(r => r.GetByRefreshTokenHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Session?)null);

@@ -35,7 +35,7 @@ public class HubErrorFilterTests
             Invoke(new ForbiddenException("User is not a member of this chat", "NOT_A_MEMBER")));
 
         Assert.Equal("NOT_A_MEMBER: User is not a member of this chat", ex.Message);
-        Assert.Empty(_logger.Collector.GetSnapshot()); // ожидаемая ошибка клиента, не сервера
+        Assert.Empty(_logger.Collector.GetSnapshot()); // an expected client error, not a server one
     }
 
     [Fact]

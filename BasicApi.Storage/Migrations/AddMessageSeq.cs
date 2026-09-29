@@ -3,21 +3,20 @@ using FluentMigrator;
 namespace BasicApi.Storage.Migrations;
 
 /// <summary>
-/// Порядковый номер сообщения в чате и идемпотентная отправка.
+/// Sequence number of a message in a chat, and idempotent sending.
 ///
-/// messages.seq — номер внутри чата (1, 2, 3, …), уникален вместе с chat_id.
-/// Выдаётся из chats.last_seq в транзакции вставки: строка чата блокируется, и
-/// отправки в один чат получают номера строго по порядку фиксации. Порядок по seq
-/// однозначен, в отличие от created_at, у которого бывают совпадения.
-/// Существующие сообщения нумеруются по (created_at, id) — в том же порядке, в каком
-/// их отдавала пагинация.
+/// messages.seq is the number within a chat (1, 2, 3, ...), unique together with chat_id.
+/// It is issued from chats.last_seq in the insert transaction: the chat row is locked, so
+/// sends to one chat get numbers strictly in commit order. Ordering by seq is unambiguous,
+/// unlike created_at, which can have ties. Existing messages are numbered by (created_at, id),
+/// the same order in which pagination returned them.
 ///
-/// messages.client_message_id — id, который клиент выбирает сам до отправки.
-/// Уникален вместе с sender_id: повтор отправки (ретрай после обрыва сети) находит
-/// уже созданное сообщение вместо второго.
+/// messages.client_message_id is an id the client picks itself before sending.
+/// Unique together with sender_id: a resend (retry after a network drop) finds the message
+/// already created instead of creating a second one.
 ///
-/// chat_members.last_read_seq вместо last_read_message_id: «прочитано до номера N».
-/// Непрочитанные — простое сравнение номеров, без подзапроса к опорному сообщению.
+/// chat_members.last_read_seq instead of last_read_message_id: "read up to number N".
+/// Unread is a simple number comparison, with no subquery to the anchor message.
 /// </summary>
 [Migration(9)]
 public class AddMessageSeq : Migration

@@ -10,9 +10,9 @@ public class MessageDto
     public DateTime CreatedAt { get; set; }
     public bool IsRead { get; set; }
 
-    /// <summary>Номер сообщения в чате: 1, 2, 3, … Порядок сообщений — по нему.</summary>
+    /// <summary>Number of the message in the chat: 1, 2, 3, … Messages are ordered by it.</summary>
     public long Seq { get; set; }
 
-    /// <summary>Id, переданный отправителем при отправке через REST; null — не передавался.</summary>
+    /// <summary>Id supplied by the sender when sending via REST; null — not supplied.</summary>
     public Guid? ClientMessageId { get; set; }
 }

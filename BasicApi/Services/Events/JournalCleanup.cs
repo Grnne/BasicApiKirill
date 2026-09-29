@@ -3,9 +3,9 @@ using BasicApi.Storage.Interfaces;
 namespace BasicApi.Services.Events;
 
 /// <summary>
-/// Чистка раз в <c>Sync:CleanupIntervalMinutes</c>: журнал изменений хранится
-/// <c>Sync:RetentionDays</c> (30 дней), разосланные события outbox — неделю.
-/// Удаляет пачками, чтобы не держать долгих блокировок.
+/// Cleanup every <c>Sync:CleanupIntervalMinutes</c>: the change journal is kept for
+/// <c>Sync:RetentionDays</c> (30 days), dispatched outbox events for a week.
+/// Deletes in batches to avoid holding long locks.
 /// </summary>
 public sealed class JournalCleanup(
     IServiceScopeFactory scopes,
@@ -40,7 +40,7 @@ public sealed class JournalCleanup(
         while (await WaitAsync(timer, stoppingToken));
     }
 
-    /// <summary>Одна чистка; возвращает, сколько удалено записей журнала и событий outbox.</summary>
+    /// <summary>One cleanup pass; returns how many journal records and outbox events were deleted.</summary>
     public async Task<(int Updates, int Events)> CleanupAsync(CancellationToken ct = default)
     {
         await using var scope = scopes.CreateAsyncScope();

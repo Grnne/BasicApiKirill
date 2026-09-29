@@ -46,7 +46,7 @@ public class ConfigurationValidationTests
     [Fact]
     public void ShortJwtKey_Fails_InAnyEnvironment()
     {
-        // HS256 требует ключ не короче 256 бит — с коротким не подпишется ни один токен.
+        // HS256 requires a key of at least 256 bits; no token can be signed with a shorter one.
         var ex = Assert.Throws<InvalidOperationException>(() =>
             ConfigurationValidation.Validate(Config("too-short"), Env("Development")));
         Assert.Contains("Jwt:Key", ex.Message);
@@ -85,7 +85,7 @@ public class ConfigurationValidationTests
     [Fact]
     public void AllProblems_AreReportedAtOnce()
     {
-        // Чтобы не чинить конфиг по одной ошибке за перезапуск.
+        // So the config does not have to be fixed one error per restart.
         var ex = Assert.Throws<InvalidOperationException>(() =>
             ConfigurationValidation.Validate(Config(null, connection: null), Env("Production")));
         Assert.Contains("Jwt:Key", ex.Message);

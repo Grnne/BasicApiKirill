@@ -28,8 +28,8 @@ public class PrivateChatTests(PostgresFixture db) : DbTest(db)
     [Fact]
     public async Task GetOrCreate_ParallelCalls_CreateExactlyOneChat()
     {
-        // Двойной клик / два устройства: раньше проверка «есть ли чат» и вставка
-        // не были атомарны, и пара получала два личных чата.
+        // Double click / two devices: previously the "does the chat exist" check and the insert
+        // were not atomic, and the pair ended up with two private chats.
         var alice = await Data.UserAsync("alice");
         var bob = await Data.UserAsync("bob");
 
@@ -48,7 +48,7 @@ public class PrivateChatTests(PostgresFixture db) : DbTest(db)
 }
 
 /// <summary>
-/// Миграция ключа личного чата на базе, где дубли уже успели появиться.
+/// Migration of the private chat key on a database where duplicates have already appeared.
 /// </summary>
 [Collection(PostgresCollection.Name)]
 public class PrivateChatKeyMigrationTests(PostgresFixture db)
@@ -90,15 +90,15 @@ public class PrivateChatKeyMigrationTests(PostgresFixture db)
             return id;
         }
 
-        var keeper = await Chat(t0, alice, bob);                    // самый старый — остаётся
-        var dup = await Chat(t0.AddHours(1), bob, alice);           // дубль той же пары
-        var other = await Chat(t0, alice, carol);                   // другая пара — не трогаем
+        var keeper = await Chat(t0, alice, bob);                    // the oldest one stays
+        var dup = await Chat(t0.AddHours(1), bob, alice);           // a duplicate of the same pair
+        var other = await Chat(t0, alice, carol);                   // a different pair, left alone
 
         var m1 = await Message(keeper, alice, t0.AddMinutes(1));
         var m2 = await Message(dup, bob, t0.AddHours(2));
         await Message(other, carol, t0.AddMinutes(5));
 
-        // Алиса прочитала дубль дальше, чем основной чат — указатель должен стать самым поздним.
+        // Alice read the duplicate further than the main chat: the pointer must become the latest.
         await connection.ExecuteAsync(
             "UPDATE chat_members SET last_read_message_id = @m1 WHERE chat_id = @keeper AND user_id = @alice",
             new { m1, keeper, alice });
@@ -106,7 +106,7 @@ public class PrivateChatKeyMigrationTests(PostgresFixture db)
             "UPDATE chat_members SET last_read_message_id = @m2 WHERE chat_id = @dup AND user_id = @alice",
             new { m2, dup, alice });
 
-        // До миграции 9: дальше указатель прочитанного хранится как seq.
+        // Before migration 9: from here on the read pointer is stored as seq.
         PostgresFixture.WithRunner(connectionString, runner => runner.MigrateUp(6));
 
         var chats = (await connection.QueryAsync<Guid>("SELECT id FROM chats ORDER BY id")).ToHashSet();

@@ -12,11 +12,11 @@ namespace BasicApi;
 public class Program
 {
     /// <summary>
-    /// CSP заголовком, а не только &lt;meta&gt; в index.html: frame-ancestors в meta
-    /// не работает, а заголовок покрывает и страницы, которые отдаёт сам сервер.
-    /// connect-src 'self' — даже при XSS скрипт не отправит токен на чужой хост
-    /// (same-origin ws/wss 'self' тоже покрывает). 'unsafe-inline' только для
-    /// стилей: Vue вставляет их тегом &lt;style&gt;; для скриптов послаблений нет.
+    /// CSP as a header, not only &lt;meta&gt; in index.html: frame-ancestors does not work
+    /// in meta, and a header also covers the pages served by the server itself.
+    /// connect-src 'self': even with XSS a script cannot send the token to a foreign host
+    /// (same-origin ws/wss is covered by 'self' too). 'unsafe-inline' is for styles only:
+    /// Vue inserts them with a &lt;style&gt; tag; there are no relaxations for scripts.
     /// </summary>
     public const string ContentSecurityPolicy =
         "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
@@ -27,19 +27,19 @@ public class Program
     {
         var builder = WebApplication.CreateBuilder(args);
 
-        // Падаем до старта, если конфиг опасен или неполон (дефолтный JWT-ключ и т.п.).
+        // Fail before startup if the config is dangerous or incomplete (default JWT key and the like).
         ConfigurationValidation.Validate(builder.Configuration, builder.Environment);
 
         builder.Services.AddApiServices(builder.Configuration, builder.Environment);
 
-        // SignalR пишет Error на любое исключение метода хаба — и на ожидаемые ошибки
-        // клиента (NOT_A_MEMBER, MESSAGE_EMPTY), для которых REST пишет Information.
-        // Настоящие ошибки хаба пишет HubErrorFilter — с именем метода и уровнем Error.
+        // SignalR logs Error for any hub method exception, including expected client
+        // errors (NOT_A_MEMBER, MESSAGE_EMPTY), for which REST logs Information.
+        // Real hub errors are logged by HubErrorFilter, with the method name and level Error.
         builder.Logging.AddFilter("Microsoft.AspNetCore.SignalR.Internal.DefaultHubDispatcher", LogLevel.None);
 
-        // Сжатие статики фронтенда: бандл ужимается втрое.
-        // Пока раздачей занимается Kestrel, это его работа; появится nginx —
-        // сжатие переедет туда.
+        // Compression of frontend static files: the bundle shrinks threefold.
+        // While Kestrel serves them, this is its job; once nginx appears,
+        // compression will move there.
         builder.Services.AddResponseCompression(options =>
         {
             options.EnableForHttps = true;
@@ -55,8 +55,8 @@ public class Program
 
         var app = builder.Build();
 
-        // Настоящий IP и схема клиента из заголовков прокси — раньше всего остального,
-        // чтобы логи, лимиты и сессии видели клиента, а не Caddy.
+        // The real client IP and scheme from proxy headers come before everything else,
+        // so that logs, limits and sessions see the client, not Caddy.
         app.UseForwardedHeaders();
 
         // Global error handling — first after forwarded headers
@@ -69,10 +69,10 @@ public class Program
                 .GetRequiredService<IMigrationRunner>()
                 .MigrateUp();
         }
-        // Заголовки безопасности для всех ответов. Дёшево и закрывает
-        // несколько типовых атак: подмену типа файла, вставку страницы
-        // в чужой iframe, утечку адреса через Referer и — через CSP —
-        // большую часть последствий XSS.
+        // Security headers for all responses. Cheap, and they close
+        // several typical attacks: content type spoofing, embedding the page
+        // in a foreign iframe, address leakage via Referer and, through CSP,
+        // most of the consequences of XSS.
         app.Use(async (context, next) =>
         {
             var headers = context.Response.Headers;
@@ -92,15 +92,15 @@ public class Program
             {
                 var path = context.Context.Request.Path.Value ?? string.Empty;
 
-                // В именах файлов сборки есть хеш содержимого: меняется файл —
-                // меняется имя. Значит их можно кэшировать навсегда.
+                // Build file names contain a content hash: when the file changes,
+                // the name changes. So they can be cached forever.
                 if (path.StartsWith("/client/assets/", StringComparison.OrdinalIgnoreCase))
                 {
                     context.Context.Response.Headers[HeaderNames.CacheControl] =
                         "public,max-age=31536000,immutable";
                 }
-                // А вот index.html обязан проверяться каждый раз — иначе
-                // пользователь останется на старой версии приложения.
+                // But index.html must be revalidated every time, otherwise
+                // the user would stay on an old version of the app.
                 else if (path.EndsWith("index.html", StringComparison.OrdinalIgnoreCase))
                 {
                     context.Context.Response.Headers[HeaderNames.CacheControl] = "no-cache";
@@ -111,28 +111,28 @@ public class Program
         // CORS
         app.UseCors("Default");
 
-        // Swagger по умолчанию только в Development; в проде — флагом Swagger:Enabled.
+        // Swagger is on by default only in Development; in production, with the Swagger:Enabled flag.
         if (app.Configuration.GetValue("Swagger:Enabled", false))
             app.UseSwaggerWithUI();
 
-        // TLS завершается на обратном прокси, поэтому HTTPS-редиректа здесь нет.
-        // Порядок: Authentication → RateLimiter → Authorization.
-        // Лимитеру нужен уже известный пользователь (лимит по userId), и он должен
-        // стоять до авторизации — иначе поток запросов без токена обрывается на 401
-        // раньше лимитера и не ограничивается вовсе.
+        // TLS terminates at the reverse proxy, so there is no HTTPS redirect here.
+        // Order: Authentication -> RateLimiter -> Authorization.
+        // The limiter needs the user to be already known (limit by userId), and it must
+        // come before authorization: otherwise a flood of requests without a token ends in 401
+        // before reaching the limiter and is not limited at all.
         app.UseAuthentication();
         app.UseRateLimiter();
         app.UseAuthorization();
 
-        // Соединение живёт, пока жив вход, с которого оно открыто, а не access-токен:
-        // веб-клиент при переподключении отдаёт тот же токен и после закрытия по его
-        // истечению оставался без событий. Конец входа обрывает соединения сразу
-        // (logout, logout-all) или в течение минуты (HubSessionMonitor).
+        // The connection lives as long as the sign-in it was opened from, not the access token:
+        // on reconnect the web client sends the same token, and after being closed on its
+        // expiry it was left without events. The end of a sign-in drops connections immediately
+        // (logout, logout-all) or within a minute (HubSessionMonitor).
         app.MapHub<ChatHub>("/hubs/chat");
         app.MapControllers();
 
-        // Проверки для compose и балансировщика: без авторизации и вне rate limit,
-        // иначе частые проверки съедят лимит и получат 429.
+        // Checks for compose and the load balancer: no authorization and outside the rate limit,
+        // otherwise frequent checks would eat the limit and get 429.
         app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false })
             .DisableRateLimiting();
         app.MapHealthChecks("/health/ready", new HealthCheckOptions
@@ -154,9 +154,9 @@ public class Program
             return Task.CompletedTask;
         });
 
-        // Клиентский роутинг: /client/chat — это маршрут внутри SPA, файла с
-        // таким именем нет. Ограничение "/client/{*path:nonfile}" важно:
-        // без него опечатка в адресе /api/... возвращала бы HTML вместо 404.
+        // Client-side routing: /client/chat is a route inside the SPA, there is no file
+        // with such a name. The "/client/{*path:nonfile}" constraint matters:
+        // without it a typo in an /api/... address would return HTML instead of 404.
         app.MapFallbackToFile("/client/{*path:nonfile}", "client/index.html");
 
         app.Run();

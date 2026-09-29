@@ -10,7 +10,7 @@ namespace BasicApi.IntegrationTests.Api;
 [Collection(PostgresCollection.Name)]
 public class RateLimitingTests(PostgresFixture db)
 {
-    // Все запросы — с одного IP, как из офиса за NAT.
+    // All requests come from one IP, as from an office behind NAT.
     private ApiFactory Factory() => new(
         db.ConnectionString,
         new Dictionary<string, string?>
@@ -47,7 +47,7 @@ public class RateLimitingTests(PostgresFixture db)
             Assert.Equal(HttpStatusCode.OK, await GetChatsAsync(client, alice));
         Assert.Equal(HttpStatusCode.TooManyRequests, await GetChatsAsync(client, alice));
 
-        // Лимит Алисы исчерпан, но Боб с того же IP не страдает.
+        // Alice's limit is exhausted, but Bob from the same IP is unaffected.
         Assert.Equal(HttpStatusCode.OK, await GetChatsAsync(client, bob));
     }
 
@@ -61,7 +61,7 @@ public class RateLimitingTests(PostgresFixture db)
         Assert.Equal(HttpStatusCode.Unauthorized, await GetChatsAsync(client, null));
         Assert.Equal(HttpStatusCode.TooManyRequests, await GetChatsAsync(client, null));
 
-        // Анонимный бюджет IP исчерпан — авторизованный пользователь с него же работает.
+        // The anonymous IP budget is exhausted - an authorized user from the same IP still works.
         Assert.Equal(HttpStatusCode.OK, await GetChatsAsync(client, Token(factory, Guid.NewGuid())));
     }
 }

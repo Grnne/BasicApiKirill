@@ -3,11 +3,11 @@ using BasicApi.Services;
 namespace BasicApi.Hubs;
 
 /// <summary>
-/// Раз в <c>Hub:SessionCheckIntervalSeconds</c> (60 с) проверяет входы открытых соединений
-/// хаба и обрывает соединения закончившихся: цепочка отозвана при повторе refresh-токена
-/// или истекла. Logout и logout-all обрывают соединения сразу, без этой проверки.
+/// Every <c>Hub:SessionCheckIntervalSeconds</c> (60 s) checks the sign-ins of open hub connections
+/// and drops the connections of ended ones: the chain was revoked on refresh-token reuse
+/// or has expired. Logout and logout-all drop connections immediately, without this check.
 ///
-/// Соединение с токеном без входа (<c>sid</c>) живёт до истечения токена.
+/// A connection with a token without a sign-in (<c>sid</c>) lives until the token expires.
 /// </summary>
 public sealed class HubSessionMonitor(
     HubConnectionRegistry connections,
@@ -39,13 +39,13 @@ public sealed class HubSessionMonitor(
         }
     }
 
-    /// <summary>Одна проверка; возвращает, сколько соединений оборвано.</summary>
+    /// <summary>One check; returns how many connections were dropped.</summary>
     public async Task<int> CheckAsync(CancellationToken ct = default)
     {
         var aborted = connections.AbortExpiredWithoutSession(time.GetUtcNow());
 
-        // Проверяем только входы из этого снимка: соединение, открытое после него,
-        // не должно оборваться лишь потому, что его вход не попал в запрос.
+        // We check only the sign-ins from this snapshot: a connection opened after it
+        // must not be dropped just because its sign-in did not make it into the query.
         var families = connections.SessionFamilies();
         if (families.Count > 0)
         {

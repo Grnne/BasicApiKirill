@@ -6,22 +6,22 @@ namespace BasicApi.Services;
 
 public interface IUserService
 {
-    /// <summary>Id активного пользователя по логину (без учёта регистра); 404 <c>USER_NOT_FOUND</c>.</summary>
+    /// <summary>Id of an active user by login (case-insensitive); 404 <c>USER_NOT_FOUND</c>.</summary>
     Task<UserIdResponseDto> GetUserIdAsync(string username, CancellationToken ct = default);
 
     /// <summary>
-    /// Профиль самого вызывающего, с почтой: клиент, восстановивший сессию по сохранённому
-    /// токену, получает те же данные, что вернули бы вход или регистрация.
+    /// The caller's own profile, with email: a client that restored a session from a saved
+    /// token gets the same data that login or registration would return.
     /// </summary>
     Task<OwnProfileResponseDto> GetOwnProfileAsync(Guid userId, CancellationToken ct = default);
 
     /// <summary>
-    /// Публичный профиль. Почты нет — она видна только владельцу. Онлайн-статуса тоже нет:
-    /// он доступен только собеседникам, через <see cref="IPresenceService"/>.
+    /// Public profile. No email — it is visible only to the owner. No online status either:
+    /// it is available only to counterparts, via <see cref="IPresenceService"/>.
     /// </summary>
     Task<UserProfileResponseDto> GetUserProfileAsync(Guid userId, CancellationToken ct = default);
 
-    /// <summary>Поиск по имени или логину (ILIKE), без самого вызывающего.</summary>
+    /// <summary>Search by name or login (ILIKE), excluding the caller.</summary>
     Task<SearchUsersResponseDto> SearchUsersAsync(
         Guid currentUserId, string query, int limit, CancellationToken ct = default);
 }
@@ -38,7 +38,7 @@ public sealed class UserService(IUserRepository userRepository) : IUserService
 
     public async Task<OwnProfileResponseDto> GetOwnProfileAsync(Guid userId, CancellationToken ct = default)
     {
-        // Токен жив, а аккаунта нет — клиенту пора выбросить токен и войти заново.
+        // The token is alive but the account is gone — the client should discard the token and sign in again.
         var user = await userRepository.GetByIdAsync(userId, ct)
             ?? throw UserNotFound();
 

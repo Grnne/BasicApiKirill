@@ -5,44 +5,44 @@ using BasicApi.Services.Events;
 namespace BasicApi.Services;
 
 /// <summary>
-/// Онлайн и «печатает»: состояние (в памяти, <see cref="IUserStatusService"/>)
-/// и рассылка изменений. Кому статус виден — решает <see cref="IChatPolicy"/>.
+/// Online and "typing": the state (in memory, <see cref="IUserStatusService"/>)
+/// and broadcasting of changes. Who can see a status is decided by <see cref="IChatPolicy"/>.
 /// </summary>
 public interface IPresenceService
 {
-    /// <summary>Новое соединение; первое соединение пользователя — «в сети» его контактам.</summary>
+    /// <summary>A new connection; a user's first connection means "online" to their contacts.</summary>
     Task ConnectedAsync(Guid userId, string connectionId, CancellationToken ct = default);
 
     /// <summary>
-    /// Соединение закрыто; последнее — «не в сети» контактам и сброс «печатает».
-    /// Без токена отмены: соединение к этому моменту уже оборвано.
+    /// Connection closed; the last one means "offline" to contacts and resets "typing".
+    /// No cancellation token: by this point the connection has already dropped.
     /// </summary>
     Task DisconnectedAsync(Guid userId, string connectionId);
 
     Task<ConnectionInfo> GetConnectionInfoAsync(Guid userId, string connectionId);
 
-    /// <summary>«Печатает» в чате; 403 <c>NOT_A_MEMBER</c> для чужого чата.</summary>
+    /// <summary>"Typing" in a chat; 403 <c>NOT_A_MEMBER</c> for a chat one is not in.</summary>
     Task SetTypingAsync(Guid chatId, Guid userId, bool isTyping, CancellationToken ct = default);
 
     /// <summary>
-    /// Двое только что стали собеседниками. При подключении «в сети» рассылается тем,
-    /// с кем уже есть общий чат, так что без этого оба видели бы друг друга
-    /// «не в сети» до переподключения. Сообщаем только «в сети»: «не в сети» клиент
-    /// и так считает по умолчанию.
+    /// Two users have just become companions. On connect, "online" is broadcast to those
+    /// who already share a chat, so without this the two would see each other as
+    /// "offline" until they reconnect. Only "online" is announced: the client
+    /// assumes "offline" by default anyway.
     /// </summary>
     Task IntroduceAsync(Guid userA, Guid userB, CancellationToken ct = default);
 
-    /// <summary>Кто из контактов сейчас в сети (офлайн не перечисляются).</summary>
+    /// <summary>Which contacts are online now (offline ones are not listed).</summary>
     Task<UserStatusResponseDto> GetContactsOnlineAsync(Guid userId, CancellationToken ct = default);
 
-    /// <summary>Статус одного пользователя; вне круга общих чатов — 404, чтобы не выдавать существование аккаунта.</summary>
+    /// <summary>The status of a single user; outside the circle of shared chats - 404, so as not to reveal that the account exists.</summary>
     Task<UserStatusDto> GetUserStatusAsync(Guid viewerId, Guid targetId, CancellationToken ct = default);
 
-    /// <summary>Статусы списка пользователей; не видимые вызывающему молча отбрасываются.</summary>
+    /// <summary>Statuses for a list of users; those not visible to the caller are silently dropped.</summary>
     Task<UserStatusResponseDto> GetUsersStatusAsync(
         Guid viewerId, IReadOnlyCollection<Guid> userIds, CancellationToken ct = default);
 
-    /// <summary>Кто печатает в чатах пользователя.</summary>
+    /// <summary>Who is typing in the user's chats.</summary>
     Task<TypingStatusResponseDto> GetTypingAsync(Guid userId, CancellationToken ct = default);
 }
 
@@ -59,8 +59,8 @@ public sealed class PresenceService(
     {
         var isFirstConnection = await status.SetUserOnlineStatusAsync(userId, connectionId, true);
 
-        // Debug, а не Information: на каждое подключение строка в проде не нужна.
-        // IP и User-Agent не пишем — минимизация данных; они есть в sessions.
+        // Debug, not Information: a line per connection is not needed in prod.
+        // We do not log IP and User-Agent - data minimisation; they are in sessions.
         if (logger.IsEnabled(LogLevel.Debug))
         {
             logger.LogDebug("Connected: userId={UserId}, connectionId={ConnectionId}, connections={Count}",
@@ -86,7 +86,7 @@ public sealed class PresenceService(
 
         await events.UserOnlineChangedAsync(userId, false, await policy.GetPresenceAudienceAsync(userId));
 
-        // Ушёл последним соединением посреди набора — «печатает» гасим сразу, не дожидаясь TTL.
+        // Left with the last connection in the middle of typing - clear "typing" right away, without waiting for the TTL.
         foreach (var chatId in await status.ClearTypingAsync(userId))
         {
             var memberIds = await membership.GetMemberIdsAsync(chatId);
@@ -164,7 +164,7 @@ public sealed class PresenceService(
 
     public async Task<TypingStatusResponseDto> GetTypingAsync(Guid userId, CancellationToken ct = default)
     {
-        // Спрашиваем только про чаты пользователя — чужие даже не читаются.
+        // Ask only about the user's chats - others' are not even read.
         var typingMap = await status.GetTypingStatusAsync(await membership.GetChatIdsAsync(userId, ct));
 
         return new TypingStatusResponseDto
