@@ -45,20 +45,17 @@ public class ChatHub(
             var userId = GetUserId();
             if (userId.HasValue)
             {
-                var httpCtx = Context.GetHttpContext();
-                var userAgent = httpCtx?.Request.Headers.UserAgent.FirstOrDefault() ?? "unknown";
-                var remoteIp = httpCtx?.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-
-                logger.LogInformation(
-                    "OnConnectedAsync: userId={UserId}, connectionId={ConnectionId}, ip={RemoteIp}, userAgent={UserAgent}",
-                    userId.Value, Context.ConnectionId, remoteIp, userAgent);
-
                 var isFirstConnection = await userStatusService.SetUserOnlineStatusAsync(userId.Value, Context.ConnectionId, true);
-                var totalConnections = await userStatusService.GetConnectionCountAsync(userId.Value);
 
-                logger.LogInformation(
-                    "User {UserId} now has {Count} active connections (just added {ConnectionId})",
-                    userId.Value, totalConnections, Context.ConnectionId);
+                // Debug, а не Information: на каждое подключение строка в проде не нужна.
+                // IP и User-Agent не пишем — минимизация данных; они есть в sessions.
+                if (logger.IsEnabled(LogLevel.Debug))
+                {
+                    logger.LogDebug(
+                        "Connected: userId={UserId}, connectionId={ConnectionId}, connections={Count}",
+                        userId.Value, Context.ConnectionId,
+                        await userStatusService.GetConnectionCountAsync(userId.Value));
+                }
 
                 if (isFirstConnection)
                 {
@@ -88,13 +85,15 @@ public class ChatHub(
 
             if (userId.HasValue)
             {
-                var beforeCount = await userStatusService.GetConnectionCountAsync(userId.Value);
                 var wentOffline = await userStatusService.SetUserOnlineStatusAsync(userId.Value, Context.ConnectionId, false);
-                var afterCount = await userStatusService.GetConnectionCountAsync(userId.Value);
 
-                logger.LogInformation(
-                    "OnDisconnectedAsync: userId={UserId}, connectionId={ConnectionId}, beforeCount={BeforeCount}, afterCount={AfterCount}",
-                    userId.Value, Context.ConnectionId, beforeCount, afterCount);
+                if (logger.IsEnabled(LogLevel.Debug))
+                {
+                    logger.LogDebug(
+                        "Disconnected: userId={UserId}, connectionId={ConnectionId}, connections={Count}",
+                        userId.Value, Context.ConnectionId,
+                        await userStatusService.GetConnectionCountAsync(userId.Value));
+                }
 
                 if (wentOffline)
                 {

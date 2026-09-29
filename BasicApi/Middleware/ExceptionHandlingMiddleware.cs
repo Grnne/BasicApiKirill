@@ -10,21 +10,31 @@ namespace BasicApi.Middleware;
 /// Catches all unhandled exceptions and returns structured ProblemDetails responses.
 /// Maps known exception types to appropriate HTTP status codes.
 /// Strips internal details in production (non-development) environments.
+///
+/// Logging: 5xx — Error with the exception and traceId (the same traceId the client
+/// sees in the response, so a user report can be matched to the log line);
+/// domain 4xx — Information without a stack trace; client aborts — Debug.
 /// </summary>
 public class ExceptionHandlingMiddleware
 {
+    /// <summary>Nginx convention for "client closed request"; never reaches the client.</summary>
+    public const int StatusClientClosedRequest = 499;
+
     private readonly RequestDelegate _next;
     private readonly IHostEnvironment _env;
+    private readonly ILogger<ExceptionHandlingMiddleware> _logger;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
-    public ExceptionHandlingMiddleware(RequestDelegate next, IHostEnvironment env)
+    public ExceptionHandlingMiddleware(
+        RequestDelegate next, IHostEnvironment env, ILogger<ExceptionHandlingMiddleware> logger)
     {
         _next = next;
         _env = env;
+        _logger = logger;
     }
 
     public async Task InvokeAsync(HttpContext context)
@@ -33,34 +43,48 @@ public class ExceptionHandlingMiddleware
         {
             await _next(context);
         }
-        catch (UnauthorizedException ex)
+        catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
         {
-            SetWwwAuthenticateHeader(context);
-            await WriteProblemDetailsAsync(context, StatusCodes.Status401Unauthorized,
-                "Unauthorized", ex.Message, errorCode: ex.ErrorCode);
+            // Клиент ушёл сам (закрыл вкладку, оборвалась сеть) — отвечать некому.
+            _logger.LogDebug("Request aborted by client: {Method} {Path}",
+                context.Request.Method, context.Request.Path);
+
+            if (!context.Response.HasStarted)
+                context.Response.StatusCode = StatusClientClosedRequest;
         }
-        catch (ForbiddenException ex)
+        catch (Exception ex) when (context.Response.HasStarted)
         {
-            await WriteProblemDetailsAsync(context, StatusCodes.Status403Forbidden,
-                "Forbidden", ex.Message, errorCode: ex.ErrorCode);
+            // Заголовки уже отправлены: ProblemDetails не записать. Логируем
+            // и пробрасываем — Kestrel оборвёт соединение, клиент увидит обрыв.
+            _logger.LogError(ex,
+                "Unhandled exception after response started: {Method} {Path}, traceId={TraceId}",
+                context.Request.Method, context.Request.Path, context.TraceIdentifier);
+            throw;
         }
-        catch (NotFoundException ex)
+        catch (DomainException ex)
         {
-            await WriteProblemDetailsAsync(context, StatusCodes.Status404NotFound,
-                "Not Found", ex.Message, errorCode: ex.ErrorCode);
-        }
-        catch (BadRequestException ex)
-        {
-            await WriteProblemDetailsAsync(context, StatusCodes.Status400BadRequest,
-                "Bad Request", ex.Message, errorCode: ex.ErrorCode);
-        }
-        catch (ConflictException ex)
-        {
-            await WriteProblemDetailsAsync(context, StatusCodes.Status409Conflict,
-                "Conflict", ex.Message, errorCode: ex.ErrorCode);
+            var (status, title) = ex switch
+            {
+                UnauthorizedException => (StatusCodes.Status401Unauthorized, "Unauthorized"),
+                ForbiddenException => (StatusCodes.Status403Forbidden, "Forbidden"),
+                NotFoundException => (StatusCodes.Status404NotFound, "Not Found"),
+                ConflictException => (StatusCodes.Status409Conflict, "Conflict"),
+                _ => (StatusCodes.Status400BadRequest, "Bad Request")
+            };
+
+            _logger.LogInformation("{Method} {Path} -> {StatusCode} {ErrorCode}: {Detail}",
+                context.Request.Method, context.Request.Path, status, ex.ErrorCode, ex.Message);
+
+            if (ex is UnauthorizedException)
+                SetWwwAuthenticateHeader(context);
+
+            await WriteProblemDetailsAsync(context, status, title, ex.Message, errorCode: ex.ErrorCode);
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Unhandled exception: {Method} {Path}, traceId={TraceId}",
+                context.Request.Method, context.Request.Path, context.TraceIdentifier);
+
             await WriteProblemDetailsAsync(context, StatusCodes.Status500InternalServerError,
                 "Internal Server Error",
                 _env.IsDevelopment() ? ex.Message : "An unexpected error occurred.",

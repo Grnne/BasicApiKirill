@@ -469,7 +469,7 @@ public class ChatHubTests
         // Assert — verify the service was queried correctly
         Assert.Single(_clientProxy.Invocations);
         Assert.Equal("Pong", _clientProxy.Invocations[0].Method);
-        _statusMock.Verify(s => s.GetConnectionCountAsync(_userId), Times.Exactly(2)); // once in OnConnectedAsync log, once in Ping
+        _statusMock.Verify(s => s.GetConnectionCountAsync(_userId), Times.Once); // only Ping; connect logs it at Debug, disabled in tests
         _statusMock.Verify(s => s.IsConnectionActiveAsync(_userId, _connectionId), Times.Once);
     }
 

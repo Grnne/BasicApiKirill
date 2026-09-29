@@ -101,8 +101,7 @@ public static class ServiceExtensions
             .ConfigureRunner(rb => rb
                 .AddPostgres()
                 .WithGlobalConnectionString(connectionString)
-                .ScanIn(typeof(InitialCreate).Assembly).For.Migrations())
-            .AddLogging(lb => lb.AddConsole());
+                .ScanIn(typeof(InitialCreate).Assembly).For.Migrations());
 
         // CORS — только явно разрешённые origin'ы (wildcard + AllowCredentials
         // означал бы, что любой сайт может делать запросы от имени пользователя).
