@@ -10,6 +10,7 @@ namespace BasicApi.Hubs;
 public static class HubErrors
 {
     public const string NotAMember = "NOT_A_MEMBER";
+    public const string RateLimited = "RATE_LIMITED";
 
     public static HubException Create(string code, string message) => new($"{code}: {message}");
 }

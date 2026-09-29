@@ -2,6 +2,7 @@
 using System.Security.Claims;
 using System.Threading.RateLimiting;
 using BasicApi.Extensions;
+using BasicApi.Models;
 using BasicApi.Models.Dto.Chat;
 using BasicApi.Models.Dto.Message;
 using BasicApi.Services;
@@ -154,11 +155,11 @@ public class ChatHub(
             if (!userId.HasValue) return;
 
             if (!await chatRepository.IsMemberAsync(chatId, userId.Value))
-                return;
+                throw HubErrors.Create(HubErrors.NotAMember, "User is not a member of this chat");
 
             await Groups.AddToGroupAsync(Context.ConnectionId, chatId.ToString());
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not HubException)
         {
             logger.LogError(ex, "JoinChat failed for chatId={ChatId}", chatId);
             throw;
@@ -189,13 +190,20 @@ public class ChatHub(
         try
         {
             if (!TryAcquireCallSlot())
-                throw new HubException("Rate limit exceeded. Slow down.");
+                throw HubErrors.Create(HubErrors.RateLimited, "Too many calls. Slow down.");
 
             var userId = GetUserId();
             if (!userId.HasValue) return;
 
+            // Текст проверяем до похода в базу: это бесплатно.
+            var textError = MessageText.Normalize(text, out text);
+            if (textError == MessageText.EmptyCode)
+                throw HubErrors.Create(textError, "Message text is empty");
+            if (textError == MessageText.TooLongCode)
+                throw HubErrors.Create(textError, $"Message text is longer than {MessageText.MaxLength} characters");
+
             if (!await chatRepository.IsMemberAsync(chatId, userId.Value))
-                return;
+                throw HubErrors.Create(HubErrors.NotAMember, "User is not a member of this chat");
 
             var message = new Message
             {
@@ -240,7 +248,7 @@ public class ChatHub(
                 await Clients.User(participant.UserId.ToString())
                     .SendAsync("ChatListUpdated", chatId, listUpdateDto);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not HubException)
         {
             logger.LogError(ex, "SendMessage failed for chatId={ChatId}", chatId);
             throw;

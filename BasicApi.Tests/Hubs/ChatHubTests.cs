@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using BasicApi.Hubs;
+using BasicApi.Models;
 using BasicApi.Services;
 using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
@@ -286,7 +287,7 @@ public class ChatHubTests
     }
 
     [Fact]
-    public async Task JoinChat_WhenNotMember_DoesNotAddToGroup()
+    public async Task JoinChat_WhenNotMember_IsRejected_AndDoesNotAddToGroup()
     {
         // Arrange
         var chatId = Guid.NewGuid();
@@ -294,10 +295,11 @@ public class ChatHubTests
             .Setup(r => r.IsMemberAsync(chatId, _userId))
             .ReturnsAsync(false);
 
-        // Act
-        await _hub.JoinChat(chatId);
+        // Act — раньше молча ничего не происходило, клиент не понимал почему
+        var ex = await Assert.ThrowsAsync<HubException>(() => _hub.JoinChat(chatId));
 
         // Assert
+        Assert.StartsWith("NOT_A_MEMBER:", ex.Message);
         _groupsMock.Verify(
             g => g.AddToGroupAsync(It.IsAny<string>(), It.IsAny<string>(), default),
             Times.Never);
@@ -425,7 +427,7 @@ public class ChatHubTests
     }
 
     [Fact]
-    public async Task SendMessage_WhenNotMember_DoesNotCreateOrSend()
+    public async Task SendMessage_WhenNotMember_IsRejected_AndDoesNotCreateOrSend()
     {
         // Arrange
         _chatRepoMock
@@ -433,11 +435,71 @@ public class ChatHubTests
             .ReturnsAsync(false);
 
         // Act
-        await _hub.SendMessage(Guid.NewGuid(), "test");
+        var ex = await Assert.ThrowsAsync<HubException>(() => _hub.SendMessage(Guid.NewGuid(), "test"));
 
         // Assert
+        Assert.StartsWith("NOT_A_MEMBER:", ex.Message);
         _messageRepoMock.Verify(r => r.CreateAsync(It.IsAny<Message>()), Times.Never);
         Assert.Empty(_clientProxy.Invocations);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("\n\t ")]
+    [InlineData(null)]
+    public async Task SendMessage_EmptyText_IsRejected(string? text)
+    {
+        _chatRepoMock.Setup(r => r.IsMemberAsync(It.IsAny<Guid>(), _userId)).ReturnsAsync(true);
+
+        var ex = await Assert.ThrowsAsync<HubException>(() => _hub.SendMessage(Guid.NewGuid(), text!));
+
+        Assert.StartsWith("MESSAGE_EMPTY:", ex.Message);
+        _messageRepoMock.Verify(r => r.CreateAsync(It.IsAny<Message>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SendMessage_TooLong_IsRejected()
+    {
+        _chatRepoMock.Setup(r => r.IsMemberAsync(It.IsAny<Guid>(), _userId)).ReturnsAsync(true);
+
+        var ex = await Assert.ThrowsAsync<HubException>(() =>
+            _hub.SendMessage(Guid.NewGuid(), new string('x', MessageText.MaxLength + 1)));
+
+        Assert.StartsWith("MESSAGE_TOO_LONG:", ex.Message);
+        _messageRepoMock.Verify(r => r.CreateAsync(It.IsAny<Message>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SendMessage_IsTrimmed_AndMaxLengthIsAccepted()
+    {
+        var chatId = Guid.NewGuid();
+        _chatRepoMock.Setup(r => r.IsMemberAsync(chatId, _userId)).ReturnsAsync(true);
+        _chatRepoMock.Setup(r => r.GetUserNameAsync(_userId)).ReturnsAsync("Me");
+        _chatRepoMock.Setup(r => r.GetChatParticipantsAsync(chatId)).ReturnsAsync([]);
+        var saved = new List<string>();
+        _messageRepoMock
+            .Setup(r => r.CreateAsync(It.IsAny<Message>()))
+            .Callback((Message m) => saved.Add(m.Text))
+            .ReturnsAsync(Guid.NewGuid());
+
+        await _hub.SendMessage(chatId, "  hello \n");
+        await _hub.SendMessage(chatId, " " + new string('x', MessageText.MaxLength) + " ");
+
+        Assert.Equal("hello", saved[0]);
+        Assert.Equal(MessageText.MaxLength, saved[1].Length);
+    }
+
+    [Fact]
+    public async Task SendMessage_OverCallLimit_IsRejectedWithCode()
+    {
+        _chatRepoMock.Setup(r => r.IsMemberAsync(It.IsAny<Guid>(), _userId)).ReturnsAsync(false);
+
+        HubException? last = null;
+        for (var i = 0; i < 25; i++)
+            last = await Assert.ThrowsAsync<HubException>(() => _hub.SendMessage(Guid.NewGuid(), "x"));
+
+        Assert.StartsWith("RATE_LIMITED:", last!.Message);
     }
 
     [Fact]
