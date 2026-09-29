@@ -170,33 +170,33 @@ public class MessageRepository(IDbConnectionFactory connectionFactory) : IMessag
         return message.Id;
     }
 
-    public async Task UpdateLastReadAsync(Guid chatId, Guid userId, Guid messageId)
+    public async Task<ReadPointerUpdate> MarkReadAsync(Guid chatId, Guid userId, Guid messageId)
     {
+        // Одним запросом: сообщение должно быть из этого чата, а указатель движется
+        // только вперёд по (created_at, id) — два устройства, отчитавшиеся не по
+        // порядку, не откатят прочитанное назад.
         const string sql = @"
-            UPDATE chat_members
-            SET last_read_message_id = @messageId
-            WHERE chat_id = @chatId AND user_id = @userId";
-
-                using var connection = connectionFactory.CreateConnection();
-        await connection.ExecuteAsync(sql, new { chatId, userId, messageId });
-    }
-    public async Task<int> GetUnreadCountAsync(Guid chatId, Guid userId)
-    {
-        const string sql = @"
-        SELECT COUNT(*) 
-        FROM messages m
-        WHERE m.chat_id = @chatId 
-        AND m.created_at > (
-            SELECT COALESCE(
-                (SELECT created_at FROM messages WHERE id = cm.last_read_message_id),
-                '1970-01-01'::timestamp
+            WITH target AS (
+                SELECT id, created_at FROM messages WHERE id = @messageId AND chat_id = @chatId
+            ), moved AS (
+                UPDATE chat_members cm
+                SET last_read_message_id = t.id
+                FROM target t
+                WHERE cm.chat_id = @chatId AND cm.user_id = @userId
+                  AND (cm.last_read_message_id IS NULL
+                       OR NOT EXISTS (SELECT 1 FROM messages r WHERE r.id = cm.last_read_message_id)
+                       OR (t.created_at, t.id) > (
+                           SELECT r.created_at, r.id FROM messages r WHERE r.id = cm.last_read_message_id))
+                RETURNING 1
             )
-            FROM chat_members cm
-            WHERE cm.chat_id = @chatId AND cm.user_id = @userId
-        )";
+            SELECT (SELECT COUNT(*) FROM target) AS Found, (SELECT COUNT(*) FROM moved) AS Moved";
 
         using var connection = connectionFactory.CreateConnection();
-                return await connection.ExecuteScalarAsync<int>(sql, new { chatId, userId });
+        var (found, moved) = await connection.QuerySingleAsync<(long Found, long Moved)>(
+            sql, new { chatId, userId, messageId });
+
+        if (found == 0) return ReadPointerUpdate.MessageNotFound;
+        return moved > 0 ? ReadPointerUpdate.Moved : ReadPointerUpdate.NotMoved;
     }
 
         /// <summary>

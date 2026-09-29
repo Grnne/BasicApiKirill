@@ -125,25 +125,6 @@ public class ChatRepository(IDbConnectionFactory connectionFactory) : IChatRepos
         return await connection.ExecuteScalarAsync<bool>(sql, new { chatId, userId });
     }
 
-        public async Task<int> GetUnreadCountAsync(Guid chatId, Guid userId)
-    {
-        const string sql = @"
-            SELECT COUNT(*)
-            FROM messages m
-            WHERE m.chat_id = @chatId
-              AND m.is_deleted = false
-              AND m.created_at > COALESCE(
-                  (SELECT created_at FROM messages WHERE id = (
-                      SELECT last_read_message_id FROM chat_members
-                      WHERE chat_id = @chatId AND user_id = @userId
-                  )),
-                  '1970-01-01'::timestamp
-              )";
-
-                using var connection = connectionFactory.CreateConnection();
-        return await connection.ExecuteScalarAsync<int>(sql, new { chatId, userId });
-    }
-
     public async Task<string?> GetCompanionNameAsync(Guid chatId, Guid userId)
     {
         const string sql = @"
@@ -204,15 +185,17 @@ public class ChatRepository(IDbConnectionFactory connectionFactory) : IChatRepos
             comp.display_name AS CompanionName,
             comp.username AS CompanionUsername,
 
+            -- Непрочитанные: чужие сообщения после указателя по (created_at, id).
+            -- Свои не считаются; равное время не путает порядок.
             COALESCE((
                 SELECT COUNT(*)
                 FROM messages m_unread
+                LEFT JOIN messages m_read ON m_read.id = cm_last.last_read_message_id
                 WHERE m_unread.chat_id = c.id
                   AND m_unread.is_deleted = false
-                  AND m_unread.created_at > COALESCE(
-                      (SELECT created_at FROM messages WHERE id = cm_last.last_read_message_id),
-                      '1970-01-01'::timestamp
-                  )
+                  AND m_unread.sender_id <> @userId
+                  AND (m_read.id IS NULL
+                       OR (m_unread.created_at, m_unread.id) > (m_read.created_at, m_read.id))
             ), 0) AS UnreadCount,
 
             lm.id AS LastMessageId,

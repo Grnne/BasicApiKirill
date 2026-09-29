@@ -172,13 +172,46 @@ public class ChatsHandlerTests
         _chatRepoMock
             .Setup(r => r.IsMemberAsync(chatId, userId))
             .ReturnsAsync(true);
+        _msgRepoMock
+            .Setup(r => r.MarkReadAsync(chatId, userId, lastMessageId))
+            .ReturnsAsync(ReadPointerUpdate.Moved);
 
         // Act
         var result = await _handler.MarkReadAsync(chatId, userId, lastMessageId);
 
         // Assert
         Assert.IsType<OkResult>(result);
-        _msgRepoMock.Verify(r => r.UpdateLastReadAsync(chatId, userId, lastMessageId), Times.Once);
+        _msgRepoMock.Verify(r => r.MarkReadAsync(chatId, userId, lastMessageId), Times.Once);
+    }
+
+    [Fact]
+    public async Task MarkReadAsync_OlderMessage_IsOk_WithoutError()
+    {
+        // Указатель назад не двигается, но для клиента это не ошибка: он уже прочитал дальше.
+        var chatId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        _chatRepoMock.Setup(r => r.IsMemberAsync(chatId, userId)).ReturnsAsync(true);
+        _msgRepoMock
+            .Setup(r => r.MarkReadAsync(chatId, userId, It.IsAny<Guid>()))
+            .ReturnsAsync(ReadPointerUpdate.NotMoved);
+
+        Assert.IsType<OkResult>(await _handler.MarkReadAsync(chatId, userId, Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task MarkReadAsync_MessageNotInChat_ThrowsNotFound()
+    {
+        var chatId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        _chatRepoMock.Setup(r => r.IsMemberAsync(chatId, userId)).ReturnsAsync(true);
+        _msgRepoMock
+            .Setup(r => r.MarkReadAsync(chatId, userId, It.IsAny<Guid>()))
+            .ReturnsAsync(ReadPointerUpdate.MessageNotFound);
+
+        var ex = await Assert.ThrowsAsync<NotFoundException>(() =>
+            _handler.MarkReadAsync(chatId, userId, Guid.NewGuid()));
+
+        Assert.Equal("MESSAGE_NOT_FOUND", ex.ErrorCode);
     }
 
     [Fact]

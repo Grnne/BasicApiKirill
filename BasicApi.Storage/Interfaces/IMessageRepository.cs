@@ -38,6 +38,10 @@ public interface IMessageRepository
     Task<(CursorResult<MessageWithSender> Result, int TotalCount)> SearchMessagesCursorAsync(Guid chatId, string query, string? cursor, int limit);
 
     Task<Guid> CreateAsync(Message message);
-    Task UpdateLastReadAsync(Guid chatId, Guid userId, Guid messageId);
-    Task<int> GetUnreadCountAsync(Guid chatId, Guid userId);
+    /// <summary>
+    /// Moves the member's read pointer to the given message — forward only, by
+    /// (created_at, id). A message from another chat (or a non-existent one) is
+    /// rejected without touching the pointer.
+    /// </summary>
+    Task<ReadPointerUpdate> MarkReadAsync(Guid chatId, Guid userId, Guid messageId);
 }

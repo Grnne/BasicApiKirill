@@ -115,7 +115,13 @@ public class ChatsHandler(
                 if (!isMember)
             throw new ForbiddenException("User is not a member of this chat", "NOT_A_MEMBER");
 
-        await messageRepository.UpdateLastReadAsync(chatId, userId, lastMessageId);
+        // Сообщение из чужого чата — 404: иначе указатель мог бы встать на чужое
+        // сообщение, и счётчик непрочитанных сломался бы. Попытка отмотать назад —
+        // не ошибка, просто ничего не меняется.
+        var update = await messageRepository.MarkReadAsync(chatId, userId, lastMessageId);
+        if (update == ReadPointerUpdate.MessageNotFound)
+            throw new NotFoundException("Message not found in this chat", "MESSAGE_NOT_FOUND");
+
         return new OkResult();
     }
 

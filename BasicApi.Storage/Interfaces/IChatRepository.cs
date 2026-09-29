@@ -28,7 +28,6 @@ public interface IChatRepository
     /// </summary>
     Task<Guid> CreateAsync(Chat chat, Guid[] memberIds);
     Task<bool> IsMemberAsync(Guid chatId, Guid userId);
-    Task<int> GetUnreadCountAsync(Guid chatId, Guid userId);
     Task<string?> GetCompanionNameAsync(Guid chatId, Guid userId);
     Task<string> GetUserNameAsync(Guid userId);
     Task<List<ChatParticipantDto>> GetChatParticipantsAsync(Guid chatId);
