@@ -13,6 +13,7 @@ using BasicApi.Storage.Services;
 using FluentMigrator.Runner;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
@@ -99,6 +100,19 @@ public static class ServiceExtensions
 
         // JWT
         services.AddScoped<IJwtService, JwtService>();
+
+        // За обратным прокси адрес соединения — это адрес прокси. Настоящий IP
+        // клиента (для лимитов и сессий) берём из X-Forwarded-For, но только если
+        // запрос пришёл из доверенной сети прокси: иначе заголовок подделает кто угодно.
+        services.Configure<ForwardedHeadersOptions>(options =>
+        {
+            options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+            foreach (var network in (configuration["ReverseProxy:TrustedNetworks"] ?? string.Empty)
+                         .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse(network));
+            }
+        });
 
         // Health checks: /health/live — процесс жив; /health/ready — ещё и база доступна.
         services.AddHealthChecks()

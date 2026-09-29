@@ -3,7 +3,9 @@
 CI и автоматического деплоя нет до последнего этапа [плана 2](plan-2-features.md).
 До тех пор прод обновляется вручную по этой инструкции. Сервер — Ubuntu с Docker,
 стек описан в `docker-compose.prod.yml`, секреты — в `.env.prod` (шаблон
-`.env.prod.example`).
+`.env.prod.example`). Снаружи открыт только Caddy (80/443, TLS от Let's Encrypt,
+конфиг — `deploy/Caddyfile`); API и Postgres доступны лишь во внутренних
+docker-сетях.
 
 Во всех командах ниже:
 
@@ -50,7 +52,7 @@ $COMPOSE build basicapi
 $COMPOSE up -d
 $COMPOSE ps                            # basicapi и postgres — healthy
 $COMPOSE logs --since 5m basicapi      # миграции применились, нет ошибок
-curl -fsS http://127.0.0.1:${HOST_PORT:-8080}/health/ready   # Healthy
+curl -fsS "https://$DOMAIN/health/ready"   # Healthy (через Caddy и TLS)
 ```
 
 Миграции применяются при старте приложения. Если старт упал на миграции —
@@ -93,6 +95,16 @@ $COMPOSE up -d --no-build basicapi
 ```
 
 После отката — пройти шаг 4 и записать откат в `~/deploy.log`.
+
+## Первый запуск на новом сервере
+
+1. DNS-запись `DOMAIN` указывает на сервер; порты 80 и 443 открыты в фаерволе.
+2. `cp .env.prod.example .env.prod`, заполнить все значения (`DOMAIN`,
+   `ACME_EMAIL`, секреты).
+3. `$COMPOSE up -d --build`, затем `$COMPOSE logs caddy` — сертификат выпущен
+   (`certificate obtained successfully`).
+4. Том `basicchat_caddy_data` хранит сертификаты — не удалять: при частых
+   перевыпусках Let's Encrypt временно блокирует домен.
 
 ## Бэкапы
 

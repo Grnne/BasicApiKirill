@@ -11,6 +11,10 @@
 #
 #  Логи:
 #    docker compose -f docker-compose.prod.yml logs -f basicapi
+#
+#  Снаружи открыты только 80/443 (Caddy). API и Postgres — во внутренних сетях.
+#  Перед первым запуском: DNS-запись DOMAIN указывает на сервер, порты 80 и 443
+#  открыты — иначе Let's Encrypt не выдаст сертификат.
 # ═══════════════════════════════════════════════════════════════════════
 
 name: basicchat
@@ -99,15 +103,16 @@ services:
       AllowedHosts: ${ALLOWED_HOSTS:-*}
       # Swagger UI и схема API; в проде по умолчанию выключены.
       Swagger__Enabled: ${SWAGGER_ENABLED:-false}
+      # Доверять X-Forwarded-For только от Caddy: его сеть edge с фиксированной подсетью.
+      ReverseProxy__TrustedNetworks: ${PROXY_SUBNET:-172.30.0.0/24}
       # Фронтенд отдаётся тем же API (wwwroot/app), поэтому по умолчанию
       # cross-origin доступ с credentials не нужен. Заполняй, только если
       # ходишь на API с отдельного домена/порта.
       Cors__AllowedOrigins: ${ALLOWED_ORIGINS:-}
 
-    ports:
-      # Если публичный доступ не нужен (доступ только через AmneziaVPN /
-      # reverse proxy) — замени на "127.0.0.1:8080:8080"
-      - "${HOST_PORT:-8080}:8080"
+    # Портов наружу нет: весь трафик идёт через Caddy по сети edge.
+    expose:
+      - "8080"
 
     # 🛡 read-only rootfs + tmpfs для временных файлов
     read_only: true
@@ -150,13 +155,72 @@ services:
 
     networks:
       - chat_network
+      - edge
+
+  caddy:
+    image: caddy:2.10-alpine
+    container_name: basicchat_caddy
+    restart: unless-stopped
+
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"     # HTTP/3
+
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data         # сертификаты и ключи ACME — не терять
+      - caddy_config:/config
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+
+    depends_on:
+      basicapi:
+        condition: service_healthy
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+          pids: 100
+
+    networks:
+      - edge
 
 volumes:
   postgres_data:
     name: basicchat_postgres_data
+  caddy_data:
+    name: basicchat_caddy_data
+  caddy_config:
+    name: basicchat_caddy_config
   # Data Protection keys живут в tmpfs — при рестарте пересоздаются.
   # Для JWT-авторизации это безопасно (токены самодостаточные).
 
 networks:
+  # База и API. internal: из этой сети нет выхода наружу.
   chat_network:
     driver: bridge
+    internal: true
+  # Caddy ↔ API. Подсеть фиксирована: приложение доверяет заголовкам прокси только из неё.
+  edge:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${PROXY_SUBNET:-172.30.0.0/24}

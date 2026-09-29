@@ -38,7 +38,11 @@ public class Program
 
         var app = builder.Build();
 
-        // Global error handling — MUST be first middleware
+        // Настоящий IP и схема клиента из заголовков прокси — раньше всего остального,
+        // чтобы логи, лимиты и сессии видели клиента, а не Caddy.
+        app.UseForwardedHeaders();
+
+        // Global error handling — first after forwarded headers
         app.UseMiddleware<ExceptionHandlingMiddleware>();
 
         // Run migrations
