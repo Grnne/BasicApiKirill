@@ -1,3 +1,4 @@
+using BasicApi.Models;
 using BasicApi.Models.Dto.Chat;
 using BasicApi.Models.Dto.Message;
 using BasicApi.Storage.Dto;
@@ -26,6 +27,15 @@ public static class ChatListItemMapper
         OutboxReadSeq = r.OutboxReadSeq,
         OutboxDeliveredSeq = r.OutboxDeliveredSeq,
         LastActivityAt = r.LastMessageCreatedAt ?? r.CreatedAt,
+        Draft = r.DraftUpdatedAt is { } draftUpdatedAt
+            ? new DraftDto
+            {
+                Text = r.DraftText ?? string.Empty,
+                Entities = MessageEntities.Deserialize(r.DraftEntitiesJson),
+                ReplyToMessageId = r.DraftReplyToMessageId,
+                UpdatedAt = draftUpdatedAt
+            }
+            : null,
         LastMessage = r.LastMessageId is not null ? new MessageDto
         {
             Id = r.LastMessageId!.Value,

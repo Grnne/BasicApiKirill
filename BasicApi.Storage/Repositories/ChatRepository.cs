@@ -167,6 +167,10 @@ public class ChatRepository(IDbSession db) : IChatRepository
 
             cm.last_read_seq AS LastReadSeq,
             cm.marked_unread AS MarkedUnread,
+            d.text AS DraftText,
+            d.entities::text AS DraftEntitiesJson,
+            d.reply_to_message_id AS DraftReplyToMessageId,
+            d.updated_at AS DraftUpdatedAt,
             COALESCE(ob.read_seq, 0) AS OutboxReadSeq,
             COALESCE(ob.delivered_seq, 0) AS OutboxDeliveredSeq,
             ob.members > 0 AS HasOthers,
@@ -201,6 +205,7 @@ public class ChatRepository(IDbSession db) : IChatRepository
         ) lm ON TRUE
 
         LEFT JOIN users sender_u ON sender_u.id = lm.sender_id
+        LEFT JOIN user_drafts d ON d.user_id = @userId AND d.chat_id = c.id
 
         -- How far the other members got: the status of the user's own messages.
         CROSS JOIN LATERAL (

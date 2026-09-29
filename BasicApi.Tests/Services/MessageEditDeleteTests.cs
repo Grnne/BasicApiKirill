@@ -40,7 +40,7 @@ public class MessageEditDeleteTests
     {
         var membership = new MembershipService(_chatRepoMock.Object);
         var policy = new ChatPolicy(membership, Options.Create(options ?? new MessageOptions()));
-        return new MessageService(new FakeDbSession(), _msgRepoMock.Object, membership, policy, _eventsMock.Object);
+        return new MessageService(new FakeDbSession(), _msgRepoMock.Object, membership, policy, _eventsMock.Object, Mock.Of<IDraftRepository>());
     }
 
     private MessageWithSender Stored(

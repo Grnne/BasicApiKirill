@@ -106,6 +106,7 @@ public static class ServiceExtensions
         services.AddScoped<IOutboxRepository, OutboxRepository>();
         services.AddScoped<IUpdateJournal, UpdateJournalRepository>();
         services.AddScoped<IReactionRepository, ReactionRepository>();
+        services.AddScoped<IDraftRepository, DraftRepository>();
 
         // Domain services: controllers and the hub are only adapters over them.
         services.AddScoped<IMembershipService, MembershipService>();
@@ -115,6 +116,7 @@ public static class ServiceExtensions
         services.AddScoped<IMessageService, MessageService>();
         services.AddScoped<IReactionService, ReactionService>();
         services.AddScoped<IReadStateService, ReadStateService>();
+        services.AddScoped<IDraftService, DraftService>();
         services.AddScoped<IPresenceService, PresenceService>();
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<ISyncService, SyncService>();

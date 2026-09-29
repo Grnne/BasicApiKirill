@@ -1,5 +1,6 @@
 using BasicApi.Middleware.Exceptions;
 using BasicApi.Models;
+using BasicApi.Models.Dto.Chat;
 using BasicApi.Models.Dto.Message;
 using BasicApi.Services.Events;
 using BasicApi.Storage;
@@ -85,7 +86,8 @@ public sealed class MessageService(
     IMessageRepository messageRepository,
     IMembershipService membership,
     IChatPolicy policy,
-    IChatEventPublisher events) : IMessageService
+    IChatEventPublisher events,
+    IDraftRepository drafts) : IMessageService
 {
     /// <summary>How many messages one forward may carry.</summary>
     public const int MaxForward = 100;
@@ -204,6 +206,10 @@ public sealed class MessageService(
                     await messageRepository.SetMentionsAsync(created.Id, chatId, created.Seq, mentioned, ct);
 
                 await events.MessageCreatedAsync(created, memberIds, ct);
+
+                // What was being written is sent: the draft goes, on every device of the sender.
+                if (await drafts.DeleteAsync(senderId, chatId, ct))
+                    await events.DraftUpdatedAsync(new DraftUpdatedDto { ChatId = chatId, Draft = null }, senderId, ct);
                 return created;
             }, ct: ct);
 

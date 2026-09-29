@@ -18,6 +18,7 @@ public class ChatsController(
     IMessageService messages,
     IReactionService reactions,
     IReadStateService readState,
+    IDraftService drafts,
     IPresenceService presence) : ControllerBase
 {
     /// <summary>
@@ -348,6 +349,59 @@ public class ChatsController(
     public async Task<IActionResult> RemoveReaction(Guid chatId, Guid messageId, CancellationToken ct)
     {
         await reactions.RemoveAsync(chatId, User.GetUserId(), messageId, ct);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Save the draft of this chat.
+    /// </summary>
+    /// <remarks>
+    /// One draft per user and chat, shared by the user's devices: they receive <c>DraftUpdated</c>,
+    /// and a new device finds the draft in <c>GET /api/chats</c> (<c>draft</c>). Save with a pause
+    /// of a second or two after typing stops, not on every key. The text is kept as typed (not
+    /// trimmed); formatting and the reply follow the rules of sending. Text of only spaces without
+    /// a reply removes the draft — <c>204</c>. Sending a message to the chat removes it too.
+    /// The same draft again changes nothing and sends nothing.
+    ///
+    /// Errors: <c>400 MESSAGE_TOO_LONG</c>, <c>400 INVALID_ENTITIES</c>, <c>400 REPLY_TARGET_NOT_FOUND</c>,
+    /// <c>403 NOT_A_MEMBER</c>, <c>429 RATE_LIMITED</c>.
+    /// </remarks>
+    /// <param name="chatId">Chat ID</param>
+    /// <param name="dto">The draft</param>
+    /// <param name="ct">Request cancellation.</param>
+    [HttpPut("{chatId}/draft")]
+    [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
+    [RequestSizeLimit(64 * 1024)]
+    [ProducesResponseType(typeof(DraftDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> SaveDraft(Guid chatId, [FromBody] SaveDraftDto dto, CancellationToken ct)
+    {
+        var draft = await drafts.SaveAsync(chatId, User.GetUserId(), dto.Text, dto.Entities, dto.ReplyToMessageId, ct);
+        return draft is null ? NoContent() : Ok(draft);
+    }
+
+    /// <summary>
+    /// Remove the draft of this chat.
+    /// </summary>
+    /// <remarks>
+    /// The user's devices receive <c>DraftUpdated</c> with <c>draft: null</c>. Without a draft —
+    /// <c>204</c> and no event. Errors: <c>403 NOT_A_MEMBER</c>, <c>429 RATE_LIMITED</c>.
+    /// </remarks>
+    /// <param name="chatId">Chat ID</param>
+    /// <param name="ct">Request cancellation.</param>
+    [HttpDelete("{chatId}/draft")]
+    [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> DeleteDraft(Guid chatId, CancellationToken ct)
+    {
+        await drafts.DeleteAsync(chatId, User.GetUserId(), ct);
         return NoContent();
     }
 

@@ -38,4 +38,7 @@ public class ChatListItemDto
     public long OutboxDeliveredSeq { get; set; }
 
     public DateTime LastActivityAt { get; set; }
+
+    /// <summary>The user's unsent message in this chat; null — none.</summary>
+    public DraftDto? Draft { get; set; }
 }

@@ -33,7 +33,15 @@ public static partial class MessageEntities
     /// </summary>
     /// <returns>An error message, or null if the entities are fine (then they are in <paramref name="result"/>).</returns>
     public static string? Normalize(
-        IReadOnlyList<MessageEntityDto>? entities, string raw, string text, out List<MessageEntityDto> result)
+        IReadOnlyList<MessageEntityDto>? entities, string raw, string text, out List<MessageEntityDto> result) =>
+        Normalize(entities, raw, text, raw.Length - raw.TrimStart().Length, out result);
+
+    /// <summary>The same checks over a text that is stored as typed, without trimming (a draft).</summary>
+    public static string? Validate(IReadOnlyList<MessageEntityDto>? entities, string text, out List<MessageEntityDto> result) =>
+        Normalize(entities, text, text, 0, out result);
+
+    private static string? Normalize(
+        IReadOnlyList<MessageEntityDto>? entities, string raw, string text, int leadingTrim, out List<MessageEntityDto> result)
     {
         result = [];
         if (entities is null || entities.Count == 0)
@@ -41,7 +49,6 @@ public static partial class MessageEntities
         if (entities.Count > MaxCount)
             return $"At most {MaxCount} entities are allowed";
 
-        var leadingTrim = raw.Length - raw.TrimStart().Length;
         foreach (var entity in entities)
         {
             if (entity is null)
@@ -74,7 +81,6 @@ public static partial class MessageEntities
         result.Sort((a, b) => a.Offset != b.Offset ? a.Offset.CompareTo(b.Offset) : b.Length.CompareTo(a.Length));
         return null;
     }
-
 
     private static string? CheckType(MessageEntityDto entity)
     {
