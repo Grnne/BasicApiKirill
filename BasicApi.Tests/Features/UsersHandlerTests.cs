@@ -30,7 +30,7 @@ public class UsersHandlerTests
         var userId = Guid.NewGuid();
 
         _userRepoMock
-            .Setup(r => r.GetIdByUsernameOrEmailAsync("testuser", It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetIdByUsernameAsync("testuser", It.IsAny<CancellationToken>()))
             .ReturnsAsync(userId);
 
         // Act
@@ -47,7 +47,7 @@ public class UsersHandlerTests
     {
         // Arrange
         _userRepoMock
-            .Setup(r => r.GetIdByUsernameOrEmailAsync("unknown", It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetIdByUsernameAsync("unknown", It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid?)null);
 
         // Act & Assert
@@ -55,19 +55,6 @@ public class UsersHandlerTests
             _handler.GetUserIdAsync("unknown"));
 
         Assert.Contains("User not found", ex.Message);
-    }
-
-    [Fact]
-    public async Task GetUserIdAsync_EmptyGuid_ThrowsNotFoundException()
-    {
-        // Arrange
-        _userRepoMock
-            .Setup(r => r.GetIdByUsernameOrEmailAsync("empty", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Guid.Empty);
-
-        // Act & Assert
-        await Assert.ThrowsAsync<NotFoundException>(() =>
-            _handler.GetUserIdAsync("empty"));
     }
 
     // ========== SearchUsersAsync Tests ==========

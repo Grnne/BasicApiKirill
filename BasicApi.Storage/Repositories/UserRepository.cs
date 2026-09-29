@@ -61,17 +61,17 @@ public class UserRepository(IDbConnectionFactory connectionFactory) : IUserRepos
             sql, new { userId, lastLoginAt }, cancellationToken: ct));
     }
 
-    public async Task<Guid?> GetIdByUsernameOrEmailAsync(string usernameOrEmail, CancellationToken ct = default)
+    public async Task<Guid?> GetIdByUsernameAsync(string username, CancellationToken ct = default)
     {
+        // Только логин и только активные: по почте искать нельзя — это приватные данные.
         const string sql = @"
-            SELECT 
-                id as Id
-            FROM users 
-            WHERE username = @Value OR email = @Value
-            LIMIT 1";
+            SELECT id
+            FROM users
+            WHERE username_normalized = lower(trim(@username)) AND is_active = true";
 
         using var connection = connectionFactory.CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<Guid>(sql, new { Value = usernameOrEmail });
+        return await connection.QueryFirstOrDefaultAsync<Guid?>(
+            new CommandDefinition(sql, new { username }, cancellationToken: ct));
     }
 
     public async Task<User?> GetByIdAsync(Guid id, CancellationToken ct = default)

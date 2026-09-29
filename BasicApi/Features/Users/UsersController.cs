@@ -13,14 +13,18 @@ namespace BasicApi.Features.Users;
 public class UsersController(UsersHandler handlers) : ControllerBase
 {
     /// <summary>
-    /// Get a user's ID by username or email.
+    /// Get a user's ID by username.
     /// </summary>
+    /// <remarks>
+    /// Case-insensitive. Only active users. Lookup by email is not supported on purpose:
+    /// an email address must not reveal whether its owner has an account.
+    /// </remarks>
     [Authorize]
-    [HttpGet("GetUserId/{usernameOrEmail}")]
+    [HttpGet("GetUserId/{username}")]
     [ProducesResponseType(typeof(UserIdResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetUserId(string usernameOrEmail)
-        => await handlers.GetUserIdAsync(usernameOrEmail);
+    public async Task<IActionResult> GetUserId(string username)
+        => await handlers.GetUserIdAsync(username);
 
     /// <summary>
     /// Search users by display name or username (Telegram-style ILIKE search).

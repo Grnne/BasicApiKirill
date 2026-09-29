@@ -11,11 +11,11 @@ public class UsersHandler(
     IChatRepository chatRepository,
     IUserStatusService userStatusService)
 {
-    public async Task<IActionResult> GetUserIdAsync(string usernameOrEmail)
+    public async Task<IActionResult> GetUserIdAsync(string username)
     {
-        var userId = await userRepository.GetIdByUsernameOrEmailAsync(usernameOrEmail);
+        var userId = await userRepository.GetIdByUsernameAsync(username);
 
-        if (!userId.HasValue || userId == Guid.Empty)
+        if (!userId.HasValue)
             throw new NotFoundException("User not found", "USER_NOT_FOUND");
 
         return new OkObjectResult(new UserIdResponseDto { UserId = userId.Value });
