@@ -21,6 +21,8 @@ namespace BasicApi.Extensions;
 
 public static class ServiceExtensions
 {
+    public const string ReadyTag = "ready";
+
     public static IServiceCollection AddApiServices(this IServiceCollection services, IConfiguration configuration)
     {
                                 services.AddControllers()
@@ -95,6 +97,10 @@ public static class ServiceExtensions
 
         // JWT
         services.AddScoped<IJwtService, JwtService>();
+
+        // Health checks: /health/live — процесс жив; /health/ready — ещё и база доступна.
+        services.AddHealthChecks()
+            .AddCheck<PostgresHealthCheck>("postgres", tags: [ReadyTag], timeout: TimeSpan.FromSeconds(3));
 
         // FluentMigrator
         services.AddFluentMigratorCore()

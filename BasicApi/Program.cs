@@ -2,6 +2,7 @@
 using BasicApi.Hubs;
 using BasicApi.Middleware;
 using FluentMigrator.Runner;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.Net.Http.Headers;
 using System.IO.Compression;
@@ -92,8 +93,17 @@ public class Program
         app.UseAuthorization();
         app.UseRateLimiter();
 
-                app.MapHub<ChatHub>("/hubs/chat");
+        app.MapHub<ChatHub>("/hubs/chat");
         app.MapControllers();
+
+        // Проверки для compose и балансировщика: без авторизации и вне rate limit,
+        // иначе частые проверки съедят лимит и получат 429.
+        app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false })
+            .DisableRateLimiting();
+        app.MapHealthChecks("/health/ready", new HealthCheckOptions
+        {
+            Predicate = check => check.Tags.Contains(ServiceExtensions.ReadyTag)
+        }).DisableRateLimiting();
 
         app.MapGet("/signalr-docs", async context =>
         {
