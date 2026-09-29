@@ -39,7 +39,8 @@ public class AuthHandlerTests
                 RefreshTokenExpiresAt = DateTime.UtcNow.AddDays(30)
             });
 
-        _handler = new AuthHandler(_userRepoMock.Object, _jwtServiceMock.Object, _sessionServiceMock.Object);
+        _handler = new AuthHandler(_userRepoMock.Object, _jwtServiceMock.Object, _sessionServiceMock.Object,
+            new BasicApi.Hubs.HubConnectionRegistry());
     }
 
     [Fact]

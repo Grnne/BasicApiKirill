@@ -26,7 +26,8 @@ public interface ISessionService
     /// Ends the session behind the given refresh token. Idempotent and silent about
     /// whether the token existed — logout must not double as a token oracle.
     /// </summary>
-    Task RevokeAsync(string? refreshToken, CancellationToken ct = default);
+    /// <returns>Session family of the revoked session, or null when nothing was revoked.</returns>
+    Task<Guid?> RevokeAsync(string? refreshToken, CancellationToken ct = default);
 
     /// <summary>Ends every live session of a user ("log out everywhere").</summary>
     Task RevokeAllForUserAsync(Guid userId, CancellationToken ct = default);

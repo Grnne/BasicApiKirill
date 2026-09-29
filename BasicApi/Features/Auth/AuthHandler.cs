@@ -1,3 +1,4 @@
+using BasicApi.Hubs;
 using BasicApi.Middleware.Exceptions;
 using BasicApi.Models.Dto.Auth;
 using BasicApi.Services;
@@ -11,7 +12,8 @@ namespace BasicApi.Features.Auth;
 public class AuthHandler(
     IUserRepository userRepository,
     IJwtService jwtService,
-    ISessionService sessionService)
+    ISessionService sessionService,
+    HubConnectionRegistry hubConnections)
 {
     public async Task<IActionResult> LoginAsync(
         LoginRequestDto request, string? userAgent = null, string? ip = null, CancellationToken ct = default)
@@ -88,18 +90,24 @@ public class AuthHandler(
     /// </summary>
     public async Task<IActionResult> LogoutAsync(string? refreshToken, CancellationToken ct = default)
     {
-        await sessionService.RevokeAsync(refreshToken, ct);
+        // Соединения хаба этого входа тоже закрываем: иначе «вышедшее» устройство
+        // продолжало бы получать сообщения, пока держит соединение.
+        var familyId = await sessionService.RevokeAsync(refreshToken, ct);
+        if (familyId is not null)
+            hubConnections.AbortSessionFamily(familyId.Value);
         return new OkResult();
     }
 
     /// <summary>
     /// Ends every session of the current user — "log out on all devices".
-    /// The current access token keeps working until it expires (minutes), but no
-    /// new one can be obtained.
+    /// The current access token keeps working for REST until it expires (minutes), but
+    /// no new one can be obtained; open hub connections are closed right away and cannot
+    /// be reopened with the old token.
     /// </summary>
     public async Task<IActionResult> LogoutAllAsync(Guid userId, CancellationToken ct = default)
     {
         await sessionService.RevokeAllForUserAsync(userId, ct);
+        hubConnections.AbortUser(userId);
         return new OkResult();
     }
 

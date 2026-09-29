@@ -1,6 +1,7 @@
 ﻿using System.Collections.Concurrent;
 using System.Security.Claims;
 using System.Threading.RateLimiting;
+using BasicApi.Extensions;
 using BasicApi.Models.Dto.Chat;
 using BasicApi.Models.Dto.Message;
 using BasicApi.Services;
@@ -16,6 +17,8 @@ public class ChatHub(
     IChatRepository chatRepository,
     IMessageRepository messageRepository,
     IUserStatusService userStatusService,
+    ISessionRepository sessionRepository,
+    HubConnectionRegistry connectionRegistry,
     ILogger<ChatHub> logger) : Hub
 {
     // Троттлинг вызовов на соединение — защита от спама SendMessage/Typing,
@@ -45,6 +48,21 @@ public class ChatHub(
             var userId = GetUserId();
             if (userId.HasValue)
             {
+                // Сначала регистрируем, потом проверяем сессию: logout между этими
+                // шагами либо найдёт соединение в реестре, либо проверка увидит отзыв.
+                var sessionFamilyId = Context.User?.GetSessionFamilyId();
+                connectionRegistry.Add(Context, userId.Value, sessionFamilyId);
+
+                if (sessionFamilyId is not null &&
+                    !await sessionRepository.HasLiveSessionInFamilyAsync(sessionFamilyId.Value))
+                {
+                    // Access-токен ещё не истёк, но вход уже закрыт (logout, logout-all).
+                    logger.LogDebug("Rejected hub connection of revoked session: userId={UserId}", userId.Value);
+                    connectionRegistry.Remove(Context.ConnectionId);
+                    Context.Abort();
+                    return;
+                }
+
                 var isFirstConnection = await userStatusService.SetUserOnlineStatusAsync(userId.Value, Context.ConnectionId, true);
 
                 // Debug, а не Information: на каждое подключение строка в проде не нужна.
@@ -111,8 +129,12 @@ public class ChatHub(
         }
         finally
         {
-            if (Context.ConnectionId is not null && ConnectionLimiters.TryRemove(Context.ConnectionId, out var limiter))
-                limiter.Dispose();
+            if (Context.ConnectionId is not null)
+            {
+                connectionRegistry.Remove(Context.ConnectionId);
+                if (ConnectionLimiters.TryRemove(Context.ConnectionId, out var limiter))
+                    limiter.Dispose();
+            }
         }
     }
 

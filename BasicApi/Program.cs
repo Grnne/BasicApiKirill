@@ -119,7 +119,9 @@ public class Program
         app.UseRateLimiter();
         app.UseAuthorization();
 
-        app.MapHub<ChatHub>("/hubs/chat");
+        // Соединение закрывается, когда истекает access-токен, с которым оно открыто:
+        // клиент переподключится со свежим токеном, а без него — не сможет.
+        app.MapHub<ChatHub>("/hubs/chat", options => options.CloseOnAuthenticationExpiration = true);
         app.MapControllers();
 
         // Проверки для compose и балансировщика: без авторизации и вне rate limit,

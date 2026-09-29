@@ -51,7 +51,7 @@ public class SessionService(
 
         await sessionRepository.CreateAsync(session, ct);
 
-        return BuildResponse(user, refreshToken, session.ExpiresAt);
+        return BuildResponse(user, refreshToken, session.ExpiresAt, session.FamilyId);
     }
 
     public async Task<AuthResponseDto> RefreshAsync(string refreshToken, string? userAgent, string? ip, CancellationToken ct = default)
@@ -122,19 +122,20 @@ public class SessionService(
             await sessionRepository.CreateAsync(replacement, ct);
         }
 
-        return BuildResponse(user, newRefreshToken, replacement.ExpiresAt);
+        return BuildResponse(user, newRefreshToken, replacement.ExpiresAt, replacement.FamilyId);
     }
 
-    public async Task RevokeAsync(string? refreshToken, CancellationToken ct = default)
+    public async Task<Guid?> RevokeAsync(string? refreshToken, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(refreshToken))
-            return;
+            return null;
 
         var session = await sessionRepository.GetByRefreshTokenHashAsync(HashRefreshToken(refreshToken), ct);
         if (session is null || session.RevokedAt is not null)
-            return;
+            return null;
 
         await sessionRepository.RevokeAsync(session.Id, DateTime.UtcNow, ct);
+        return session.FamilyId;
     }
 
     public Task RevokeAllForUserAsync(Guid userId, CancellationToken ct = default)
@@ -153,13 +154,13 @@ public class SessionService(
             .Replace('/', '_')
             .TrimEnd('=');
 
-    private AuthResponseDto BuildResponse(User user, string refreshToken, DateTime refreshExpiresAt) => new()
+    private AuthResponseDto BuildResponse(User user, string refreshToken, DateTime refreshExpiresAt, Guid sessionFamilyId) => new()
     {
         UserId = user.Id,
         Username = user.Username,
         Email = user.Email,
         DisplayName = user.DisplayName,
-        Token = jwtService.GenerateToken(user.Id, user.Username, user.Email),
+        Token = jwtService.GenerateToken(user.Id, user.Username, user.Email, sessionFamilyId),
         ExpiresAt = jwtService.GetExpiryDate(),
         RefreshToken = refreshToken,
         RefreshTokenExpiresAt = refreshExpiresAt

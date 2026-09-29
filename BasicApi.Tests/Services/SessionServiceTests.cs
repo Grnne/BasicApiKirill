@@ -35,7 +35,7 @@ public class SessionServiceTests
         _userRepoMock = new Mock<IUserRepository>();
         _jwtMock = new Mock<IJwtService>();
 
-        _jwtMock.Setup(j => j.GenerateToken(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>()))
+        _jwtMock.Setup(j => j.GenerateToken(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>()))
             .Returns("access-token");
         _jwtMock.Setup(j => j.GetExpiryDate()).Returns(DateTime.UtcNow.AddMinutes(15));
 

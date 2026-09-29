@@ -23,6 +23,7 @@ public class ChatHubTests
     private readonly Mock<IMessageRepository> _messageRepoMock;
     private readonly Mock<ILogger<ChatHub>> _loggerMock;
     private readonly Mock<IUserStatusService> _statusMock;
+    private readonly Mock<ISessionRepository> _sessionRepoMock = new();
     private readonly Mock<HubCallerContext> _contextMock;
     private readonly Mock<IHubCallerClients> _clientsMock;
     private readonly Mock<IGroupManager> _groupsMock;
@@ -113,7 +114,8 @@ public class ChatHubTests
             .Setup(c => c.Caller)
             .Returns(_clientProxy);
 
-        _hub = new ChatHub(_chatRepoMock.Object, _messageRepoMock.Object, _statusMock.Object, _loggerMock.Object)
+        _hub = new ChatHub(_chatRepoMock.Object, _messageRepoMock.Object, _statusMock.Object,
+            _sessionRepoMock.Object, new HubConnectionRegistry(), _loggerMock.Object)
         {
             Context = _contextMock.Object,
             Clients = _clientsMock.Object,
@@ -174,7 +176,8 @@ public class ChatHubTests
         unauthenticatedContext.Setup(c => c.User).Returns(new ClaimsPrincipal());
         unauthenticatedContext.Setup(c => c.Features).Returns(new FeatureCollection());
 
-        var hub = new ChatHub(_chatRepoMock.Object, _messageRepoMock.Object, _statusMock.Object, _loggerMock.Object)
+        var hub = new ChatHub(_chatRepoMock.Object, _messageRepoMock.Object, _statusMock.Object,
+            _sessionRepoMock.Object, new HubConnectionRegistry(), _loggerMock.Object)
         {
             Context = unauthenticatedContext.Object,
             Clients = _clientsMock.Object,
@@ -236,7 +239,8 @@ public class ChatHubTests
         unauthenticatedContext.Setup(c => c.User).Returns(new ClaimsPrincipal());
         unauthenticatedContext.Setup(c => c.Features).Returns(new FeatureCollection());
 
-        var hub = new ChatHub(_chatRepoMock.Object, _messageRepoMock.Object, _statusMock.Object, _loggerMock.Object)
+        var hub = new ChatHub(_chatRepoMock.Object, _messageRepoMock.Object, _statusMock.Object,
+            _sessionRepoMock.Object, new HubConnectionRegistry(), _loggerMock.Object)
         {
             Context = unauthenticatedContext.Object,
             Clients = _clientsMock.Object,
@@ -305,7 +309,8 @@ public class ChatHubTests
         // Arrange
         var unauthenticatedContext = CreateUnauthenticatedContext();
 
-        var hub = new ChatHub(_chatRepoMock.Object, _messageRepoMock.Object, _statusMock.Object, _loggerMock.Object)
+        var hub = new ChatHub(_chatRepoMock.Object, _messageRepoMock.Object, _statusMock.Object,
+            _sessionRepoMock.Object, new HubConnectionRegistry(), _loggerMock.Object)
         {
             Context = unauthenticatedContext.Object,
             Clients = _clientsMock.Object,
@@ -433,7 +438,8 @@ public class ChatHubTests
         // Arrange
         var unauthenticatedContext = CreateUnauthenticatedContext();
 
-        var hub = new ChatHub(_chatRepoMock.Object, _messageRepoMock.Object, _statusMock.Object, _loggerMock.Object)
+        var hub = new ChatHub(_chatRepoMock.Object, _messageRepoMock.Object, _statusMock.Object,
+            _sessionRepoMock.Object, new HubConnectionRegistry(), _loggerMock.Object)
         {
             Context = unauthenticatedContext.Object,
             Clients = _clientsMock.Object,
@@ -479,7 +485,8 @@ public class ChatHubTests
         // Arrange
         var unauthenticatedContext = CreateUnauthenticatedContext();
 
-        var hub = new ChatHub(_chatRepoMock.Object, _messageRepoMock.Object, _statusMock.Object, _loggerMock.Object)
+        var hub = new ChatHub(_chatRepoMock.Object, _messageRepoMock.Object, _statusMock.Object,
+            _sessionRepoMock.Object, new HubConnectionRegistry(), _loggerMock.Object)
         {
             Context = unauthenticatedContext.Object,
             Clients = _clientsMock.Object,
@@ -530,7 +537,8 @@ public class ChatHubTests
         // Arrange
         var unauthenticatedContext = CreateUnauthenticatedContext();
 
-        var hub = new ChatHub(_chatRepoMock.Object, _messageRepoMock.Object, _statusMock.Object, _loggerMock.Object)
+        var hub = new ChatHub(_chatRepoMock.Object, _messageRepoMock.Object, _statusMock.Object,
+            _sessionRepoMock.Object, new HubConnectionRegistry(), _loggerMock.Object)
         {
             Context = unauthenticatedContext.Object,
             Clients = _clientsMock.Object,

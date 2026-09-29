@@ -5,6 +5,7 @@ using System.Threading.RateLimiting;
 using BasicApi.Features.Auth;
 using BasicApi.Features.Chats;
 using BasicApi.Features.Users;
+using BasicApi.Hubs;
 using BasicApi.Middleware.Exceptions;
 using BasicApi.Services;
 using BasicApi.Storage.Interfaces;
@@ -96,6 +97,7 @@ public static class ServiceExtensions
         services.AddScoped<IChatService, ChatService>();
         services.AddScoped<ISessionService, SessionService>();
         services.AddSingleton<IUserStatusService, UserStatusService>();
+        services.AddSingleton<HubConnectionRegistry>();
         services.AddScoped<AuthHandler>();
         services.AddScoped<ChatsHandler>();
         services.AddScoped<UsersHandler>();

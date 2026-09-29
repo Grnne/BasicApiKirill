@@ -38,7 +38,8 @@ public class AuthHandlerLogoutValidateTests
                 RefreshTokenExpiresAt = DateTime.UtcNow.AddDays(30)
             });
 
-        _handler = new AuthHandler(_userRepoMock.Object, _jwtServiceMock.Object, _sessionServiceMock.Object);
+        _handler = new AuthHandler(_userRepoMock.Object, _jwtServiceMock.Object, _sessionServiceMock.Object,
+            new BasicApi.Hubs.HubConnectionRegistry());
     }
 
     // ========== LogoutAsync Tests ==========
@@ -76,7 +77,7 @@ public class AuthHandlerLogoutValidateTests
         // «существует ли такой токен».
         _sessionServiceMock
             .Setup(s => s.RevokeAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((Guid?)null);
 
         // Act
         var result = await _handler.LogoutAsync("never-issued");
