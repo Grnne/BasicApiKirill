@@ -113,6 +113,7 @@ public static class ServiceExtensions
         services.AddScoped<IMessageService, MessageService>();
         services.AddScoped<IPresenceService, PresenceService>();
         services.AddScoped<IUserService, UserService>();
+        services.AddScoped<ISyncService, SyncService>();
         services.AddScoped<AuthService>();
         services.AddScoped<ISessionService, SessionService>();
         // События: сообщения и новые чаты — через outbox в транзакции изменения,
@@ -122,6 +123,8 @@ public static class ServiceExtensions
         services.AddSingleton<OutboxSignal>();
         services.AddSingleton<OutboxDispatcher>();
         services.AddHostedService(sp => sp.GetRequiredService<OutboxDispatcher>());
+        services.AddSingleton<JournalCleanup>();
+        services.AddHostedService(sp => sp.GetRequiredService<JournalCleanup>());
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IUserStatusService, UserStatusService>();
         services.AddSingleton<HubConnectionRegistry>();

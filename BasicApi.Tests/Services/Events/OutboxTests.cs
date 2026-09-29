@@ -43,6 +43,9 @@ internal sealed class InMemoryOutbox : IOutboxRepository
         Rows[i] = Rows[i] with { Attempts = attempts, Processed = attempts >= giveUpAfter };
         return Task.FromResult(attempts);
     }
+
+    public Task<int> DeleteProcessedOlderThanAsync(DateTime olderThan, int batchSize, CancellationToken ct = default) =>
+        Task.FromResult(0);
 }
 
 public class OutboxTests

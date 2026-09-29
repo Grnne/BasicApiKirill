@@ -17,4 +17,7 @@ public interface IOutboxRepository
 
     /// <summary>Неудачная попытка рассылки; после <paramref name="giveUpAfter"/> событие снимается.</summary>
     Task<int> MarkFailedAsync(long id, int giveUpAfter, CancellationToken ct = default);
+
+    /// <summary>Удаляет разосланные события старше <paramref name="olderThan"/>, пачками.</summary>
+    Task<int> DeleteProcessedOlderThanAsync(DateTime olderThan, int batchSize, CancellationToken ct = default);
 }

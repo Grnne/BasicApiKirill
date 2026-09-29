@@ -34,4 +34,18 @@ public sealed class UpdateJournalRepository(IDbSession db) : IUpdateJournal
             WHERE user_id = @userId AND pts > @sincePts
             ORDER BY pts
             LIMIT @limit", new { userId, sincePts, limit }, ct);
+
+    public Task AckAsync(Guid userId, Guid sessionFamilyId, long pts, CancellationToken ct = default) =>
+        db.ExecuteAsync(@"
+            INSERT INTO user_sync_state (user_id, session_family_id, acked_pts, updated_at)
+            VALUES (@userId, @sessionFamilyId, @pts, now())
+            ON CONFLICT (user_id, session_family_id) DO UPDATE
+            SET acked_pts = GREATEST(user_sync_state.acked_pts, EXCLUDED.acked_pts), updated_at = now()",
+            new { userId, sessionFamilyId, pts }, ct);
+
+    public Task<int> DeleteOlderThanAsync(DateTime olderThan, int batchSize, CancellationToken ct = default) =>
+        db.ExecuteAsync(@"
+            DELETE FROM user_updates
+            WHERE ctid IN (SELECT ctid FROM user_updates WHERE created_at < @olderThan LIMIT @batchSize)",
+            new { olderThan, batchSize }, ct);
 }

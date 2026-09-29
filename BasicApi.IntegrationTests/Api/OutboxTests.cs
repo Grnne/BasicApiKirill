@@ -121,5 +121,8 @@ public class OutboxTests(PostgresFixture db) : DbTest(db)
         public Task MarkProcessedAsync(IReadOnlyCollection<long> ids, CancellationToken ct = default) => Task.CompletedTask;
 
         public Task<int> MarkFailedAsync(long id, int giveUpAfter, CancellationToken ct = default) => Task.FromResult(0);
+
+        public Task<int> DeleteProcessedOlderThanAsync(DateTime olderThan, int batchSize, CancellationToken ct = default) =>
+            Task.FromResult(0);
     }
 }

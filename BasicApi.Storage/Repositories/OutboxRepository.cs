@@ -30,4 +30,10 @@ public sealed class OutboxRepository(IDbSession db) : IOutboxRepository
                 processed_at = CASE WHEN attempts + 1 >= @giveUpAfter THEN now() END
             WHERE id = @id
             RETURNING attempts", new { id, giveUpAfter }, ct);
+
+    public Task<int> DeleteProcessedOlderThanAsync(DateTime olderThan, int batchSize, CancellationToken ct = default) =>
+        db.ExecuteAsync(@"
+            DELETE FROM outbox
+            WHERE id IN (SELECT id FROM outbox WHERE processed_at < @olderThan ORDER BY id LIMIT @batchSize)",
+            new { olderThan, batchSize }, ct);
 }

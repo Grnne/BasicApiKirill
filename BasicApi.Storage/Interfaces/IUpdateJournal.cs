@@ -16,4 +16,13 @@ public interface IUpdateJournal
 
     /// <summary>Изменения с pts больше <paramref name="sincePts"/>, по порядку.</summary>
     Task<IReadOnlyList<UserUpdate>> GetSinceAsync(Guid userId, long sincePts, int limit, CancellationToken ct = default);
+
+    /// <summary>Запоминает, что устройство получило журнал до <paramref name="pts"/>; назад не двигается.</summary>
+    Task AckAsync(Guid userId, Guid sessionFamilyId, long pts, CancellationToken ct = default);
+
+    /// <summary>
+    /// Удаляет записи журнала старше <paramref name="olderThan"/> — не больше
+    /// <paramref name="batchSize"/> за раз, чтобы не держать долгих блокировок.
+    /// </summary>
+    Task<int> DeleteOlderThanAsync(DateTime olderThan, int batchSize, CancellationToken ct = default);
 }

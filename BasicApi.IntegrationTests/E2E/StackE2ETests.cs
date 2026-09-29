@@ -162,6 +162,13 @@ public class StackE2ETests(E2EUsers users)
         // Битый курсор — 400, не 500
         var broken = await aliceApi.GetAsync($"api/chats/{chatId}/messages/cursor?cursor=garbage!!");
         Assert.Equal(HttpStatusCode.BadRequest, broken.StatusCode);
+
+        // Синхронизация: в журнале Боба — новый чат и два сообщения, по порядку
+        var state = await (await bobApi.GetAsync("api/sync/state")).ReadAsync<JsonElement>();
+        Assert.Equal(3, state.GetProperty("pts").GetInt64());
+        var missed = await (await bobApi.GetAsync("api/sync?since=1")).ReadAsync<JsonElement>();
+        Assert.Equal(["hello from alice", "hello back"], missed.GetProperty("updates").EnumerateArray()
+            .Select(u => u.GetProperty("payload").GetProperty("text").GetString()));
     }
 
     [E2EFact]
