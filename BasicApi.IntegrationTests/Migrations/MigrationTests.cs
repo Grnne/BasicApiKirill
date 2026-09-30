@@ -4,7 +4,7 @@ using Dapper;
 using FluentMigrator;
 using Npgsql;
 
-namespace BasicApi.IntegrationTests;
+namespace BasicApi.IntegrationTests.Migrations;
 
 [Collection(PostgresCollection.Name)]
 public class MigrationTests(PostgresFixture db)

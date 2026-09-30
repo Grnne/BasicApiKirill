@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace BasicApi.IntegrationTests.Api;
+namespace BasicApi.IntegrationTests.Platform;
 
 /// <summary>
 /// A client error in the hub (someone else's chat, empty message) is not a server error: like a 4xx

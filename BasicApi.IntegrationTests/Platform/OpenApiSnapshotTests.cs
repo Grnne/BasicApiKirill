@@ -4,7 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using BasicApi.IntegrationTests.Infrastructure;
 
-namespace BasicApi.IntegrationTests.Api;
+namespace BasicApi.IntegrationTests.Platform;
 
 /// <summary>
 /// The REST contract as Swagger describes it must match the committed snapshot: any change of a

@@ -4,7 +4,7 @@ using System.Text.Json;
 using BasicApi.IntegrationTests.Infrastructure;
 using Microsoft.AspNetCore.SignalR.Client;
 
-namespace BasicApi.IntegrationTests.Api;
+namespace BasicApi.IntegrationTests.Platform;
 
 /// <summary>
 /// Commands over REST (A8): the same services and events as the hub methods.

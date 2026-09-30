@@ -1,7 +1,7 @@
 using System.Net;
 using BasicApi.IntegrationTests.Infrastructure;
 
-namespace BasicApi.IntegrationTests.Api;
+namespace BasicApi.IntegrationTests.Platform;
 
 [Collection(PostgresCollection.Name)]
 public class StartupConfigurationTests(PostgresFixture db)

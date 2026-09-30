@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 
-namespace BasicApi.IntegrationTests.Api;
+namespace BasicApi.IntegrationTests.Platform;
 
 public class ForwardedHeadersTests(PostgresFixture db) : DbTest(db)
 {

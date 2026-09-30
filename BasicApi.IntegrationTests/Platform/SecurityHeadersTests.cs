@@ -2,7 +2,7 @@ using System.Net;
 using System.Text.RegularExpressions;
 using BasicApi.IntegrationTests.Infrastructure;
 
-namespace BasicApi.IntegrationTests.Api;
+namespace BasicApi.IntegrationTests.Platform;
 
 [Collection(PostgresCollection.Name)]
 public class SecurityHeadersTests(PostgresFixture db)

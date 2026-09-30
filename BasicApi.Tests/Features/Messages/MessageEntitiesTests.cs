@@ -1,7 +1,7 @@
 using BasicApi.Models;
 using BasicApi.Models.Dto.Message;
 
-namespace BasicApi.Tests;
+namespace BasicApi.Tests.Features.Messages;
 
 /// <summary>What the server accepts as formatting (D6, R31).</summary>
 public class MessageEntitiesTests

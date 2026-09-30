@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 
-namespace BasicApi.IntegrationTests.Api;
+namespace BasicApi.IntegrationTests.Platform;
 
 /// <summary>
 /// A hub connection lives for hours, an access token for minutes. The connection lives as long as

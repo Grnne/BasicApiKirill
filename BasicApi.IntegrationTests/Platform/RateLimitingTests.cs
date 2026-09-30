@@ -5,7 +5,7 @@ using BasicApi.IntegrationTests.Infrastructure;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace BasicApi.IntegrationTests.Api;
+namespace BasicApi.IntegrationTests.Platform;
 
 [Collection(PostgresCollection.Name)]
 public class RateLimitingTests(PostgresFixture db)

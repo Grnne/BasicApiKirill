@@ -1,6 +1,6 @@
 using BasicApi.Storage.Dto;
 
-namespace BasicApi.Tests;
+namespace BasicApi.Tests.Features.Messages;
 
 public class MessageCursorTests
 {

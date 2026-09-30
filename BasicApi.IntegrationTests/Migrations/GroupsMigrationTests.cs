@@ -2,7 +2,7 @@ using BasicApi.IntegrationTests.Infrastructure;
 using Dapper;
 using Npgsql;
 
-namespace BasicApi.IntegrationTests;
+namespace BasicApi.IntegrationTests.Migrations;
 
 [Collection(PostgresCollection.Name)]
 public class GroupsMigrationTests(PostgresFixture db)

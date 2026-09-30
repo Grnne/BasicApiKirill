@@ -10,7 +10,7 @@ using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 
-namespace BasicApi.IntegrationTests.Api;
+namespace BasicApi.IntegrationTests.Platform;
 
 /// <summary>Outbox: the event is saved together with the change and is not lost (plan 1, 2.6).</summary>
 public class OutboxTests(PostgresFixture db) : DbTest(db)

@@ -2,7 +2,7 @@ using System.Net;
 using BasicApi.IntegrationTests.Infrastructure;
 using Npgsql;
 
-namespace BasicApi.IntegrationTests.Api;
+namespace BasicApi.IntegrationTests.Platform;
 
 [Collection(PostgresCollection.Name)]
 public class HealthCheckTests(PostgresFixture db)

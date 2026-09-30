@@ -4,7 +4,7 @@ using System.Text.Json;
 using BasicApi.IntegrationTests.Infrastructure;
 using Npgsql;
 
-namespace BasicApi.IntegrationTests.Api;
+namespace BasicApi.IntegrationTests.Platform;
 
 /// <summary>
 /// Time does not depend on the database session time zone. While the columns were timestamp without
