@@ -45,6 +45,18 @@ public class ChatListItemDto
 
     public DateTime LastActivityAt { get; set; }
 
+    /// <summary>Pinned to the top of the list: 1 — the topmost; null — not pinned.</summary>
+    public int? PinnedPosition { get; set; }
+
+    /// <summary>In the archive: not in the main list. A new message brings it back unless muted.</summary>
+    public bool Archived { get; set; }
+
+    /// <summary>Muted now: no notifications; the unread counter works as usual.</summary>
+    public bool IsMuted { get; set; }
+
+    /// <summary>Muted until then; null — not muted, or muted for good (<see cref="IsMuted"/>).</summary>
+    public DateTime? MutedUntil { get; set; }
+
     /// <summary>The user's unsent message in this chat; null — none.</summary>
     public DraftDto? Draft { get; set; }
 }

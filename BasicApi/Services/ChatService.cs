@@ -25,7 +25,7 @@ public sealed class ChatService(
     }
 
     public async Task<CursorPaginatedResponse<ChatListItemDto>> GetUserChatsPageAsync(
-        Guid userId, string? cursor, int limit, CancellationToken ct = default)
+        Guid userId, string? cursor, int limit, CancellationToken ct = default, bool archived = false)
     {
         ChatListCursor? before = null;
         if (!string.IsNullOrEmpty(cursor))
@@ -33,12 +33,15 @@ public sealed class ChatService(
                 ? parsed
                 : throw new BadRequestException("Cursor is malformed", "INVALID_CURSOR");
 
-        var rows = await chatRepository.GetUserChatsPageAsync(userId, before, limit + 1, ct);
+        // The main list starts with all pinned chats (at most ten, outside the limit); the pages then
+        // go on by activity without them. The archive has no pins.
+        var pinned = !archived && before is null ? await chatRepository.GetPinnedChatsAsync(userId, ct) : [];
+        var rows = await chatRepository.GetUserChatsPageAsync(userId, before, limit + 1, ct, archived, unpinnedOnly: !archived);
         var page = rows.Take(limit).ToList();
         var hasMore = rows.Count > limit;
         return new CursorPaginatedResponse<ChatListItemDto>
         {
-            Items = [.. page.Select(ChatListItemMapper.Map)],
+            Items = [.. pinned.Concat(page).Select(ChatListItemMapper.Map)],
             HasMore = hasMore,
             NextCursor = hasMore ? new ChatListCursor(page[^1].LastActivityAt, page[^1].ChatId).Encode() : null
         };

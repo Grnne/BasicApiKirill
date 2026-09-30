@@ -12,7 +12,7 @@ public interface IChatService
     /// <c>nextCursor</c> of the previous page. Errors: 400 <c>INVALID_CURSOR</c>.
     /// </summary>
     Task<CursorPaginatedResponse<ChatListItemDto>> GetUserChatsPageAsync(
-        Guid userId, string? cursor, int limit, CancellationToken ct = default);
+        Guid userId, string? cursor, int limit, CancellationToken ct = default, bool archived = false);
     Task<ChatDetailDto> GetChatDetailsAsync(Guid chatId, Guid userId, CancellationToken ct = default);
 
     /// <summary>

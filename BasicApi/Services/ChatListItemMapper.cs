@@ -28,6 +28,10 @@ public static class ChatListItemMapper
         OutboxReadSeq = r.OutboxReadSeq,
         OutboxDeliveredSeq = r.OutboxDeliveredSeq,
         LastActivityAt = r.LastActivityAt,
+        PinnedPosition = r.PinnedPosition,
+        Archived = r.ArchivedAt is not null,
+        IsMuted = ChatStates.IsMuted(r.MutedUntil, DateTime.UtcNow),
+        MutedUntil = ChatStates.ShownUntil(r.MutedUntil, DateTime.UtcNow),
         Draft = r.DraftUpdatedAt is { } draftUpdatedAt
             ? new DraftDto
             {

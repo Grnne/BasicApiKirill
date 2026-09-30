@@ -188,6 +188,9 @@ public class ChatRepository(IDbSession db) : IChatRepository
             ) AS UnreadMentionCount,
 
             cm.last_read_seq AS LastReadSeq,
+            cm.pinned_position AS PinnedPosition,
+            cm.archived_at AS ArchivedAt,
+            cm.muted_until AS MutedUntil,
             cm.marked_unread AS MarkedUnread,
             d.text AS DraftText,
             d.entities::text AS DraftEntitiesJson,
@@ -276,7 +279,8 @@ public class ChatRepository(IDbSession db) : IChatRepository
         Guid userId, string? query, string? typeFilter, int? limit, CancellationToken ct = default)
     {
         var whereClause = BuildSearchWhereClause(query, typeFilter);
-        var orderBy = "ORDER BY c.last_activity_at DESC, c.id DESC";
+        // Pinned chats on top, in their order (D9); then by activity.
+        var orderBy = "ORDER BY cm.pinned_position IS NULL, cm.pinned_position, c.last_activity_at DESC, c.id DESC";
         var limitClause = limit.HasValue ? $" LIMIT {limit.Value}" : "";
 
         var sql = $"{ChatListBaseSql}\n{whereClause}\n{orderBy}{limitClause}";
@@ -285,11 +289,14 @@ public class ChatRepository(IDbSession db) : IChatRepository
     }
 
     public async Task<IReadOnlyList<ChatListResult>> GetUserChatsPageAsync(
-        Guid userId, ChatListCursor? before, int limit, CancellationToken ct = default)
+        Guid userId, ChatListCursor? before, int limit, CancellationToken ct = default, bool archived = false,
+        bool unpinnedOnly = false)
     {
         // A row comparison matches the order exactly: chats with the same activity go by id.
         var sql = $@"{ChatListBaseSql}
-            {(before is null ? "" : "WHERE (c.last_activity_at, c.id) < (@beforeAt, @beforeId)")}
+            WHERE (cm.archived_at IS NOT NULL) = @archived
+              {(unpinnedOnly ? "AND cm.pinned_position IS NULL" : "")}
+              {(before is null ? "" : "AND (c.last_activity_at, c.id) < (@beforeAt, @beforeId)")}
             ORDER BY c.last_activity_at DESC, c.id DESC
             LIMIT @limit";
 
@@ -299,9 +306,16 @@ public class ChatRepository(IDbSession db) : IChatRepository
             query = (string?)null,
             beforeAt = before?.LastActivityAt,
             beforeId = before?.ChatId,
-            limit
+            limit,
+            archived
         }, ct);
     }
+
+    public Task<IReadOnlyList<ChatListResult>> GetPinnedChatsAsync(Guid userId, CancellationToken ct = default) =>
+        db.QueryAsync<ChatListResult>($@"{ChatListBaseSql}
+            WHERE cm.pinned_position IS NOT NULL AND cm.archived_at IS NULL
+            ORDER BY cm.pinned_position, c.id",
+            new { userId, query = (string?)null }, ct);
 
     public Task<ChatListResult?> GetChatListItemAsync(Guid chatId, Guid userId, CancellationToken ct = default)
     {

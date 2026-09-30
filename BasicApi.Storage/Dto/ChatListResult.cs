@@ -32,6 +32,10 @@ public class ChatListResult
     public Guid? LastMessageId { get; set; }
     public long? LastMessageSeq { get; set; }
     public Guid? LastMessageSenderId { get; set; }
+    public int? PinnedPosition { get; set; }
+    public DateTime? ArchivedAt { get; set; }
+    public DateTime? MutedUntil { get; set; }
+
     public Guid? CompanionAvatarId { get; set; }
     public Guid? ChatAvatarId { get; set; }
 

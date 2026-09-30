@@ -59,6 +59,12 @@ public interface IChatEventPublisher
     /// <summary><c>UserUpdated</c> — a user's public profile — to the user's devices and their contacts.</summary>
     Task UserUpdatedAsync(UserUpdatedDto update, IReadOnlyCollection<Guid> recipientIds, CancellationToken ct = default);
 
+    /// <summary><c>PinnedChatsChanged</c> — the whole list, top first — to the user's own devices.</summary>
+    Task PinnedChatsChangedAsync(PinnedChatsDto pinned, Guid userId, CancellationToken ct = default);
+
+    /// <summary><c>ChatStateChanged</c> — archived, muted — to the member's own devices.</summary>
+    Task ChatStateChangedAsync(ChatStateDto state, IReadOnlyCollection<Guid> userIds, CancellationToken ct = default);
+
     /// <summary><c>BlockListChanged</c> to the user's own devices.</summary>
     Task BlockListChangedAsync(BlockListChangedDto change, Guid userId, CancellationToken ct = default);
 

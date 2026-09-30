@@ -101,7 +101,8 @@ public sealed class MessageService(
     IChatEventPublisher events,
     IDraftRepository drafts,
     IGroupRepository groups,
-    IAttachmentRepository attachments) : IMessageService
+    IAttachmentRepository attachments,
+    IChatStateService? chatStates = null) : IMessageService
 {
     /// <summary>How many messages one forward may carry.</summary>
     public const int MaxForward = 100;
@@ -266,6 +267,8 @@ public sealed class MessageService(
                     await messageRepository.SetMentionsAsync(created.Id, chatId, created.Seq, mentioned, ct);
 
                 await events.MessageCreatedAsync(created, memberIds, ct);
+                if (chatStates is not null)
+                    await chatStates.UnarchiveOnMessageAsync(chatId, senderId, ct);
 
                 // What was being written is sent: the draft goes, on every device of the sender.
                 if (await drafts.DeleteAsync(senderId, chatId, ct))
@@ -383,6 +386,8 @@ public sealed class MessageService(
 
                 await events.MessageCreatedAsync(created, memberIds, ct);
                 items.Add(created);
+                if (chatStates is not null && items.Count == 1)
+                    await chatStates.UnarchiveOnMessageAsync(chatId, userId, ct);
             }
             return items;
         }, ct: ct);

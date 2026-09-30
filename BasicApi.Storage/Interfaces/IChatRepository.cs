@@ -14,8 +14,16 @@ public interface IChatRepository
     /// The user's chats by last activity, newest first: up to <paramref name="limit"/> strictly
     /// after <paramref name="before"/> (the last chat of the previous page), or from the top.
     /// </summary>
+    /// <remarks>
+    /// <paramref name="archived"/> — the archive instead of the main list; <paramref name="unpinnedOnly"/> —
+    /// without the pinned chats (they come first, separately).
+    /// </remarks>
     Task<IReadOnlyList<ChatListResult>> GetUserChatsPageAsync(
-        Guid userId, ChatListCursor? before, int limit, CancellationToken ct = default);
+        Guid userId, ChatListCursor? before, int limit, CancellationToken ct = default, bool archived = false,
+        bool unpinnedOnly = false);
+
+    /// <summary>The user's pinned chats of the main list, top first.</summary>
+    Task<IReadOnlyList<ChatListResult>> GetPinnedChatsAsync(Guid userId, CancellationToken ct = default);
 
     /// <summary>
     /// Returns a single chat-list row for one chat, as seen by the given user

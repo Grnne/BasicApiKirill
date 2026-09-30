@@ -19,6 +19,7 @@ public class ChatsController(
     IReactionService reactions,
     IReadStateService readState,
     IDraftService drafts,
+    IChatStateService chatStates,
     IPresenceService presence) : ControllerBase
 {
     /// <summary>
@@ -43,14 +44,83 @@ public class ChatsController(
     /// </remarks>
     /// <param name="cursor">From the previous page; omit for the first.</param>
     /// <param name="limit">Chats per page (default 50, max 200).</param>
+    /// <param name="archived">true — the archive instead of the main list.</param>
     /// <param name="ct">Request cancellation.</param>
     [HttpGet("page")]
     [ProducesResponseType(typeof(CursorPaginatedResponse<ChatListItemDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetUserChatsPage(
-        [FromQuery] string? cursor, [FromQuery] int limit = 50, CancellationToken ct = default)
-        => Ok(await chats.GetUserChatsPageAsync(User.GetUserId(), cursor, Math.Clamp(limit, 1, 200), ct));
+        [FromQuery] string? cursor, [FromQuery] int limit = 50, [FromQuery] bool archived = false,
+        CancellationToken ct = default)
+        => Ok(await chats.GetUserChatsPageAsync(User.GetUserId(), cursor, Math.Clamp(limit, 1, 200), ct, archived));
+
+    /// <summary>
+    /// Pin a chat on top of the list, or unpin it.
+    /// </summary>
+    /// <remarks>
+    /// A newly pinned chat goes on top; at most 10 are pinned. A pinned chat leaves the archive.
+    /// Answers with the pinned chats, top first; the caller's other devices get
+    /// <c>PinnedChatsChanged</c> with the same list.
+    ///
+    /// Errors: <c>400 TOO_MANY_PINNED</c>, <c>403 NOT_A_MEMBER</c>.
+    /// </remarks>
+    [HttpPut("{chatId}/pinned")]
+    [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
+    [ProducesResponseType(typeof(PinnedChatsDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> SetPinned(Guid chatId, [FromBody] SetPinnedDto dto, CancellationToken ct)
+        => Ok(await chatStates.SetPinnedAsync(User.GetUserId(), chatId, dto.Pinned, ct));
+
+    /// <summary>
+    /// Reorder the pinned chats.
+    /// </summary>
+    /// <remarks>
+    /// <c>chatIds</c> — exactly the pinned chats, top first. Errors: <c>400 INVALID_REQUEST</c>.
+    /// </remarks>
+    [HttpPut("pinned")]
+    [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
+    [ProducesResponseType(typeof(PinnedChatsDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ReorderPinned([FromBody] PinnedChatsDto dto, CancellationToken ct)
+        => Ok(await chatStates.ReorderPinnedAsync(User.GetUserId(), dto.ChatIds, ct));
+
+    /// <summary>
+    /// Move a chat to the archive, or back.
+    /// </summary>
+    /// <remarks>
+    /// An archived chat is not in the main list (<c>GET /api/chats/page</c>), only in
+    /// <c>GET /api/chats/page?archived=true</c>; it is unpinned. A new message brings it back, unless
+    /// the chat is muted. The caller's other devices get <c>ChatStateChanged</c>.
+    ///
+    /// Errors: <c>403 NOT_A_MEMBER</c>.
+    /// </remarks>
+    [HttpPut("{chatId}/archived")]
+    [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
+    [ProducesResponseType(typeof(ChatStateDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> SetArchived(Guid chatId, [FromBody] SetArchivedDto dto, CancellationToken ct)
+        => Ok(await chatStates.SetArchivedAsync(User.GetUserId(), chatId, dto.Archived, ct));
+
+    /// <summary>
+    /// Mute a chat, or unmute it.
+    /// </summary>
+    /// <remarks>
+    /// <c>{ "muted": true, "until": "…" }</c> — until the moment; without <c>until</c> — for good;
+    /// <c>{ "muted": false }</c> — unmute. A muted chat sends no notifications and does not leave the
+    /// archive on a new message; the unread counter works as usual. The caller's other devices get
+    /// <c>ChatStateChanged</c>.
+    ///
+    /// Errors: <c>400 INVALID_REQUEST</c> (<c>until</c> in the past), <c>403 NOT_A_MEMBER</c>.
+    /// </remarks>
+    [HttpPut("{chatId}/muted")]
+    [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
+    [ProducesResponseType(typeof(ChatStateDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> SetMuted(Guid chatId, [FromBody] SetMutedDto dto, CancellationToken ct)
+        => Ok(await chatStates.SetMutedAsync(User.GetUserId(), chatId, dto.Muted, dto.Until, ct));
 
     /// <summary>
     /// Create a private chat with another user.

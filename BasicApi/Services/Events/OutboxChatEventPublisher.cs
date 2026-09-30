@@ -77,6 +77,12 @@ public sealed class OutboxChatEventPublisher(
     public Task ChatUpdatedAsync(ChatUpdatedDto update, IReadOnlyCollection<Guid> memberIds, CancellationToken ct = default) =>
         ToAllAsync(UpdateTypes.ChatUpdated, update, memberIds, ct);
 
+    public Task PinnedChatsChangedAsync(PinnedChatsDto pinned, Guid userId, CancellationToken ct = default) =>
+        ToAllAsync(UpdateTypes.PinnedChatsChanged, pinned, [userId], ct);
+
+    public Task ChatStateChangedAsync(ChatStateDto state, IReadOnlyCollection<Guid> userIds, CancellationToken ct = default) =>
+        ToAllAsync(UpdateTypes.ChatStateChanged, state, userIds, ct);
+
     public Task BlockListChangedAsync(BlockListChangedDto change, Guid userId, CancellationToken ct = default) =>
         ToAllAsync(UpdateTypes.BlockListChanged, change, [userId], ct);
 
@@ -158,4 +164,6 @@ public static class UpdateTypes
     public const string UserUpdated = "UserUpdated";
     public const string PrivacyUpdated = "PrivacyUpdated";
     public const string BlockListChanged = "BlockListChanged";
+    public const string PinnedChatsChanged = "PinnedChatsChanged";
+    public const string ChatStateChanged = "ChatStateChanged";
 }
