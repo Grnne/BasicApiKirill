@@ -1,4 +1,4 @@
-﻿using BasicApi.Extensions;
+using BasicApi.Extensions;
 using BasicApi.Hubs;
 using BasicApi.Middleware;
 using FluentMigrator.Runner;
@@ -22,6 +22,19 @@ public class Program
         "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
         "img-src 'self' data:; font-src 'self'; connect-src 'self'; " +
         "frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'";
+
+    /// <summary>
+    /// The policy with the file storage allowed for pictures, media and uploads: clients load
+    /// files straight from it. In production the proxy serves the storage from the site itself, so
+    /// this adds nothing 'self' does not already allow; in local development it is another port.
+    /// </summary>
+    public static string ContentSecurityPolicyWith(string? storageOrigin) =>
+        storageOrigin is null
+            ? ContentSecurityPolicy
+            : ContentSecurityPolicy
+                .Replace("img-src 'self' data:", $"img-src 'self' data: {storageOrigin}")
+                .Replace("connect-src 'self'", $"connect-src 'self' {storageOrigin}")
+                .Replace("font-src 'self';", $"font-src 'self'; media-src 'self' {storageOrigin};");
 
     public static void Main(string[] args)
     {
@@ -73,10 +86,13 @@ public class Program
         // several typical attacks: content type spoofing, embedding the page
         // in a foreign iframe, address leakage via Referer and, through CSP,
         // most of the consequences of XSS.
+        var storage = app.Configuration.GetSection(Services.Media.StorageOptions.Section)
+            .Get<Services.Media.StorageOptions>();
+        var contentSecurityPolicy = ContentSecurityPolicyWith(storage?.PublicOrigin);
         app.Use(async (context, next) =>
         {
             var headers = context.Response.Headers;
-            headers.ContentSecurityPolicy = ContentSecurityPolicy;
+            headers.ContentSecurityPolicy = contentSecurityPolicy;
             headers["X-Content-Type-Options"] = "nosniff";
             headers["X-Frame-Options"] = "DENY";
             headers["Referrer-Policy"] = "no-referrer";

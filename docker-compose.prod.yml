@@ -111,6 +111,13 @@ services:
       # access with credentials is not needed by default. Fill in only if you call
       # the API from a separate domain/port.
       Cors__AllowedOrigins: ${ALLOWED_ORIGINS:-}
+      # Files: the API talks to the storage inside the docker network and signs links for
+      # the site's own address — Caddy passes /media/ to the storage (plan 2, F4).
+      Storage__Endpoint: http://seaweedfs:8333
+      Storage__PublicUrl: ${PUBLIC_URL:-https://${DOMAIN}}
+      Storage__Bucket: media
+      Storage__AccessKey: ${STORAGE_ACCESS_KEY}
+      Storage__SecretKey: ${STORAGE_SECRET_KEY}
 
     # No published ports: all traffic goes through Caddy over the edge network.
     expose:
@@ -131,6 +138,8 @@ services:
 
     depends_on:
       postgres:
+        condition: service_healthy
+      seaweedfs:
         condition: service_healthy
 
     healthcheck:
@@ -156,6 +165,61 @@ services:
           pids: 200
         reservations:
           memory: 128M
+
+    networks:
+      - chat_network
+      - edge
+
+  # File storage with the S3 API (SeaweedFS: MinIO stopped publishing community builds).
+  # Not published: clients reach it only through Caddy at /media/, by links the API signs.
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.47
+    container_name: basicchat_seaweedfs
+    restart: unless-stopped
+    command: ["mini", "-dir=/data", "-webdav=false", "-admin.ui=false", "-s3.port.iceberg=0",
+              "-s3.port.lance=0", "-master.telemetry=false",
+              "-s3.externalUrl=${PUBLIC_URL:-https://${DOMAIN}}", "-s3.allowedOrigins=${PUBLIC_URL:-https://${DOMAIN}}"]
+    environment:
+      AWS_ACCESS_KEY_ID: ${STORAGE_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${STORAGE_SECRET_KEY}
+    volumes:
+      - media_data:/data     # the files themselves — back up together with the database
+    tmpfs:
+      - /tmp:size=64m
+
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8333/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+    security_opt:
+      - no-new-privileges:true
+    # The entrypoint fixes /data ownership and drops to the seaweed user.
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETUID
+      - SETGID
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+          pids: 200
+        reservations:
+          memory: 64M
 
     networks:
       - chat_network
@@ -190,6 +254,8 @@ services:
     depends_on:
       basicapi:
         condition: service_healthy
+      seaweedfs:
+        condition: service_healthy
 
     logging:
       driver: json-file
@@ -217,6 +283,8 @@ volumes:
     name: basicchat_caddy_data
   caddy_config:
     name: basicchat_caddy_config
+  media_data:
+    name: basicchat_media_data
   # Data Protection keys live in tmpfs and are recreated on restart.
   # That is safe for JWT auth (tokens are self-contained).
 

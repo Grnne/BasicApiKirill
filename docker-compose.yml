@@ -1,4 +1,4 @@
-﻿services:
+services:
   postgres:
     image: postgres:latest
     container_name: chat_postgres
@@ -19,6 +19,29 @@
     networks:
       - chat_network
 
+  # File storage with the S3 API (plan 2, F4). The browser uploads and downloads by signed
+  # links straight from here, so the port is published: http://localhost:8333.
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.47
+    container_name: chat_seaweedfs
+    command: ["mini", "-dir=/data", "-webdav=false", "-admin.ui=false", "-s3.port.iceberg=0",
+              "-s3.port.lance=0", "-master.telemetry=false"]
+    environment:
+      AWS_ACCESS_KEY_ID: ${STORAGE_ACCESS_KEY:-dev-media}
+      AWS_SECRET_ACCESS_KEY: ${STORAGE_SECRET_KEY:-dev-media-secret-do-not-use-in-production}
+    ports:
+      - "${STORAGE_PORT:-8333}:8333"
+    volumes:
+      - media_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8333/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    restart: unless-stopped
+    networks:
+      - chat_network
+
   basicapi:
     build:
       context: .
@@ -28,6 +51,10 @@
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__DefaultConnection=Host=postgres;Database=${DB_NAME:-postgres};Username=${DB_USER:-postgres};Password=${DB_PASSWORD:-postgres};Maximum Pool Size=30
+      - Storage__Endpoint=http://seaweedfs:8333
+      - Storage__PublicUrl=http://localhost:${STORAGE_PORT:-8333}
+      - Storage__AccessKey=${STORAGE_ACCESS_KEY:-dev-media}
+      - Storage__SecretKey=${STORAGE_SECRET_KEY:-dev-media-secret-do-not-use-in-production}
     ports:
       - "${HOST_PORT:-8080}:8080"
     volumes:
@@ -37,6 +64,8 @@
       - ${APPDATA}/ASP.NET/Https:/root/.aspnet/https:ro
     depends_on:
       postgres:
+        condition: service_healthy
+      seaweedfs:
         condition: service_healthy
     healthcheck:
       # Same as in docker-compose.prod.yml: an HTTP request to /health/ready made with bash.
@@ -52,6 +81,8 @@
 volumes:
   postgres_data:
     name: chat_postgres_data
+  media_data:
+    name: chat_media_data
 
 networks:
   chat_network:

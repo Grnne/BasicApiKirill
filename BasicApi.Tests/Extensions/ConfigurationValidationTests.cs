@@ -91,4 +91,27 @@ public class ConfigurationValidationTests
         Assert.Contains("Jwt:Key", ex.Message);
         Assert.Contains("DefaultConnection", ex.Message);
     }
+
+    private static IConfiguration WithStorage(string? accessKey, string? secretKey) =>
+        new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Jwt:Key"] = StrongKey,
+            ["Jwt:Issuer"] = "ChatApi",
+            ["Jwt:Audience"] = "ChatClient",
+            ["ConnectionStrings:DefaultConnection"] = "Host=db",
+            ["Storage:Endpoint"] = "http://seaweedfs:8333",
+            ["Storage:AccessKey"] = accessKey,
+            ["Storage:SecretKey"] = secretKey
+        }).Build();
+
+    [Fact]
+    public void Storage_NeedsItsKeys_AndNotThePlaceholder()
+    {
+        ConfigurationValidation.Validate(WithStorage("chat-media", "a-real-secret"), Env("Production"));
+        Assert.Throws<InvalidOperationException>(() =>
+            ConfigurationValidation.Validate(WithStorage(null, "a-real-secret"), Env("Development")));
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            ConfigurationValidation.Validate(WithStorage("chat-media", "CHANGE_ME__openssl_rand_-base64_24"), Env("Production")));
+        Assert.Contains("Storage:SecretKey", ex.Message);
+    }
 }

@@ -69,6 +69,7 @@ public class ExceptionHandlingMiddleware
                 ForbiddenException => (StatusCodes.Status403Forbidden, "Forbidden"),
                 NotFoundException => (StatusCodes.Status404NotFound, "Not Found"),
                 ConflictException => (StatusCodes.Status409Conflict, "Conflict"),
+                ServiceUnavailableException => (StatusCodes.Status503ServiceUnavailable, "Service Unavailable"),
                 _ => (StatusCodes.Status400BadRequest, "Bad Request")
             };
 

@@ -6,6 +6,7 @@ using BasicApi.Hubs;
 using BasicApi.Middleware.Exceptions;
 using BasicApi.Services;
 using BasicApi.Services.Events;
+using BasicApi.Services.Media;
 using BasicApi.Storage;
 using BasicApi.Storage.Interfaces;
 using BasicApi.Storage.Migrations;
@@ -108,6 +109,7 @@ public static class ServiceExtensions
         services.AddScoped<IReactionRepository, ReactionRepository>();
         services.AddScoped<IDraftRepository, DraftRepository>();
         services.AddScoped<IGroupRepository, GroupRepository>();
+        services.AddScoped<IAttachmentRepository, AttachmentRepository>();
 
         // Domain services: controllers and the hub are only adapters over them.
         services.AddScoped<IMembershipService, MembershipService>();
@@ -120,6 +122,13 @@ public static class ServiceExtensions
         services.AddScoped<IReadStateService, ReadStateService>();
         services.AddScoped<IDraftService, DraftService>();
         services.AddScoped<IGroupService, GroupService>();
+        // Files: kept in S3-compatible storage; without Storage:Endpoint media is off (503).
+        services.Configure<StorageOptions>(configuration.GetSection(StorageOptions.Section));
+        services.Configure<MediaOptions>(configuration.GetSection(MediaOptions.Section));
+        services.AddSingleton<IObjectStorage, S3ObjectStorage>();
+        services.AddScoped<IMediaService, MediaService>();
+        services.AddSingleton<MediaCleanup>();
+        services.AddHostedService(sp => sp.GetRequiredService<MediaCleanup>());
         services.AddScoped<IPresenceService, PresenceService>();
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<ISyncService, SyncService>();

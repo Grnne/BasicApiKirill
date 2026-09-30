@@ -49,6 +49,16 @@ public static class ConfigurationValidation
         if (string.IsNullOrWhiteSpace(configuration.GetConnectionString("DefaultConnection")))
             errors.Add("ConnectionStrings:DefaultConnection is not configured.");
 
+        // Storage keys sign every upload and download link: a known one lets anyone read all files.
+        if (!string.IsNullOrWhiteSpace(configuration["Storage:Endpoint"]))
+        {
+            var secret = configuration["Storage:SecretKey"];
+            if (string.IsNullOrWhiteSpace(configuration["Storage:AccessKey"]) || string.IsNullOrWhiteSpace(secret))
+                errors.Add("Storage:AccessKey and Storage:SecretKey are required when Storage:Endpoint is set.");
+            else if (!environment.IsDevelopment() && secret.StartsWith("CHANGE_ME", StringComparison.Ordinal))
+                errors.Add("Storage:SecretKey is a placeholder from the repository; generate a real secret.");
+        }
+
         if (errors.Count > 0)
         {
             throw new InvalidOperationException(

@@ -36,6 +36,19 @@ $COMPOSE exec -T postgres pg_dump -U "$DB_USER" -d "$DB_NAME" -Fc > "$BACKUP"
 ls -lh "$BACKUP"    # размер не нулевой
 ```
 
+**Файлы** (с плана 2, Ф4) лежат в томе `basicchat_media_data` хранилища SeaweedFS. Их
+бэкап — копия тома; на время копирования хранилище останавливается, чтобы данные тома были
+согласованы (сообщения при этом работают, не грузятся только файлы):
+
+```bash
+$COMPOSE stop seaweedfs
+docker run --rm -v basicchat_media_data:/data:ro -v ~/backups:/backup alpine   tar czf /backup/media-$(date +%Y%m%d-%H%M).tgz -C /data .
+$COMPOSE start seaweedfs
+```
+
+Файлы только добавляются и удаляются, миграции их не меняют, поэтому при откате (шаг 5)
+том не восстанавливают — он нужен при потере сервера или диска.
+
 ## 2. Код и образ
 
 ```bash
@@ -70,8 +83,10 @@ curl -fsS "https://$DOMAIN/health/ready"   # Healthy (через Caddy и TLS)
   приложения, хоть и начинается с `Error`.
 
 Всё остальное с `"LogLevel":"Error"` при старте — повод разбираться. Если старт упал с `Invalid configuration` — в `.env.prod`
-не задан или слабый секрет (например, `JWT_KEY`); приложение не стартует
-с ключом короче 32 байт или с заглушкой `CHANGE_ME`.
+не задан или слабый секрет (например, `JWT_KEY`, `STORAGE_SECRET_KEY`); приложение не
+стартует с JWT-ключом короче 32 байт или с заглушкой `CHANGE_ME`. При обновлении на версию
+с файлами (план 2, Ф4) в `.env.prod` нужно добавить `STORAGE_ACCESS_KEY` и
+`STORAGE_SECRET_KEY` (см. `.env.prod.example`).
 
 ## 4. Проверка
 
@@ -142,8 +157,9 @@ services:
       - "8443:443"
 ```
 
-`.env.local` — как `.env.prod.example`, с `DOMAIN=localhost` и любыми
-сгенерированными секретами. Затем:
+`.env.local` — как `.env.prod.example`, с `DOMAIN=localhost`,
+`PUBLIC_URL=https://localhost:8443` (ссылки на файлы подписываются для адреса с портом) и
+любыми сгенерированными секретами. Затем:
 
 ```powershell
 docker compose --env-file .env.local -f docker-compose.prod.yml -f docker-compose.local.yml up -d --build
