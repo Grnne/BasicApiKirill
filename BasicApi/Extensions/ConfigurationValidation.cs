@@ -1,5 +1,5 @@
 using System.Text;
-using BasicApi.Services.Push;
+using BasicApi.Features.Push;
 
 namespace BasicApi.Extensions;
 

@@ -56,7 +56,7 @@
             "type": "integer"
           },
           "state": {
-            "description": "`stored`; `expired` — the original was removed by the server's retention policy,\r\n            only the preview is left.",
+            "description": "`stored`; `expired` — the original was removed by the server's retention policy,\n            only the preview is left.",
             "nullable": true,
             "type": "string"
           },
@@ -82,7 +82,7 @@
         "description": "An entry of the group's action log.",
         "properties": {
           "action": {
-            "description": "`group_created`, `title_changed`, `member_permissions_changed`,\r\n            `members_added`, `member_removed`, `member_left`, `role_changed`,\r\n            `permissions_changed`, `ownership_transferred`, `message_deleted`.",
+            "description": "`group_created`, `title_changed`, `member_permissions_changed`,\n            `members_added`, `member_removed`, `member_left`, `role_changed`,\n            `permissions_changed`, `ownership_transferred`, `message_deleted`.",
             "nullable": true,
             "type": "string"
           },
@@ -146,17 +146,17 @@
             "type": "string"
           },
           "expiresAt": {
-            "description": "When BasicApi.Models.Dto.Auth.AuthResponseDto.Token expires (UTC).",
+            "description": "When BasicApi.Features.Auth.AuthResponseDto.Token expires (UTC).",
             "format": "date-time",
             "type": "string"
           },
           "refreshToken": {
-            "description": "Long-lived opaque token used to obtain a new access token via\r\n`POST /api/auth/refresh`. Rotated on every refresh — always store the\r\nlatest value and never send it anywhere except the refresh endpoint.",
+            "description": "Long-lived opaque token used to obtain a new access token via\n`POST /api/auth/refresh`. Rotated on every refresh — always store the\nlatest value and never send it anywhere except the refresh endpoint.",
             "nullable": true,
             "type": "string"
           },
           "refreshTokenExpiresAt": {
-            "description": "When BasicApi.Models.Dto.Auth.AuthResponseDto.RefreshToken expires (UTC). After that the user must log in again.",
+            "description": "When BasicApi.Features.Auth.AuthResponseDto.RefreshToken expires (UTC). After that the user must log in again.",
             "format": "date-time",
             "type": "string"
           },
@@ -251,7 +251,7 @@
             "type": "boolean"
           },
           "avatarId": {
-            "description": "The photo to show for the chat: the group's, or the companion's in a private chat; null — none.\r\nFetched by `POST /api/media/links`.",
+            "description": "The photo to show for the chat: the group's, or the companion's in a private chat; null — none.\nFetched by `POST /api/media/links`.",
             "format": "uuid",
             "nullable": true,
             "type": "string"
@@ -304,12 +304,12 @@
             "type": "string"
           },
           "outboxDeliveredSeq": {
-            "description": "The user's own messages up to this seq have reached another member's device; 0 — none.\r\nGrows with `MessagesDelivered` and `MessagesRead`.",
+            "description": "The user's own messages up to this seq have reached another member's device; 0 — none.\nGrows with `MessagesDelivered` and `MessagesRead`.",
             "format": "int64",
             "type": "integer"
           },
           "outboxReadSeq": {
-            "description": "The user's own messages up to this seq have been read by another member; 0 — none.\r\nGrows with `MessagesRead`.",
+            "description": "The user's own messages up to this seq have been read by another member; 0 — none.\nGrows with `MessagesRead`.",
             "format": "int64",
             "type": "integer"
           },
@@ -356,7 +356,7 @@
             "type": "array"
           },
           "nextCursor": {
-            "description": "Cursor string to pass as `before` to fetch the next (older) page.\r\nNull when there are no more pages.",
+            "description": "Cursor string to pass as `before` to fetch the next (older) page.\nNull when there are no more pages.",
             "nullable": true,
             "type": "string"
           }
@@ -485,7 +485,7 @@
             "type": "string"
           },
           "mimeType": {
-            "description": "The type the upload will carry in `Content-Type`. Only for display: the server finds the\r\nreal type in the file itself.",
+            "description": "The type the upload will carry in `Content-Type`. Only for display: the server finds the\nreal type in the file itself.",
             "nullable": true,
             "type": "string"
           },
@@ -676,7 +676,7 @@
         "additionalProperties": false,
         "properties": {
           "clientMessageIds": {
-            "description": "Optional, one per message in the same order: a retry with the same ids creates nothing new\r\nand returns the copies made before.",
+            "description": "Optional, one per message in the same order: a retry with the same ids creates nothing new\nand returns the copies made before.",
             "items": {
               "format": "uuid",
               "type": "string"
@@ -837,7 +837,7 @@
         "additionalProperties": false,
         "properties": {
           "refreshToken": {
-            "description": "Refresh token of the session to end. Optional: when omitted, only the\r\naccess token is discarded client-side and the session stays alive until\r\nit expires — so clients should always send it.",
+            "description": "Refresh token of the session to end. Optional: when omitted, only the\naccess token is discarded client-side and the session stays alive until\nit expires — so clients should always send it.",
             "nullable": true,
             "type": "string"
           }
@@ -995,11 +995,11 @@
             "type": "string"
           },
           "isRead": {
-            "description": "Someone else's message — the caller has read it; one's own — another member has read it\r\n(BasicApi.Models.Dto.Message.MessageDto.Status is `read`). Filled in history and search; false in events.",
+            "description": "Someone else's message — the caller has read it; one's own — another member has read it\n(BasicApi.Models.Dto.Message.MessageDto.Status is `read`). Filled in history and search; false in events.",
             "type": "boolean"
           },
           "myReaction": {
-            "description": "The caller's own reaction. Filled in history and search; in events it is null —\r\ntrack your own from `ReactionsChanged`.",
+            "description": "The caller's own reaction. Filled in history and search; in events it is null —\ntrack your own from `ReactionsChanged`.",
             "nullable": true,
             "type": "string"
           },
@@ -1028,7 +1028,7 @@
             "type": "integer"
           },
           "status": {
-            "description": "For the caller's own messages: `sent`, `delivered` (a device of another member\r\nreceived it) or `read` (another member read it). Null for others' messages, in a chat\r\nwith oneself and in events. Filled in history and search.",
+            "description": "For the caller's own messages: `sent`, `delivered` (a device of another member\nreceived it) or `read` (another member read it). Null for others' messages, in a chat\nwith oneself and in events. Filled in history and search.",
             "nullable": true,
             "type": "string"
           },
@@ -1037,7 +1037,7 @@
             "type": "string"
           },
           "type": {
-            "description": "Kind of message: `text`, `media` (files in BasicApi.Models.Dto.Message.MessageDto.Attachments, the text is the\r\ncaption and may be empty) or `system` (see BasicApi.Models.Dto.Message.MessageDto.Action); more kinds will come —\r\nshow an unknown one as a stub.",
+            "description": "Kind of message: `text`, `media` (files in BasicApi.Models.Dto.Message.MessageDto.Attachments, the text is the\ncaption and may be empty) or `system` (see BasicApi.Models.Dto.Message.MessageDto.Action); more kinds will come —\nshow an unknown one as a stub.",
             "nullable": true,
             "type": "string"
           }
@@ -1061,7 +1061,7 @@
             "type": "array"
           },
           "nextCursor": {
-            "description": "Cursor string to pass as `before` to fetch the next (older) page.\r\nNull when there are no more pages.",
+            "description": "Cursor string to pass as `before` to fetch the next (older) page.\nNull when there are no more pages.",
             "nullable": true,
             "type": "string"
           }
@@ -1070,7 +1070,7 @@
       },
       "MessageEntityDto": {
         "additionalProperties": false,
-        "description": "A piece of formatting over the message text. BasicApi.Models.Dto.Message.MessageEntityDto.Offset and BasicApi.Models.Dto.Message.MessageEntityDto.Length\r\nare in UTF-16 code units — the same as string indices in JavaScript, Java, C# and Swift's\r\n`utf16` view. A record: two lists of entities compare by value.",
+        "description": "A piece of formatting over the message text. BasicApi.Models.Dto.Message.MessageEntityDto.Offset and BasicApi.Models.Dto.Message.MessageEntityDto.Length\nare in UTF-16 code units — the same as string indices in JavaScript, Java, C# and Swift's\n`utf16` view. A record: two lists of entities compare by value.",
         "properties": {
           "language": {
             "description": "`pre`: language for highlighting, optional.",
@@ -1086,7 +1086,7 @@
             "type": "integer"
           },
           "type": {
-            "description": "`bold`, `italic`, `underline`, `strikethrough`, `spoiler`,\r\n            `code`, `pre` (a code block, with BasicApi.Models.Dto.Message.MessageEntityDto.Language), `link`\r\n            (with BasicApi.Models.Dto.Message.MessageEntityDto.Url), `mention` (with BasicApi.Models.Dto.Message.MessageEntityDto.UserId).",
+            "description": "`bold`, `italic`, `underline`, `strikethrough`, `spoiler`,\n            `code`, `pre` (a code block, with BasicApi.Models.Dto.Message.MessageEntityDto.Language), `link`\n            (with BasicApi.Models.Dto.Message.MessageEntityDto.Url), `mention` (with BasicApi.Models.Dto.Message.MessageEntityDto.UserId).",
             "nullable": true,
             "type": "string"
           },
@@ -1120,7 +1120,7 @@
       },
       "MessageReactionsDto": {
         "additionalProperties": false,
-        "description": "The reactions of a message after a change: the answer to setting a reaction and the payload\r\nof the `ReactionsChanged` event.",
+        "description": "The reactions of a message after a change: the answer to setting a reaction and the payload\nof the `ReactionsChanged` event.",
         "properties": {
           "chatId": {
             "format": "uuid",
@@ -1181,7 +1181,7 @@
       },
       "OwnProfileResponseDto": {
         "additionalProperties": false,
-        "description": "The caller's own profile — BasicApi.Models.Dto.Auth.AuthResponseDto minus the token fields,\r\nso a client restoring a session from a stored token recovers exactly the user data\r\nlogin/register would have given it.\r\nUnlike BasicApi.Models.Dto.Users.UserProfileResponseDto this includes the email, which is\r\nprivate to the account owner.",
+        "description": "The caller's own profile — `AuthResponseDto` minus the token fields,\nso a client restoring a session from a stored token recovers exactly the user data\nlogin/register would have given it.\nUnlike BasicApi.Models.Dto.Users.UserProfileResponseDto this includes the email, which is\nprivate to the account owner.",
         "properties": {
           "avatarId": {
             "description": "The photo; null — none. Fetched by `POST /api/media/links`.",
@@ -1260,7 +1260,7 @@
       },
       "PrivacySettingsDto": {
         "additionalProperties": false,
-        "description": "Privacy settings (D11): `everybody`, `contacts` (those who share a chat with the user) or\r\n`nobody`. In a request a null field is left as it is.",
+        "description": "Privacy settings (D11): `everybody`, `contacts` (those who share a chat with the user) or\n`nobody`. In a request a null field is left as it is.",
         "properties": {
           "groupAdd": {
             "description": "Who may add the user to groups.",
@@ -1315,7 +1315,7 @@
             "type": "boolean"
           },
           "vapidPublicKey": {
-            "description": "The server's public VAPID key: `applicationServerKey` for\r\n`pushManager.subscribe`. Null when push is off.",
+            "description": "The server's public VAPID key: `applicationServerKey` for\n`pushManager.subscribe`. Null when push is off.",
             "nullable": true,
             "type": "string"
           }
@@ -1534,7 +1534,7 @@
       },
       "SearchMessagesResponseDto": {
         "additionalProperties": false,
-        "description": "Response for full-text search in chat messages.\r\nExtends BasicApi.Models.Dto.Message.CursorPaginatedResponse`1 with search-specific metadata.",
+        "description": "Response for full-text search in chat messages.\nExtends BasicApi.Models.Dto.Message.CursorPaginatedResponse`1 with search-specific metadata.",
         "properties": {
           "hasMore": {
             "description": "Whether there are more items beyond this page.",
@@ -1549,7 +1549,7 @@
             "type": "array"
           },
           "nextCursor": {
-            "description": "Cursor string to pass as `before` to fetch the next (older) page.\r\nNull when there are no more pages.",
+            "description": "Cursor string to pass as `before` to fetch the next (older) page.\nNull when there are no more pages.",
             "nullable": true,
             "type": "string"
           },
@@ -1595,7 +1595,7 @@
         "additionalProperties": false,
         "properties": {
           "attachmentIds": {
-            "description": "Completed uploads (or files the sender can see in their chats) to send, up to 10 — an album.\r\nPhotos and videos go together; files only with files; a voice message alone.",
+            "description": "Completed uploads (or files the sender can see in their chats) to send, up to 10 — an album.\nPhotos and videos go together; files only with files; a voice message alone.",
             "items": {
               "format": "uuid",
               "type": "string"
@@ -1604,7 +1604,7 @@
             "type": "array"
           },
           "clientMessageId": {
-            "description": "Optional id that the client picks itself (a new Guid for each message)\r\nand repeats on retries: a repeat does not create a second message but returns the first.",
+            "description": "Optional id that the client picks itself (a new Guid for each message)\nand repeats on retries: a repeat does not create a second message but returns the first.",
             "format": "uuid",
             "nullable": true,
             "type": "string"
@@ -1624,7 +1624,7 @@
             "type": "string"
           },
           "text": {
-            "description": "Text; leading and trailing whitespace is trimmed, then it must be 1 to 4096 characters.\r\nWith files it is the caption and may be empty.",
+            "description": "Text; leading and trailing whitespace is trimmed, then it must be 1 to 4096 characters.\nWith files it is the caption and may be empty.",
             "nullable": true,
             "type": "string"
           }
@@ -1723,7 +1723,7 @@
             "type": "integer"
           },
           "snapshotRequired": {
-            "description": "No diff available: part of the changes has already been removed from the journal (the client did not\r\nsign in within the retention period) or `since` is not from this journal. Take a new snapshot via\r\n`GET /api/sync/state`.",
+            "description": "No diff available: part of the changes has already been removed from the journal (the client did not\nsign in within the retention period) or `since` is not from this journal. Take a new snapshot via\n`GET /api/sync/state`.",
             "type": "boolean"
           },
           "updates": {
@@ -1739,7 +1739,7 @@
       },
       "SyncStateDto": {
         "additionalProperties": false,
-        "description": "Snapshot: everything the client needs to start from a clean slate — the state of the user, the\r\nsame on every device. The history of each chat comes page by page.",
+        "description": "Snapshot: everything the client needs to start from a clean slate — the state of the user, the\nsame on every device. The history of each chat comes page by page.",
         "properties": {
           "blockedUserIds": {
             "description": "Whom the user has blocked; profiles — `GET /api/users/me/blocked`.",
@@ -1751,7 +1751,7 @@
             "type": "array"
           },
           "chats": {
-            "description": "All the user's chats, archived included — like `GET /api/chats`: counters, pins,\r\narchive, mute, drafts.",
+            "description": "All the user's chats, archived included — like `GET /api/chats`: counters, pins,\narchive, mute, drafts.",
             "items": {
               "$ref": "#/components/schemas/ChatListItemDto"
             },
@@ -1795,7 +1795,7 @@
             "type": "integer"
           },
           "type": {
-            "description": "Hub event name: `MessageCreated`, `MessageUpdated`, `MessageDeleted`, `ReactionsChanged`, `MessagesDelivered`, `MessagesRead`, `ReadStateChanged`, `DraftUpdated`, `ChatCreated`, `ChatUpdated`,\r\n            `ChatDeleted`, `MemberAdded`, `MemberRemoved`, `MemberUpdated`, `UserUpdated`, `PrivacyUpdated`,\r\n            `BlockListChanged`, `PinnedChatsChanged`, `ChatStateChanged`,\r\n            `FoldersChanged`.",
+            "description": "Hub event name: `MessageCreated`, `MessageUpdated`, `MessageDeleted`, `ReactionsChanged`, `MessagesDelivered`, `MessagesRead`, `ReadStateChanged`, `DraftUpdated`, `ChatCreated`, `ChatUpdated`,\n            `ChatDeleted`, `MemberAdded`, `MemberRemoved`, `MemberUpdated`, `UserUpdated`, `PrivacyUpdated`,\n            `BlockListChanged`, `PinnedChatsChanged`, `ChatStateChanged`,\n            `FoldersChanged`.",
             "nullable": true,
             "type": "string"
           }
@@ -1915,7 +1915,7 @@
       },
       "UserProfileResponseDto": {
         "additionalProperties": false,
-        "description": "Public profile of a user, safe to show to any authenticated user.\r\nCarries the same fields as BasicApi.Models.Dto.Users.UserSearchResultDto, so a client can\r\nstore search results and profile lookups as one record.\r\nEmail is deliberately absent — see BasicApi.Models.Dto.Users.OwnProfileResponseDto for your own.",
+        "description": "Public profile of a user, safe to show to any authenticated user.\nCarries the same fields as BasicApi.Models.Dto.Users.UserSearchResultDto, so a client can\nstore search results and profile lookups as one record.\nEmail is deliberately absent — see BasicApi.Models.Dto.Users.OwnProfileResponseDto for your own.",
         "properties": {
           "avatarId": {
             "description": "The photo; null — none. Fetched by `POST /api/media/links`.",
@@ -1972,7 +1972,7 @@
         "description": "Request body for POST /api/users/status — online status for an explicit set of users.",
         "properties": {
           "userIds": {
-            "description": "User IDs to resolve. Must be non-empty and contain at most\r\nBasicApi.Models.Dto.Users.UserStatusBatchRequestDto.MaxUserIds entries. Duplicates are collapsed.",
+            "description": "User IDs to resolve. Must be non-empty and contain at most\nBasicApi.Models.Dto.Users.UserStatusBatchRequestDto.MaxUserIds entries. Duplicates are collapsed.",
             "items": {
               "format": "uuid",
               "type": "string"
@@ -1990,7 +1990,7 @@
             "type": "boolean"
           },
           "lastSeenAt": {
-            "description": "When the user was last online, if offline and they show it to the caller; null otherwise\r\n(online, hidden by their privacy settings, or never seen).",
+            "description": "When the user was last online, if offline and they show it to the caller; null otherwise\n(online, hidden by their privacy settings, or never seen).",
             "format": "date-time",
             "nullable": true,
             "type": "string"
@@ -2056,7 +2056,7 @@
   "paths": {
     "/api/Auth/login": {
       "post": {
-        "description": "Returns a short-lived `token` (access) and a long-lived `refreshToken`.\r\nStore both; when the access token expires, call `POST /api/auth/refresh`\r\ninstead of asking for the password again.",
+        "description": "Returns a short-lived `token` (access) and a long-lived `refreshToken`.\nStore both; when the access token expires, call `POST /api/auth/refresh`\ninstead of asking for the password again.",
         "requestBody": {
           "content": {
             "application/*+json": {
@@ -2126,7 +2126,7 @@
     },
     "/api/Auth/logout": {
       "post": {
-        "description": "Send the session's `refreshToken` in the body — that is what actually gets revoked.\r\nWithout it the server has nothing to invalidate and the session stays alive until\r\nit expires.\r\n            \r\nIdempotent: an unknown or already-revoked token also returns 200, so the endpoint\r\ncannot be used to find out which tokens exist. The access token keeps working until\r\nit expires (minutes) — discard it client-side.",
+        "description": "Send the session's `refreshToken` in the body — that is what actually gets revoked.\nWithout it the server has nothing to invalidate and the session stays alive until\nit expires.\n            \nIdempotent: an unknown or already-revoked token also returns 200, so the endpoint\ncannot be used to find out which tokens exist. The access token keeps working until\nit expires (minutes) — discard it client-side.",
         "requestBody": {
           "content": {
             "application/*+json": {
@@ -2169,7 +2169,7 @@
     },
     "/api/Auth/logout-all": {
       "post": {
-        "description": "Revokes all refresh tokens of the current user — use it after a password change or\r\nwhen a device is lost. Already-issued access tokens stay valid until they expire.",
+        "description": "Revokes all refresh tokens of the current user — use it after a password change or\nwhen a device is lost. Already-issued access tokens stay valid until they expire.",
         "responses": {
           "200": {
             "description": "OK"
@@ -2193,7 +2193,7 @@
     },
     "/api/Auth/password": {
       "post": {
-        "description": "Needs the current password. Every other sign-in of the user ends at once — their refresh\r\ntokens stop working and their hub connections close; this device stays signed in. Access\r\ntokens already issued to other devices work until they expire (minutes). Limited like\r\nsign-in: 5 attempts a minute from one IP.\r\n            \r\nErrors: `400 WRONG_PASSWORD`, `400 PASSWORD_TOO_LONG`, `400 VALIDATION_ERROR`\r\n(new password shorter than 6), `429 RATE_LIMITED`.",
+        "description": "Needs the current password. Every other sign-in of the user ends at once — their refresh\ntokens stop working and their hub connections close; this device stays signed in. Access\ntokens already issued to other devices work until they expire (minutes). Limited like\nsign-in: 5 attempts a minute from one IP.\n            \nErrors: `400 WRONG_PASSWORD`, `400 PASSWORD_TOO_LONG`, `400 VALIDATION_ERROR`\n(new password shorter than 6), `429 RATE_LIMITED`.",
         "requestBody": {
           "content": {
             "application/*+json": {
@@ -2256,7 +2256,7 @@
     },
     "/api/Auth/refresh": {
       "post": {
-        "description": "Call this when the access token has expired (or is about to). The endpoint is\r\nanonymous on purpose — the expired access token is not required, and not accepted\r\nas proof of anything.\r\n            \r\n**Rotation:** every successful call invalidates the refresh token you sent and\r\nreturns a new one. Always persist the new value.\r\n            \r\n**Parallel refreshes are safe.** A token that was rotated less than 30 seconds ago\r\nstill works, so two requests racing after a 401 both succeed instead of logging the\r\nuser out. Replaying a token after that window is treated as theft and revokes every\r\nsession in that login's chain (`REFRESH_TOKEN_REUSED`).\r\n            \r\nError codes: `INVALID_REFRESH_TOKEN`, `REFRESH_TOKEN_EXPIRED`, `SESSION_REVOKED`,\r\n`REFRESH_TOKEN_REUSED`, `USER_INACTIVE`, `USER_NOT_FOUND` — all as 401.\r\nAny of them means the same thing for the client: show the login screen.",
+        "description": "Call this when the access token has expired (or is about to). The endpoint is\nanonymous on purpose — the expired access token is not required, and not accepted\nas proof of anything.\n            \n**Rotation:** every successful call invalidates the refresh token you sent and\nreturns a new one. Always persist the new value.\n            \n**Parallel refreshes are safe.** A token that was rotated less than 30 seconds ago\nstill works, so two requests racing after a 401 both succeed instead of logging the\nuser out. Replaying a token after that window is treated as theft and revokes every\nsession in that login's chain (`REFRESH_TOKEN_REUSED`).\n            \nError codes: `INVALID_REFRESH_TOKEN`, `REFRESH_TOKEN_EXPIRED`, `SESSION_REVOKED`,\n`REFRESH_TOKEN_REUSED`, `USER_INACTIVE`, `USER_NOT_FOUND` — all as 401.\nAny of them means the same thing for the client: show the login screen.",
         "requestBody": {
           "content": {
             "application/*+json": {
@@ -2316,7 +2316,7 @@
     },
     "/api/Auth/register": {
       "post": {
-        "description": "Registration signs the user in: the response carries the same access and\r\nrefresh tokens as `POST /api/auth/login`.",
+        "description": "Registration signs the user in: the response carries the same access and\nrefresh tokens as `POST /api/auth/login`.",
         "requestBody": {
           "content": {
             "application/*+json": {
@@ -2386,7 +2386,7 @@
     },
     "/api/Auth/validate": {
       "get": {
-        "description": "Returns userId, username, and isValid flag.\r\nUse this endpoint to check if the access token has expired or is malformed.\r\nUnlike other endpoints, this one is anonymous so it can test tokens\r\nthat may already be expired or tampered with.\r\n            \r\nThis says nothing about the refresh token or the session — a valid answer here\r\ndoes not mean the session is still alive, and an invalid one does not mean the\r\nuser must log in again (try `POST /api/auth/refresh` first).\r\n            \r\nSample request:\r\n  GET /api/auth/validate\r\nHeaders: Authorization: Bearer {token}",
+        "description": "Returns userId, username, and isValid flag.\nUse this endpoint to check if the access token has expired or is malformed.\nUnlike other endpoints, this one is anonymous so it can test tokens\nthat may already be expired or tampered with.\n            \nThis says nothing about the refresh token or the session — a valid answer here\ndoes not mean the session is still alive, and an invalid one does not mean the\nuser must log in again (try `POST /api/auth/refresh` first).\n            \nSample request:\n  GET /api/auth/validate\nHeaders: Authorization: Bearer {token}",
         "responses": {
           "200": {
             "content": {
@@ -2407,7 +2407,7 @@
     },
     "/api/Users/GetUserId/{username}": {
       "get": {
-        "description": "Case-insensitive. Only active users. Lookup by email is not supported on purpose:\r\nan email address must not reveal whether its owner has an account.",
+        "description": "Case-insensitive. Only active users. Lookup by email is not supported on purpose:\nan email address must not reveal whether its owner has an account.",
         "parameters": [
           {
             "in": "path",
@@ -2458,7 +2458,7 @@
     },
     "/api/Users/me": {
       "get": {
-        "description": "Intended for session restore: a client that kept the token but lost its local\r\nuser data (cache cleared, app reinstalled) can recover the same user fields\r\nlogin/register returns, without asking for credentials again.\r\n            \r\nReturns userId, username, email and displayName — i.e. the login response\r\nminus the token. Unlike `GET /api/users/{userId}` this includes the email,\r\nsince it is the caller's own data.\r\n            \r\nA 404 here means the token is valid but the account no longer exists —\r\nthe client should discard the token and show the login screen.\r\n            \r\nSample request:\r\n  GET /api/users/me",
+        "description": "Intended for session restore: a client that kept the token but lost its local\nuser data (cache cleared, app reinstalled) can recover the same user fields\nlogin/register returns, without asking for credentials again.\n            \nReturns userId, username, email and displayName — i.e. the login response\nminus the token. Unlike `GET /api/users/{userId}` this includes the email,\nsince it is the caller's own data.\n            \nA 404 here means the token is valid but the account no longer exists —\nthe client should discard the token and show the login screen.\n            \nSample request:\n  GET /api/users/me",
         "responses": {
           "200": {
             "content": {
@@ -2497,7 +2497,7 @@
         ]
       },
       "patch": {
-        "description": "`displayName` — the name shown to others, 1–100 characters after trimming. Answers with\r\n             the own profile; the caller's other devices and everyone who shares a chat with them get\r\n             `UserUpdated`. Messages already sent show the new name too: it is not copied into them.\r\n            \r\n             Errors: `400 INVALID_DISPLAY_NAME`.",
+        "description": "`displayName` — the name shown to others, 1–100 characters after trimming. Answers with\n             the own profile; the caller's other devices and everyone who shares a chat with them get\n             `UserUpdated`. Messages already sent show the new name too: it is not copied into them.\n            \n             Errors: `400 INVALID_DISPLAY_NAME`.",
         "requestBody": {
           "content": {
             "application/*+json": {
@@ -2586,7 +2586,7 @@
         ]
       },
       "put": {
-        "description": "A photo the caller uploaded (`POST /api/media/uploads`, kind `photo`). Answers with\r\nthe own profile; the caller's other devices and everyone who shares a chat with them get\r\n`UserUpdated`. Anyone signed in may download a user's avatar.\r\n            \r\nErrors: `400 INVALID_AVATAR` (not a photo), `404 ATTACHMENT_NOT_FOUND`.",
+        "description": "A photo the caller uploaded (`POST /api/media/uploads`, kind `photo`). Answers with\nthe own profile; the caller's other devices and everyone who shares a chat with them get\n`UserUpdated`. Anyone signed in may download a user's avatar.\n            \nErrors: `400 INVALID_AVATAR` (not a photo), `404 ATTACHMENT_NOT_FOUND`.",
         "requestBody": {
           "content": {
             "application/*+json": {
@@ -2689,7 +2689,7 @@
     },
     "/api/Users/me/privacy": {
       "get": {
-        "description": "`lastSeen`, `messages`, `groupAdd` — each `everybody`, `contacts` (those who\r\n            share a chat with the caller) or `nobody`; never changed — everybody.",
+        "description": "`lastSeen`, `messages`, `groupAdd` — each `everybody`, `contacts` (those who\n            share a chat with the caller) or `nobody`; never changed — everybody.",
         "responses": {
           "200": {
             "content": {
@@ -2718,7 +2718,7 @@
         ]
       },
       "put": {
-        "description": "Only the fields given change. Answers with all settings; the caller's other devices get\r\n`PrivacyUpdated`.\r\n            \r\n- `lastSeen` — who sees online and last seen. It works both ways: whoever hides theirs\r\n  (`nobody`) does not see the others' either. Takes effect at once.\r\n- `messages` — who may start a private chat; an existing chat keeps working.\r\n- `groupAdd` — who may add the caller to groups.\r\n            \r\nErrors: `400 INVALID_PRIVACY`.",
+        "description": "Only the fields given change. Answers with all settings; the caller's other devices get\n`PrivacyUpdated`.\n            \n- `lastSeen` — who sees online and last seen. It works both ways: whoever hides theirs\n  (`nobody`) does not see the others' either. Takes effect at once.\n- `messages` — who may start a private chat; an existing chat keeps working.\n- `groupAdd` — who may add the caller to groups.\n            \nErrors: `400 INVALID_PRIVACY`.",
         "requestBody": {
           "content": {
             "application/*+json": {
@@ -2778,7 +2778,7 @@
     },
     "/api/Users/search": {
       "get": {
-        "description": "Searches active users by display name or username using case-insensitive partial matching.\r\nExcludes the current user from results.\r\n            \r\nSample request:\r\n  GET /api/users/search?q=alice&limit=20",
+        "description": "Searches active users by display name or username using case-insensitive partial matching.\nExcludes the current user from results.\n            \nSample request:\n  GET /api/users/search?q=alice&limit=20",
         "parameters": [
           {
             "description": "Search query (minimum 1 character).",
@@ -2839,7 +2839,7 @@
     },
     "/api/Users/status": {
       "get": {
-        "description": "Sample request:\r\n  GET /api/users/status\r\nReturns a list of online users with their userIds.",
+        "description": "Sample request:\n  GET /api/users/status\nReturns a list of online users with their userIds.",
         "responses": {
           "200": {
             "content": {
@@ -2862,13 +2862,13 @@
             "description": "Unauthorized"
           }
         },
-        "summary": "Get online status of all chat members for the current user.\r\nReturns only users who are currently online.",
+        "summary": "Get online status of all chat members for the current user.\nReturns only users who are currently online.",
         "tags": [
           "Users"
         ]
       },
       "post": {
-        "description": "Returns one entry per requested user, including offline ones (`isOnline: false`).\r\nIDs you share no chat with are silently omitted from the response.\r\nAt most 200 IDs per request; duplicates are collapsed.\r\n            \r\nPurpose: entering the chat list screen. Send the `companionId`s of the private\r\nchats currently on screen and get their presence in one round-trip, instead of\r\nrelying on `UserOnlineChanged` events that fired while the app was closed.\r\n            \r\nSample request:\r\n  POST /api/users/status\r\n  { \"userIds\": [\"3fa85f64-5717-4562-b3fc-2c963f66afa6\"] }",
+        "description": "Returns one entry per requested user, including offline ones (`isOnline: false`).\nIDs you share no chat with are silently omitted from the response.\nAt most 200 IDs per request; duplicates are collapsed.\n            \nPurpose: entering the chat list screen. Send the `companionId`s of the private\nchats currently on screen and get their presence in one round-trip, instead of\nrelying on `UserOnlineChanged` events that fired while the app was closed.\n            \nSample request:\n  POST /api/users/status\n  { \"userIds\": [\"3fa85f64-5717-4562-b3fc-2c963f66afa6\"] }",
         "requestBody": {
           "content": {
             "application/*+json": {
@@ -2928,7 +2928,7 @@
     },
     "/api/Users/typing": {
       "get": {
-        "description": "Returns a list of users currently typing, grouped by chat.\r\nSample request:\r\n  GET /api/users/typing",
+        "description": "Returns a list of users currently typing, grouped by chat.\nSample request:\n  GET /api/users/typing",
         "responses": {
           "200": {
             "content": {
@@ -2959,7 +2959,7 @@
     },
     "/api/Users/{userId}": {
       "get": {
-        "description": "Returns the user's ID, username and display name.\r\nEmail is not exposed — it is private to the account owner; use `GET /api/users/me`\r\nfor your own profile. Online status is not exposed here either — use\r\n`GET /api/users/status`, which is scoped to members of your own chats.\r\n            \r\nSample request:\r\n  GET /api/users/3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "description": "Returns the user's ID, username and display name.\nEmail is not exposed — it is private to the account owner; use `GET /api/users/me`\nfor your own profile. Online status is not exposed here either — use\n`GET /api/users/status`, which is scoped to members of your own chats.\n            \nSample request:\n  GET /api/users/3fa85f64-5717-4562-b3fc-2c963f66afa6",
         "parameters": [
           {
             "description": "User ID.",
@@ -3054,7 +3054,7 @@
         ]
       },
       "put": {
-        "description": "In a private chat neither may write to the other (the caller gets `403 USER_BLOCKED`, the\r\nblocked one `403 PRIVACY_RESTRICTED` — the same as for privacy settings, so a block is not\r\ntold). The blocked one cannot start a private chat with the caller or add them to groups, and\r\nsees neither their online, last seen nor avatar. Takes effect at once; the caller's devices\r\nget `BlockListChanged`. Blocking twice is not an error.\r\n            \r\nErrors: `400 INVALID_REQUEST` (oneself), `404 USER_NOT_FOUND`.",
+        "description": "In a private chat neither may write to the other (the caller gets `403 USER_BLOCKED`, the\nblocked one `403 PRIVACY_RESTRICTED` — the same as for privacy settings, so a block is not\ntold). The blocked one cannot start a private chat with the caller or add them to groups, and\nsees neither their online, last seen nor avatar. Takes effect at once; the caller's devices\nget `BlockListChanged`. Blocking twice is not an error.\n            \nErrors: `400 INVALID_REQUEST` (oneself), `404 USER_NOT_FOUND`.",
         "parameters": [
           {
             "in": "path",
@@ -3109,7 +3109,7 @@
     },
     "/api/Users/{userId}/status": {
       "get": {
-        "description": "Unlike `GET /api/users/status`, this always answers about the user you asked for:\r\n`isOnline: false` is returned explicitly when they are offline.\r\n            \r\nPurpose: opening a chat screen. The client knows the companion's id and needs\r\ntheir current presence right away, without waiting for a `UserOnlineChanged` event\r\nthat may have fired while the app was closed.\r\n            \r\nVisible only for users you share a chat with (and for yourself); anything else\r\nreturns 404, so the endpoint cannot be used to probe whether an account exists.\r\n            \r\nSample request:\r\n  GET /api/users/3fa85f64-5717-4562-b3fc-2c963f66afa6/status",
+        "description": "Unlike `GET /api/users/status`, this always answers about the user you asked for:\n`isOnline: false` is returned explicitly when they are offline.\n            \nPurpose: opening a chat screen. The client knows the companion's id and needs\ntheir current presence right away, without waiting for a `UserOnlineChanged` event\nthat may have fired while the app was closed.\n            \nVisible only for users you share a chat with (and for yourself); anything else\nreturns 404, so the endpoint cannot be used to probe whether an account exists.\n            \nSample request:\n  GET /api/users/3fa85f64-5717-4562-b3fc-2c963f66afa6/status",
         "parameters": [
           {
             "description": "User ID.",
@@ -3195,7 +3195,7 @@
     },
     "/api/chats/groups": {
       "post": {
-        "description": "The caller becomes its owner; `memberIds` (may be empty) become members. The group\r\nopens with a system message \"group created\". Up to `Groups:MaxMembers` (500) members,\r\nthe owner included.\r\n            \r\nThe body is the caller's `ChatListItemDto` (`type: \"group\"`). The members receive\r\n`ChatCreated` with their own card; the caller's other devices learn of the group through\r\n`/api/sync`.\r\n            \r\nErrors: `400 INVALID_TITLE` (1–128 characters after trimming), `400 TOO_MANY_MEMBERS`,\r\n`404 USER_NOT_FOUND` (a member does not exist or is deactivated), `429 RATE_LIMITED`.",
+        "description": "The caller becomes its owner; `memberIds` (may be empty) become members. The group\nopens with a system message \"group created\". Up to `Groups:MaxMembers` (500) members,\nthe owner included.\n            \nThe body is the caller's `ChatListItemDto` (`type: \"group\"`). The members receive\n`ChatCreated` with their own card; the caller's other devices learn of the group through\n`/api/sync`.\n            \nErrors: `400 INVALID_TITLE` (1–128 characters after trimming), `400 TOO_MANY_MEMBERS`,\n`404 USER_NOT_FOUND` (a member does not exist or is deactivated), `429 RATE_LIMITED`.",
         "requestBody": {
           "content": {
             "application/*+json": {
@@ -3276,7 +3276,7 @@
     },
     "/api/chats/page": {
       "get": {
-        "description": "The same `ChatListItemDto` as `GET /api/chats`, newest activity first (a new\r\nmessage, or creation). `nextCursor` — pass it as `cursor` for the next page; null —\r\nthe end. A chat that gets a message while paging moves to the top: keep the list up to date\r\nfrom events, not by reloading pages.\r\n            \r\nErrors: `400 INVALID_CURSOR`.",
+        "description": "The same `ChatListItemDto` as `GET /api/chats`, newest activity first (a new\nmessage, or creation). `nextCursor` — pass it as `cursor` for the next page; null —\nthe end. A chat that gets a message while paging moves to the top: keep the list up to date\nfrom events, not by reloading pages.\n            \nErrors: `400 INVALID_CURSOR`.",
         "parameters": [
           {
             "description": "From the previous page; omit for the first.",
@@ -3396,7 +3396,7 @@
     },
     "/api/chats/private/{userId}": {
       "post": {
-        "description": "The body is a full `ChatListItemDto` — the same shape as an entry of\r\n`GET /api/chats` — so the client can insert the chat into its list\r\nwithout a follow-up request. The companion fields describe the *other*\r\nparticipant as seen by the caller.\r\n            \r\nThe other participant receives the same chat over SignalR as a\r\n`ChatCreated` event, built from their own point of view.",
+        "description": "The body is a full `ChatListItemDto` — the same shape as an entry of\n`GET /api/chats` — so the client can insert the chat into its list\nwithout a follow-up request. The companion fields describe the *other*\nparticipant as seen by the caller.\n            \nThe other participant receives the same chat over SignalR as a\n`ChatCreated` event, built from their own point of view.",
         "parameters": [
           {
             "in": "path",
@@ -3450,7 +3450,7 @@
             "description": "Unauthorized"
           }
         },
-        "summary": "Create a private chat with another user.\r\nReturns 200 if chat already exists, 201 if a new chat was created.",
+        "summary": "Create a private chat with another user.\nReturns 200 if chat already exists, 201 if a new chat was created.",
         "tags": [
           "Chats"
         ]
@@ -3458,7 +3458,7 @@
     },
     "/api/chats/saved": {
       "post": {
-        "description": "One per user, created on first call: `201` then, `200` afterwards, the same\r\n`ChatListItemDto` as in `GET /api/chats` with `type: \"saved\"` and no\r\ntitle or companion (the client names it). Everything works as in any chat: send,\r\nforward into it, edit, delete, react. The caller's other devices learn about a new one\r\nthrough `/api/sync` (`ChatCreated`).",
+        "description": "One per user, created on first call: `201` then, `200` afterwards, the same\n`ChatListItemDto` as in `GET /api/chats` with `type: \"saved\"` and no\ntitle or companion (the client names it). Everything works as in any chat: send,\nforward into it, edit, delete, react. The caller's other devices learn about a new one\nthrough `/api/sync` (`ChatCreated`).",
         "responses": {
           "200": {
             "content": {
@@ -3499,7 +3499,7 @@
     },
     "/api/chats/search": {
       "get": {
-        "description": "Searches the current user's chats.\r\nFor group chats: searches by chat title (ILIKE).\r\nFor private chats: searches by companion display name or username (ILIKE).\r\n\r\nUse the optional `type` parameter to filter results:\r\n- `type=group` — search only group chats\r\n- `type=private` — search only private chats\r\n- omit `type` — search both\r\n\r\nSample requests:\r\n- GET /api/chats/search?q=team&type=group&limit=20\r\n- GET /api/chats/search?q=alice&type=private&limit=20\r\n- GET /api/chats/search?q=something&limit=20",
+        "description": "Searches the current user's chats.\nFor group chats: searches by chat title (ILIKE).\nFor private chats: searches by companion display name or username (ILIKE).\n\nUse the optional `type` parameter to filter results:\n- `type=group` — search only group chats\n- `type=private` — search only private chats\n- omit `type` — search both\n\nSample requests:\n- GET /api/chats/search?q=team&type=group&limit=20\n- GET /api/chats/search?q=alice&type=private&limit=20\n- GET /api/chats/search?q=something&limit=20",
         "parameters": [
           {
             "description": "Search query.",
@@ -3568,7 +3568,7 @@
     },
     "/api/chats/{chatId}": {
       "delete": {
-        "description": "The owner only. The group and its history are gone for all members; they receive\r\n`ChatDeleted`, and their connections stop getting the group's events.\r\n            \r\nErrors: `400 NOT_A_GROUP`, `403 NOT_A_MEMBER`, `403 PERMISSION_DENIED`,\r\n`429 RATE_LIMITED`.",
+        "description": "The owner only. The group and its history are gone for all members; they receive\n`ChatDeleted`, and their connections stop getting the group's events.\n            \nErrors: `400 NOT_A_GROUP`, `403 NOT_A_MEMBER`, `403 PERMISSION_DENIED`,\n`429 RATE_LIMITED`.",
         "parameters": [
           {
             "description": "Group ID",
@@ -3691,7 +3691,7 @@
         ]
       },
       "patch": {
-        "description": "Only the given fields change. `title` — needs `changeInfo`; members get a system\r\nmessage \"title changed\". `memberPermissions` — the owner or an admin with\r\n`removeMembers`; only `sendMessages`, `sendMedia`, `addMembers`,\r\n`changeInfo`, and a given field changes, an omitted one stays (`{ \"sendMessages\": false }`\r\nmakes the group read-only for members). Members' own overrides still win.\r\n            \r\nThe body is the group's title and default permissions now; members receive `ChatUpdated`\r\nwith the same. No change — no event.\r\n            \r\nErrors: `400 NOT_A_GROUP`, `400 INVALID_TITLE`, `400 INVALID_PERMISSIONS`,\r\n`403 NOT_A_MEMBER`, `403 PERMISSION_DENIED`, `429 RATE_LIMITED`.",
+        "description": "Only the given fields change. `title` — needs `changeInfo`; members get a system\nmessage \"title changed\". `memberPermissions` — the owner or an admin with\n`removeMembers`; only `sendMessages`, `sendMedia`, `addMembers`,\n`changeInfo`, and a given field changes, an omitted one stays (`{ \"sendMessages\": false }`\nmakes the group read-only for members). Members' own overrides still win.\n            \nThe body is the group's title and default permissions now; members receive `ChatUpdated`\nwith the same. No change — no event.\n            \nErrors: `400 NOT_A_GROUP`, `400 INVALID_TITLE`, `400 INVALID_PERMISSIONS`,\n`403 NOT_A_MEMBER`, `403 PERMISSION_DENIED`, `429 RATE_LIMITED`.",
         "parameters": [
           {
             "description": "Group ID",
@@ -3784,7 +3784,7 @@
     },
     "/api/chats/{chatId}/archived": {
       "put": {
-        "description": "An archived chat is not in the main list (`GET /api/chats/page`), only in\r\n`GET /api/chats/page?archived=true`; it is unpinned. A new message brings it back, unless\r\nthe chat is muted. The caller's other devices get `ChatStateChanged`.\r\n            \r\nErrors: `403 NOT_A_MEMBER`.",
+        "description": "An archived chat is not in the main list (`GET /api/chats/page`), only in\n`GET /api/chats/page?archived=true`; it is unpinned. A new message brings it back, unless\nthe chat is muted. The caller's other devices get `ChatStateChanged`.\n            \nErrors: `403 NOT_A_MEMBER`.",
         "parameters": [
           {
             "in": "path",
@@ -3845,7 +3845,7 @@
     },
     "/api/chats/{chatId}/audit": {
       "get": {
-        "description": "For the owner and admins. Newest first; `nextCursor` — pass it as `cursor` for\r\nolder entries. Actions: `group_created`, `title_changed`,\r\n`member_permissions_changed`, `members_added`, `member_removed`,\r\n`member_left`, `role_changed`, `permissions_changed`,\r\n`ownership_transferred`, `message_deleted` (someone else's message deleted by an\r\nadmin); `data` holds the details.\r\n            \r\nErrors: `400 NOT_A_GROUP`, `400 INVALID_CURSOR`, `403 NOT_A_MEMBER`,\r\n`403 PERMISSION_DENIED` (not an admin).",
+        "description": "For the owner and admins. Newest first; `nextCursor` — pass it as `cursor` for\nolder entries. Actions: `group_created`, `title_changed`,\n`member_permissions_changed`, `members_added`, `member_removed`,\n`member_left`, `role_changed`, `permissions_changed`,\n`ownership_transferred`, `message_deleted` (someone else's message deleted by an\nadmin); `data` holds the details.\n            \nErrors: `400 NOT_A_GROUP`, `400 INVALID_CURSOR`, `403 NOT_A_MEMBER`,\n`403 PERMISSION_DENIED` (not an admin).",
         "parameters": [
           {
             "description": "Group ID",
@@ -3926,7 +3926,7 @@
     },
     "/api/chats/{chatId}/avatar": {
       "delete": {
-        "description": "Like setting one: `changeInfo`, a system message (`photo_removed`), `ChatUpdated`\r\nwith `avatarId: null`.",
+        "description": "Like setting one: `changeInfo`, a system message (`photo_removed`), `ChatUpdated`\nwith `avatarId: null`.",
         "parameters": [
           {
             "in": "path",
@@ -3986,7 +3986,7 @@
         ]
       },
       "put": {
-        "description": "A photo the caller uploaded (`POST /api/media/uploads`, kind `photo`). Needs the\r\n`changeInfo` permission. Members get a system message (`photo_changed`) and\r\n`ChatUpdated` with `avatarId`; the same photo again changes nothing.\r\n            \r\nErrors: `400 NOT_A_GROUP`, `400 INVALID_AVATAR` (not a photo), `403 NOT_A_MEMBER`,\r\n`403 PERMISSION_DENIED`, `404 ATTACHMENT_NOT_FOUND`.",
+        "description": "A photo the caller uploaded (`POST /api/media/uploads`, kind `photo`). Needs the\n`changeInfo` permission. Members get a system message (`photo_changed`) and\n`ChatUpdated` with `avatarId`; the same photo again changes nothing.\n            \nErrors: `400 NOT_A_GROUP`, `400 INVALID_AVATAR` (not a photo), `403 NOT_A_MEMBER`,\n`403 PERMISSION_DENIED`, `404 ATTACHMENT_NOT_FOUND`.",
         "parameters": [
           {
             "in": "path",
@@ -4077,7 +4077,7 @@
     },
     "/api/chats/{chatId}/draft": {
       "delete": {
-        "description": "The user's devices receive `DraftUpdated` with `draft: null`. Without a draft —\r\n`204` and no event. Errors: `403 NOT_A_MEMBER`, `429 RATE_LIMITED`.",
+        "description": "The user's devices receive `DraftUpdated` with `draft: null`. Without a draft —\n`204` and no event. Errors: `403 NOT_A_MEMBER`, `429 RATE_LIMITED`.",
         "parameters": [
           {
             "description": "Chat ID",
@@ -4131,7 +4131,7 @@
         ]
       },
       "put": {
-        "description": "One draft per user and chat, shared by the user's devices: they receive `DraftUpdated`,\r\nand a new device finds the draft in `GET /api/chats` (`draft`). Save with a pause\r\nof a second or two after typing stops, not on every key. The text is kept as typed (not\r\ntrimmed); formatting and the reply follow the rules of sending. Text of only spaces without\r\na reply removes the draft — `204`. Sending a message to the chat removes it too.\r\nThe same draft again changes nothing and sends nothing.\r\n            \r\nErrors: `400 MESSAGE_TOO_LONG`, `400 INVALID_ENTITIES`, `400 REPLY_TARGET_NOT_FOUND`,\r\n`403 NOT_A_MEMBER`, `429 RATE_LIMITED`.",
+        "description": "One draft per user and chat, shared by the user's devices: they receive `DraftUpdated`,\nand a new device finds the draft in `GET /api/chats` (`draft`). Save with a pause\nof a second or two after typing stops, not on every key. The text is kept as typed (not\ntrimmed); formatting and the reply follow the rules of sending. Text of only spaces without\na reply removes the draft — `204`. Sending a message to the chat removes it too.\nThe same draft again changes nothing and sends nothing.\n            \nErrors: `400 MESSAGE_TOO_LONG`, `400 INVALID_ENTITIES`, `400 REPLY_TARGET_NOT_FOUND`,\n`403 NOT_A_MEMBER`, `429 RATE_LIMITED`.",
         "parameters": [
           {
             "description": "Chat ID",
@@ -4227,7 +4227,7 @@
     },
     "/api/chats/{chatId}/item": {
       "get": {
-        "description": "Returns the same `ChatListItemDto` as one entry of `GET /api/chats`,\r\nresolved for the caller: companion id/name/username for private chats,\r\nunread count and last message preview.\r\n            \r\nPurpose: the client knows only a `chatId` (after a push, a deep link,\r\nor a `ChatListUpdated` event) and needs to render or refresh exactly\r\none row without refetching the whole list.\r\n            \r\nUse `GET /api/chats/{chatId}` instead when you need the participant list.",
+        "description": "Returns the same `ChatListItemDto` as one entry of `GET /api/chats`,\nresolved for the caller: companion id/name/username for private chats,\nunread count and last message preview.\n            \nPurpose: the client knows only a `chatId` (after a push, a deep link,\nor a `ChatListUpdated` event) and needs to render or refresh exactly\none row without refetching the whole list.\n            \nUse `GET /api/chats/{chatId}` instead when you need the participant list.",
         "parameters": [
           {
             "description": "Chat ID",
@@ -4290,7 +4290,7 @@
     },
     "/api/chats/{chatId}/marked-unread": {
       "put": {
-        "description": "A reminder for the user only: nobody else sees it, the unread counter does not change.\r\nReading the chat (`POST /read`) removes it. The caller's devices receive\r\n`ReadStateChanged`; setting what is already set changes nothing and sends nothing.\r\n            \r\nErrors: `403 NOT_A_MEMBER`, `429 RATE_LIMITED`.",
+        "description": "A reminder for the user only: nobody else sees it, the unread counter does not change.\nReading the chat (`POST /read`) removes it. The caller's devices receive\n`ReadStateChanged`; setting what is already set changes nothing and sends nothing.\n            \nErrors: `403 NOT_A_MEMBER`, `429 RATE_LIMITED`.",
         "parameters": [
           {
             "description": "Chat ID",
@@ -4366,7 +4366,7 @@
     },
     "/api/chats/{chatId}/media": {
       "get": {
-        "description": "Messages of the chat that carry files of the kind (`media` — photos and videos,\r\n`files`, `voice`) or web links (`links` — an address in the text or a link in\r\nthe formatting), **newest first**, as a gallery shows them. The same `MessageDto` as the\r\nhistory, with `attachments`; previews come from `POST /api/media/links`. What the\r\ncaller deleted for themselves is left out.\r\n            \r\nErrors: `400 INVALID_FILTER`, `400 INVALID_CURSOR`, `403 NOT_A_MEMBER`.",
+        "description": "Messages of the chat that carry files of the kind (`media` — photos and videos,\n`files`, `voice`) or web links (`links` — an address in the text or a link in\nthe formatting), **newest first**, as a gallery shows them. The same `MessageDto` as the\nhistory, with `attachments`; previews come from `POST /api/media/links`. What the\ncaller deleted for themselves is left out.\n            \nErrors: `400 INVALID_FILTER`, `400 INVALID_CURSOR`, `403 NOT_A_MEMBER`.",
         "parameters": [
           {
             "description": "Chat ID.",
@@ -4455,7 +4455,7 @@
     },
     "/api/chats/{chatId}/members": {
       "get": {
-        "description": "Owner first, then admins, then members by joining time. `permissions` is what the member\r\nmay do now: the role, the group's defaults and their own overrides together.\r\n            \r\nErrors: `400 NOT_A_GROUP`, `403 NOT_A_MEMBER`.",
+        "description": "Owner first, then admins, then members by joining time. `permissions` is what the member\nmay do now: the role, the group's defaults and their own overrides together.\n            \nErrors: `400 NOT_A_GROUP`, `403 NOT_A_MEMBER`.",
         "parameters": [
           {
             "description": "Group ID",
@@ -4519,7 +4519,7 @@
         ]
       },
       "post": {
-        "description": "Needs `addMembers`. Those already in the group are skipped; the body lists who was\r\nadded (empty — nobody new). New members see the whole history, but only what comes after\r\njoining counts as unread; they receive `ChatCreated`. The members already there receive\r\n`MemberAdded` and a system message \"members added\".\r\n            \r\nErrors: `400 NOT_A_GROUP`, `400 INVALID_REQUEST` (nobody besides the caller),\r\n`400 TOO_MANY_MEMBERS`, `403 NOT_A_MEMBER`, `403 PERMISSION_DENIED`,\r\n`404 USER_NOT_FOUND`, `429 RATE_LIMITED`.",
+        "description": "Needs `addMembers`. Those already in the group are skipped; the body lists who was\nadded (empty — nobody new). New members see the whole history, but only what comes after\njoining counts as unread; they receive `ChatCreated`. The members already there receive\n`MemberAdded` and a system message \"members added\".\n            \nErrors: `400 NOT_A_GROUP`, `400 INVALID_REQUEST` (nobody besides the caller),\n`400 TOO_MANY_MEMBERS`, `403 NOT_A_MEMBER`, `403 PERMISSION_DENIED`,\n`404 USER_NOT_FOUND`, `429 RATE_LIMITED`.",
         "parameters": [
           {
             "description": "Group ID",
@@ -4625,7 +4625,7 @@
     },
     "/api/chats/{chatId}/members/{userId}": {
       "delete": {
-        "description": "Another member — the owner removes anyone, an admin with `removeMembers` — members only.\r\nOneself — leaving: the owner hands the group over to the longest-standing admin (or member),\r\nthe last member deletes it. The removed one loses the chat with its history.\r\n            \r\nEveryone, the removed one included, receives `MemberRemoved`; the rest also get a system\r\nmessage. The removed one's connections stop getting the chat's events.\r\n            \r\nErrors: `400 NOT_A_GROUP`, `403 NOT_A_MEMBER`, `403 PERMISSION_DENIED`,\r\n`404 MEMBER_NOT_FOUND`, `429 RATE_LIMITED`.",
+        "description": "Another member — the owner removes anyone, an admin with `removeMembers` — members only.\nOneself — leaving: the owner hands the group over to the longest-standing admin (or member),\nthe last member deletes it. The removed one loses the chat with its history.\n            \nEveryone, the removed one included, receives `MemberRemoved`; the rest also get a system\nmessage. The removed one's connections stop getting the chat's events.\n            \nErrors: `400 NOT_A_GROUP`, `403 NOT_A_MEMBER`, `403 PERMISSION_DENIED`,\n`404 MEMBER_NOT_FOUND`, `429 RATE_LIMITED`.",
         "parameters": [
           {
             "description": "Group ID",
@@ -4711,7 +4711,7 @@
     },
     "/api/chats/{chatId}/members/{userId}/permissions": {
       "put": {
-        "description": "Replaces the member's overrides: a given field overrides the role and the group's defaults,\r\nan omitted one follows them (`{}` removes all overrides). For a member — the owner or an\r\nadmin with `removeMembers`, and only `sendMessages`, `sendMedia`,\r\n`addMembers`, `changeInfo`; for an admin — the owner, any permission. Members receive\r\n`MemberUpdated`.\r\n            \r\nErrors: `400 NOT_A_GROUP`, `400 INVALID_PERMISSIONS` (an admin permission for a member),\r\n`403 NOT_A_MEMBER`, `403 PERMISSION_DENIED`, `404 MEMBER_NOT_FOUND`,\r\n`429 RATE_LIMITED`.",
+        "description": "Replaces the member's overrides: a given field overrides the role and the group's defaults,\nan omitted one follows them (`{}` removes all overrides). For a member — the owner or an\nadmin with `removeMembers`, and only `sendMessages`, `sendMedia`,\n`addMembers`, `changeInfo`; for an admin — the owner, any permission. Members receive\n`MemberUpdated`.\n            \nErrors: `400 NOT_A_GROUP`, `400 INVALID_PERMISSIONS` (an admin permission for a member),\n`403 NOT_A_MEMBER`, `403 PERMISSION_DENIED`, `404 MEMBER_NOT_FOUND`,\n`429 RATE_LIMITED`.",
         "parameters": [
           {
             "description": "Group ID",
@@ -4824,7 +4824,7 @@
     },
     "/api/chats/{chatId}/members/{userId}/role": {
       "put": {
-        "description": "- `admin` — make a member an admin: the owner, or an admin with `addAdmins`.\r\n- `member` — make an admin a member again: the owner.\r\n- `owner` — hand the group over: the owner; they become an admin.\r\n            \r\nA new role starts without the member's own permission overrides. Members receive\r\n`MemberUpdated` (for a handover — about both). The same role again changes nothing.\r\n            \r\nErrors: `400 NOT_A_GROUP`, `400 INVALID_ROLE`, `403 NOT_A_MEMBER`,\r\n`403 PERMISSION_DENIED`, `404 MEMBER_NOT_FOUND`, `429 RATE_LIMITED`.",
+        "description": "- `admin` — make a member an admin: the owner, or an admin with `addAdmins`.\n- `member` — make an admin a member again: the owner.\n- `owner` — hand the group over: the owner; they become an admin.\n            \nA new role starts without the member's own permission overrides. Members receive\n`MemberUpdated` (for a handover — about both). The same role again changes nothing.\n            \nErrors: `400 NOT_A_GROUP`, `400 INVALID_ROLE`, `403 NOT_A_MEMBER`,\n`403 PERMISSION_DENIED`, `404 MEMBER_NOT_FOUND`, `429 RATE_LIMITED`.",
         "parameters": [
           {
             "description": "Group ID",
@@ -4937,7 +4937,7 @@
     },
     "/api/chats/{chatId}/messages": {
       "post": {
-        "description": "Same rules and events as the hub method `SendMessage`: the text is trimmed\r\nand must be 1–4096 characters; chat members receive `MessageCreated` and\r\n`ChatListUpdated` over SignalR, the sender included — other devices of the\r\nsender learn about the message the same way.\r\n            \r\nPass a fresh `clientMessageId` with every message and repeat it on retries:\r\na retry returns the already created message with `200` instead of `201`\r\nand sends no events.\r\n            \r\nErrors: `400 MESSAGE_EMPTY`, `400 MESSAGE_TOO_LONG`,\r\n`403 NOT_A_MEMBER`, `409 CLIENT_MESSAGE_ID_CONFLICT` (the id is taken\r\nby a message in another chat), `429 RATE_LIMITED` (commands limit per user).",
+        "description": "Same rules and events as the hub method `SendMessage`: the text is trimmed\nand must be 1–4096 characters; chat members receive `MessageCreated` and\n`ChatListUpdated` over SignalR, the sender included — other devices of the\nsender learn about the message the same way.\n            \nPass a fresh `clientMessageId` with every message and repeat it on retries:\na retry returns the already created message with `200` instead of `201`\nand sends no events.\n            \nErrors: `400 MESSAGE_EMPTY`, `400 MESSAGE_TOO_LONG`,\n`403 NOT_A_MEMBER`, `409 CLIENT_MESSAGE_ID_CONFLICT` (the id is taken\nby a message in another chat), `429 RATE_LIMITED` (commands limit per user).",
         "parameters": [
           {
             "description": "Chat ID",
@@ -5050,7 +5050,7 @@
     },
     "/api/chats/{chatId}/messages/at": {
       "get": {
-        "description": "Returns a page of messages cursor-based, with the most recent message at or before\r\nthe given date as the last item in the page.\r\nUse the returned `nextCursor` to scroll further back.\r\n\r\nPurpose: \"Jump to March 15\", \"Open chat where I left off\", \"Go to unread messages\".",
+        "description": "Returns a page of messages cursor-based, with the most recent message at or before\nthe given date as the last item in the page.\nUse the returned `nextCursor` to scroll further back.\n\nPurpose: \"Jump to March 15\", \"Open chat where I left off\", \"Go to unread messages\".",
         "parameters": [
           {
             "description": "Chat ID",
@@ -5122,7 +5122,7 @@
     },
     "/api/chats/{chatId}/messages/cursor": {
       "get": {
-        "description": "Returns messages ordered chronologically (oldest first).\r\nUse the `cursor` parameter from the previous response's `nextCursor` field\r\nto fetch the next (older) page. When `cursor` is omitted, returns the most recent messages.\r\n\r\nThe response includes:\r\n- `items`: the messages in this page\r\n- `nextCursor`: pass this as `cursor` to get the next page (null = no more pages)\r\n- `hasMore`: whether more messages exist beyond this page",
+        "description": "Returns messages ordered chronologically (oldest first).\nUse the `cursor` parameter from the previous response's `nextCursor` field\nto fetch the next (older) page. When `cursor` is omitted, returns the most recent messages.\n\nThe response includes:\n- `items`: the messages in this page\n- `nextCursor`: pass this as `cursor` to get the next page (null = no more pages)\n- `hasMore`: whether more messages exist beyond this page",
         "parameters": [
           {
             "description": "Chat ID",
@@ -5193,7 +5193,7 @@
     },
     "/api/chats/{chatId}/messages/forward": {
       "post": {
-        "description": "Copies 1–100 messages of `fromChatId` into this chat in their original order.\r\nEach copy is a new message of the caller with `forwardFrom` — the original\r\nauthor (for a forward of a forward — the very first one). Replies are not carried over.\r\nMembers of this chat receive `MessageCreated` and `ChatListUpdated` for each copy.\r\n            \r\nPass `clientMessageIds` (one per message, same order) and repeat them on retries:\r\na retry creates nothing new and answers `200` instead of `201`.\r\n            \r\nErrors: `400 INVALID_REQUEST` (empty or repeated ids, `clientMessageIds` of another\r\nlength), `400 TOO_MANY_MESSAGES`, `403 NOT_A_MEMBER` (of either chat),\r\n`404 MESSAGE_NOT_FOUND` (a message is not in `fromChatId`, deleted or hidden by\r\nthe caller), `409 CLIENT_MESSAGE_ID_CONFLICT`, `429 RATE_LIMITED`.",
+        "description": "Copies 1–100 messages of `fromChatId` into this chat in their original order.\nEach copy is a new message of the caller with `forwardFrom` — the original\nauthor (for a forward of a forward — the very first one). Replies are not carried over.\nMembers of this chat receive `MessageCreated` and `ChatListUpdated` for each copy.\n            \nPass `clientMessageIds` (one per message, same order) and repeat them on retries:\na retry creates nothing new and answers `200` instead of `201`.\n            \nErrors: `400 INVALID_REQUEST` (empty or repeated ids, `clientMessageIds` of another\nlength), `400 TOO_MANY_MESSAGES`, `403 NOT_A_MEMBER` (of either chat),\n`404 MESSAGE_NOT_FOUND` (a message is not in `fromChatId`, deleted or hidden by\nthe caller), `409 CLIENT_MESSAGE_ID_CONFLICT`, `429 RATE_LIMITED`.",
         "parameters": [
           {
             "description": "Target chat ID",
@@ -5316,7 +5316,7 @@
     },
     "/api/chats/{chatId}/messages/search": {
       "get": {
-        "description": "Searches messages by text content using PostgreSQL full-text search.\r\nReturns messages ordered chronologically (oldest first, newest matches).\r\nSupports cursor-based pagination — use the returned `nextCursor` to fetch older results.\r\n\r\nThe response includes:\r\n- `items`: matching messages with sender names\r\n- `nextCursor`: pass this as `cursor` to get the next page (null = no more pages)\r\n- `hasMore`: whether more matches exist beyond this page\r\n- `query`: the original search query\r\n- `totalCount`: total number of matches for this query",
+        "description": "Searches messages by text content using PostgreSQL full-text search.\nReturns messages ordered chronologically (oldest first, newest matches).\nSupports cursor-based pagination — use the returned `nextCursor` to fetch older results.\n\nThe response includes:\n- `items`: matching messages with sender names\n- `nextCursor`: pass this as `cursor` to get the next page (null = no more pages)\n- `hasMore`: whether more matches exist beyond this page\n- `query`: the original search query\n- `totalCount`: total number of matches for this query",
         "parameters": [
           {
             "description": "Chat ID to search within.",
@@ -5405,7 +5405,7 @@
     },
     "/api/chats/{chatId}/messages/{messageId}": {
       "delete": {
-        "description": "`forEveryone=true` — only the author, within `Messages:DeleteWindowHours`\r\n             (48 by default). The message disappears from history, search and the chat list for\r\n             all members; they receive `MessageDeleted` with `forEveryone: true`.\r\n            \r\n             Without it — any member, any message, any time: the message disappears only for the\r\n             caller; their devices receive `MessageDeleted` with `forEveryone: false`.\r\n            \r\n             Repeating a delete returns `204` and sends nothing.\r\n            \r\n             Errors: `403 NOT_A_MEMBER`, `403 NOT_MESSAGE_AUTHOR`,\r\n             `403 DELETE_WINDOW_EXPIRED`, `404 MESSAGE_NOT_FOUND`, `429 RATE_LIMITED`.",
+        "description": "`forEveryone=true` — only the author, within `Messages:DeleteWindowHours`\n             (48 by default). The message disappears from history, search and the chat list for\n             all members; they receive `MessageDeleted` with `forEveryone: true`.\n            \n             Without it — any member, any message, any time: the message disappears only for the\n             caller; their devices receive `MessageDeleted` with `forEveryone: false`.\n            \n             Repeating a delete returns `204` and sends nothing.\n            \n             Errors: `403 NOT_A_MEMBER`, `403 NOT_MESSAGE_AUTHOR`,\n             `403 DELETE_WINDOW_EXPIRED`, `404 MESSAGE_NOT_FOUND`, `429 RATE_LIMITED`.",
         "parameters": [
           {
             "description": "Chat ID",
@@ -5488,7 +5488,7 @@
         ]
       },
       "patch": {
-        "description": "Only the author, within `Messages:EditWindowHours` (48 by default) of sending.\r\nThe text follows the same rules as when sending. Members receive `MessageUpdated`\r\nwith the whole message; `editedAt` is set. The same text again changes nothing\r\nand sends no event.\r\n            \r\nErrors: `400 MESSAGE_EMPTY`, `400 MESSAGE_TOO_LONG`, `403 NOT_A_MEMBER`,\r\n`403 NOT_MESSAGE_AUTHOR`, `403 EDIT_WINDOW_EXPIRED`,\r\n`404 MESSAGE_NOT_FOUND` (not in this chat or deleted), `429 RATE_LIMITED`.",
+        "description": "Only the author, within `Messages:EditWindowHours` (48 by default) of sending.\nThe text follows the same rules as when sending. Members receive `MessageUpdated`\nwith the whole message; `editedAt` is set. The same text again changes nothing\nand sends no event.\n            \nErrors: `400 MESSAGE_EMPTY`, `400 MESSAGE_TOO_LONG`, `403 NOT_A_MEMBER`,\n`403 NOT_MESSAGE_AUTHOR`, `403 EDIT_WINDOW_EXPIRED`,\n`404 MESSAGE_NOT_FOUND` (not in this chat or deleted), `429 RATE_LIMITED`.",
         "parameters": [
           {
             "description": "Chat ID",
@@ -5601,7 +5601,7 @@
     },
     "/api/chats/{chatId}/messages/{messageId}/reactions": {
       "delete": {
-        "description": "Members receive `ReactionsChanged` with `emoji: null`. Without a reaction —\r\n`204` and no event. Errors as for putting one.",
+        "description": "Members receive `ReactionsChanged` with `emoji: null`. Without a reaction —\n`204` and no event. Errors as for putting one.",
         "parameters": [
           {
             "description": "Chat ID",
@@ -5675,7 +5675,7 @@
         ]
       },
       "put": {
-        "description": "One reaction per user per message: a new one replaces the previous. The emoji must be one\r\nof the instance's set (`Messages:Reactions`). Members receive `ReactionsChanged`;\r\nthe same reaction again changes nothing and sends no event.\r\n            \r\nErrors: `400 INVALID_REACTION`, `403 NOT_A_MEMBER`,\r\n`404 MESSAGE_NOT_FOUND` (not in this chat, deleted, or hidden by the caller),\r\n`429 RATE_LIMITED`.",
+        "description": "One reaction per user per message: a new one replaces the previous. The emoji must be one\nof the instance's set (`Messages:Reactions`). Members receive `ReactionsChanged`;\nthe same reaction again changes nothing and sends no event.\n            \nErrors: `400 INVALID_REACTION`, `403 NOT_A_MEMBER`,\n`404 MESSAGE_NOT_FOUND` (not in this chat, deleted, or hidden by the caller),\n`429 RATE_LIMITED`.",
         "parameters": [
           {
             "description": "Chat ID",
@@ -5788,7 +5788,7 @@
     },
     "/api/chats/{chatId}/muted": {
       "put": {
-        "description": "`{ \"muted\": true, \"until\": \"…\" }` — until the moment; without `until` — for good;\r\n             `{ \"muted\": false }` — unmute. A muted chat sends no notifications and does not leave the\r\n             archive on a new message; the unread counter works as usual. The caller's other devices get\r\n             `ChatStateChanged`.\r\n            \r\n             Errors: `400 INVALID_REQUEST` (`until` in the past), `403 NOT_A_MEMBER`.",
+        "description": "`{ \"muted\": true, \"until\": \"…\" }` — until the moment; without `until` — for good;\n             `{ \"muted\": false }` — unmute. A muted chat sends no notifications and does not leave the\n             archive on a new message; the unread counter works as usual. The caller's other devices get\n             `ChatStateChanged`.\n            \n             Errors: `400 INVALID_REQUEST` (`until` in the past), `403 NOT_A_MEMBER`.",
         "parameters": [
           {
             "in": "path",
@@ -5859,7 +5859,7 @@
     },
     "/api/chats/{chatId}/pinned": {
       "put": {
-        "description": "A newly pinned chat goes on top; at most 10 are pinned. A pinned chat leaves the archive.\r\nAnswers with the pinned chats, top first; the caller's other devices get\r\n`PinnedChatsChanged` with the same list.\r\n            \r\nErrors: `400 TOO_MANY_PINNED`, `403 NOT_A_MEMBER`.",
+        "description": "A newly pinned chat goes on top; at most 10 are pinned. A pinned chat leaves the archive.\nAnswers with the pinned chats, top first; the caller's other devices get\n`PinnedChatsChanged` with the same list.\n            \nErrors: `400 TOO_MANY_PINNED`, `403 NOT_A_MEMBER`.",
         "parameters": [
           {
             "in": "path",
@@ -5930,7 +5930,7 @@
     },
     "/api/chats/{chatId}/read": {
       "post": {
-        "description": "Moves the caller's read pointer to this message (forward only; an older one is not an\r\nerror) and clears \"marked as unread\". Authors whose messages first became read receive\r\n`MessagesRead`; the caller's devices receive `ReadStateChanged` with the new counters.\r\n            \r\nErrors: `403 NOT_A_MEMBER`, `404 MESSAGE_NOT_FOUND` (not in this chat).",
+        "description": "Moves the caller's read pointer to this message (forward only; an older one is not an\nerror) and clears \"marked as unread\". Authors whose messages first became read receive\n`MessagesRead`; the caller's devices receive `ReadStateChanged` with the new counters.\n            \nErrors: `403 NOT_A_MEMBER`, `404 MESSAGE_NOT_FOUND` (not in this chat).",
         "parameters": [
           {
             "in": "path",
@@ -5994,7 +5994,7 @@
     },
     "/api/chats/{chatId}/typing": {
       "post": {
-        "description": "Same as the hub method `Typing`: other members receive `TypingChanged`.\r\n\"Typing\" expires after 6 seconds unless repeated, so send `isTyping: true`\r\nevery few seconds while the user types and `false` when they stop.",
+        "description": "Same as the hub method `Typing`: other members receive `TypingChanged`.\n\"Typing\" expires after 6 seconds unless repeated, so send `isTyping: true`\nevery few seconds while the user types and `false` when they stop.",
         "parameters": [
           {
             "description": "Chat ID",
@@ -6070,7 +6070,7 @@
     },
     "/api/devices": {
       "get": {
-        "description": "A device is one sign-in (login or registration) with the token refreshes after it; it is gone\r\nafter logout, when its refresh token expires or when it is signed out from another device.\r\n`isCurrent` marks the one the request came from.",
+        "description": "A device is one sign-in (login or registration) with the token refreshes after it; it is gone\nafter logout, when its refresh token expires or when it is signed out from another device.\n`isCurrent` marks the one the request came from.",
         "responses": {
           "200": {
             "content": {
@@ -6101,7 +6101,7 @@
     },
     "/api/devices/{deviceId}": {
       "delete": {
-        "description": "Its refresh token stops working and its hub connections close at once; an access token it\r\nalready holds works until it expires (minutes). The current device may be signed out too —\r\nthe same as logout.\r\n            \r\nErrors: `404 DEVICE_NOT_FOUND` — not the caller's or already signed out.",
+        "description": "Its refresh token stops working and its hub connections close at once; an access token it\nalready holds works until it expires (minutes). The current device may be signed out too —\nthe same as logout.\n            \nErrors: `404 DEVICE_NOT_FOUND` — not the caller's or already signed out.",
         "parameters": [
           {
             "description": "The device id from the list.",
@@ -6178,7 +6178,7 @@
         ]
       },
       "post": {
-        "description": "A folder shows the chats listed in `chatIds` and, by filters, all private chats\r\n(`includePrivate`) or all groups (`includeGroups`) outside the archive; with\r\n`onlyUnread` — only those with something unread. `pinnedChatIds` — pinned inside\r\nthe folder, top first (they are in the folder too). Up to 20 folders, 200 listed and 10 pinned\r\nchats in each; the new folder goes last. The caller's devices get `FoldersChanged` with\r\nall folders.\r\n            \r\nErrors: `400 INVALID_TITLE` (1–64 characters), `400 TOO_MANY_FOLDERS`,\r\n`400 INVALID_REQUEST` (limits; a chat the caller is not in).",
+        "description": "A folder shows the chats listed in `chatIds` and, by filters, all private chats\n(`includePrivate`) or all groups (`includeGroups`) outside the archive; with\n`onlyUnread` — only those with something unread. `pinnedChatIds` — pinned inside\nthe folder, top first (they are in the folder too). Up to 20 folders, 200 listed and 10 pinned\nchats in each; the new folder goes last. The caller's devices get `FoldersChanged` with\nall folders.\n            \nErrors: `400 INVALID_TITLE` (1–64 characters), `400 TOO_MANY_FOLDERS`,\n`400 INVALID_REQUEST` (limits; a chat the caller is not in).",
         "requestBody": {
           "content": {
             "application/*+json": {
@@ -6423,7 +6423,7 @@
     },
     "/api/folders/{folderId}/chats": {
       "get": {
-        "description": "The same `ChatListItemDto` as `GET /api/chats/page`: the first page starts with the\r\nchats pinned in the folder (outside the limit), then the others by activity.\r\n            \r\nErrors: `400 INVALID_CURSOR`, `404 FOLDER_NOT_FOUND`.",
+        "description": "The same `ChatListItemDto` as `GET /api/chats/page`: the first page starts with the\nchats pinned in the folder (outside the limit), then the others by activity.\n            \nErrors: `400 INVALID_CURSOR`, `404 FOLDER_NOT_FOUND`.",
         "parameters": [
           {
             "in": "path",
@@ -6501,7 +6501,7 @@
     },
     "/api/media/links": {
       "post": {
-        "description": "Up to 100 ids at once — a screen of previews in one request. Files the caller may not see are\r\nleft out of the answer. Links are signed and work for `Media:DownloadUrlMinutes` (60)\r\nminutes. Photos, videos and voice are served for display; other files only as a download of\r\nunknown type.\r\n            \r\nErrors: `400 INVALID_REQUEST`.",
+        "description": "Up to 100 ids at once — a screen of previews in one request. Files the caller may not see are\nleft out of the answer. Links are signed and work for `Media:DownloadUrlMinutes` (60)\nminutes. Photos, videos and voice are served for display; other files only as a download of\nunknown type.\n            \nErrors: `400 INVALID_REQUEST`.",
         "requestBody": {
           "content": {
             "application/*+json": {
@@ -6571,7 +6571,7 @@
     },
     "/api/media/uploads": {
       "post": {
-        "description": "Three steps, and the file never passes through the API:\r\n1. this call — the server checks the kind and the declared size and answers with a signed link;\r\n2. `PUT {uploadUrl}` with the file as the body and exactly `Content-Type: {contentType}`;\r\n   for a video with `withThumbnail` — also a frame (JPEG or PNG) to `thumbnailUploadUrl`;\r\n3. `POST /api/media/uploads/{attachmentId}/complete`.\r\n            \r\nLimits: `Media:MaxFileSizeMb` (100 MB), photos `Media:MaxPhotoSizeMb` (20 MB),\r\n`Media:MaxPendingUploads` unfinished uploads per user. Voice needs `durationMs`;\r\nvideo — `width` and `height` if known.\r\n            \r\nErrors: `400 INVALID_MEDIA`, `400 FILE_TOO_LARGE`, `409 TOO_MANY_UPLOADS`,\r\n`503 MEDIA_UNAVAILABLE` — the server has no file storage.",
+        "description": "Three steps, and the file never passes through the API:\n1. this call — the server checks the kind and the declared size and answers with a signed link;\n2. `PUT {uploadUrl}` with the file as the body and exactly `Content-Type: {contentType}`;\n   for a video with `withThumbnail` — also a frame (JPEG or PNG) to `thumbnailUploadUrl`;\n3. `POST /api/media/uploads/{attachmentId}/complete`.\n            \nLimits: `Media:MaxFileSizeMb` (100 MB), photos `Media:MaxPhotoSizeMb` (20 MB),\n`Media:MaxPendingUploads` unfinished uploads per user. Voice needs `durationMs`;\nvideo — `width` and `height` if known.\n            \nErrors: `400 INVALID_MEDIA`, `400 FILE_TOO_LARGE`, `409 TOO_MANY_UPLOADS`,\n`503 MEDIA_UNAVAILABLE` — the server has no file storage.",
         "requestBody": {
           "content": {
             "application/*+json": {
@@ -6651,7 +6651,7 @@
     },
     "/api/media/uploads/{attachmentId}/complete": {
       "post": {
-        "description": "The server reads what was uploaded: the real size, the SHA-256, the type by content. A photo\r\nmust be a JPEG, PNG, GIF or WebP picture — the server measures it and makes a preview; a video\r\nmust be MP4, MOV or WebM, a voice message Ogg, WebM, MP4 or MP3. A file that fails the check is\r\nremoved. Repeating the call returns the same file.\r\n            \r\nErrors: `400 UPLOAD_INCOMPLETE` — nothing was put at the link yet,\r\n`400 FILE_TOO_LARGE`, `400 INVALID_MEDIA`, `404 UPLOAD_NOT_FOUND` — no such\r\nupload of the caller (or it went stale and was removed).",
+        "description": "The server reads what was uploaded: the real size, the SHA-256, the type by content. A photo\nmust be a JPEG, PNG, GIF or WebP picture — the server measures it and makes a preview; a video\nmust be MP4, MOV or WebM, a voice message Ogg, WebM, MP4 or MP3. A file that fails the check is\nremoved. Repeating the call returns the same file.\n            \nErrors: `400 UPLOAD_INCOMPLETE` — nothing was put at the link yet,\n`400 FILE_TOO_LARGE`, `400 INVALID_MEDIA`, `404 UPLOAD_NOT_FOUND` — no such\nupload of the caller (or it went stale and was removed).",
         "parameters": [
           {
             "in": "path",
@@ -6723,7 +6723,7 @@
     },
     "/api/media/{attachmentId}": {
       "get": {
-        "description": "`302` to a signed link — for code that downloads with the access token. For\r\n             `<img>` use links from `POST /api/media/links`: a browser does not send the\r\n             token with a picture request.\r\n            \r\n             Errors: `404 ATTACHMENT_NOT_FOUND` — no such file, the caller may not see it, or (for the\r\n             file itself) it has expired.",
+        "description": "`302` to a signed link — for code that downloads with the access token. For\n             `<img>` use links from `POST /api/media/links`: a browser does not send the\n             token with a picture request.\n            \n             Errors: `404 ATTACHMENT_NOT_FOUND` — no such file, the caller may not see it, or (for the\n             file itself) it has expired.",
         "parameters": [
           {
             "description": "The file.",
@@ -6841,7 +6841,7 @@
         ]
       },
       "put": {
-        "description": "The body is the browser's `PushSubscription.toJSON()`. One subscription per device (the\r\nsign-in the token belongs to): a new one replaces the old. A subscription the same browser\r\ngave another sign-in — for instance, before logging in as someone else — moves to this one.\r\nLogout and signing the device out remove it. Only push services the server knows are taken:\r\nGoogle (Chrome), Mozilla, Microsoft (Edge) and Apple (Safari) by default.\r\n            \r\nErrors: `400 INVALID_SUBSCRIPTION`, `404 DEVICE_NOT_FOUND` (the sign-in has already\r\nended), `503 PUSH_UNAVAILABLE` (push is off on this server).",
+        "description": "The body is the browser's `PushSubscription.toJSON()`. One subscription per device (the\nsign-in the token belongs to): a new one replaces the old. A subscription the same browser\ngave another sign-in — for instance, before logging in as someone else — moves to this one.\nLogout and signing the device out remove it. Only push services the server knows are taken:\nGoogle (Chrome), Mozilla, Microsoft (Edge) and Apple (Safari) by default.\n            \nErrors: `400 INVALID_SUBSCRIPTION`, `404 DEVICE_NOT_FOUND` (the sign-in has already\nended), `503 PUSH_UNAVAILABLE` (push is off on this server).",
         "requestBody": {
           "content": {
             "application/*+json": {
@@ -6914,7 +6914,7 @@
     },
     "/api/search/messages": {
       "get": {
-        "description": "The same full-text search as in a chat (Russian morphology, words as prefixes), over every\r\nchat the caller is in now. Deleted messages, the caller's hidden ones and system messages are\r\nnot found. Newest first; `nextCursor` — for the next page. Each hit is the message\r\n(`MessageDto`) and its chat: type, title or companion, avatar.\r\n            \r\nFilters: `chatId`, `senderId`, `from`/`to` (the time, `to` exclusive),\r\n`type` — `text` or `media` (the caption is searched).\r\n            \r\nErrors: `400 INVALID_QUERY` (shorter than 2 characters), `400 INVALID_FILTER`,\r\n`400 INVALID_CURSOR`, `403 NOT_A_MEMBER` (a chat filter for a chat the caller is not in).",
+        "description": "The same full-text search as in a chat (Russian morphology, words as prefixes), over every\nchat the caller is in now. Deleted messages, the caller's hidden ones and system messages are\nnot found. Newest first; `nextCursor` — for the next page. Each hit is the message\n(`MessageDto`) and its chat: type, title or companion, avatar.\n            \nFilters: `chatId`, `senderId`, `from`/`to` (the time, `to` exclusive),\n`type` — `text` or `media` (the caption is searched).\n            \nErrors: `400 INVALID_QUERY` (shorter than 2 characters), `400 INVALID_FILTER`,\n`400 INVALID_CURSOR`, `403 NOT_A_MEMBER` (a chat filter for a chat the caller is not in).",
         "parameters": [
           {
             "in": "query",
@@ -7029,7 +7029,7 @@
     },
     "/api/sync": {
       "get": {
-        "description": "After a reconnect: apply `updates` in order (each has the same payload as the\r\nhub event of the same name), store the returned `pts`, repeat while\r\n`hasMore`. An update may also have arrived over the hub — recognize it by\r\nthe message or chat id.\r\n            \r\n`snapshotRequired: true` — the journal no longer reaches back to\r\n`since` (kept for 30 days): take `GET /api/sync/state` instead.",
+        "description": "After a reconnect: apply `updates` in order (each has the same payload as the\nhub event of the same name), store the returned `pts`, repeat while\n`hasMore`. An update may also have arrived over the hub — recognize it by\nthe message or chat id.\n            \n`snapshotRequired: true` — the journal no longer reaches back to\n`since` (kept for 30 days): take `GET /api/sync/state` instead.",
         "parameters": [
           {
             "description": "The last pts the client knows (0 — nothing yet).",
@@ -7091,7 +7091,7 @@
     },
     "/api/sync/ack": {
       "post": {
-        "description": "The device is the sign-in behind the access token. The acknowledged pts only moves\r\nforward. New messages the journal carried up to this pts become `delivered`: their\r\nauthors get `MessagesDelivered` if no other member had received them before.",
+        "description": "The device is the sign-in behind the access token. The acknowledged pts only moves\nforward. New messages the journal carried up to this pts become `delivered`: their\nauthors get `MessagesDelivered` if no other member had received them before.",
         "requestBody": {
           "content": {
             "application/*+json": {
@@ -7145,7 +7145,7 @@
     },
     "/api/sync/state": {
       "get": {
-        "description": "Call on first start and whenever `GET /api/sync` answers\r\n`snapshotRequired: true`. Keep `pts`: it is the `since` of the next\r\n`GET /api/sync`.",
+        "description": "Call on first start and whenever `GET /api/sync` answers\n`snapshotRequired: true`. Keep `pts`: it is the `since` of the next\n`GET /api/sync`.",
         "responses": {
           "200": {
             "content": {

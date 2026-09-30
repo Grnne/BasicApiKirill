@@ -37,6 +37,7 @@ public class OpenApiSnapshotTests(PostgresFixture db)
     }
 
     // Keys sorted: the order of paths follows controller discovery and is not part of the contract.
+    // Line breaks of XML comments follow the checkout (CRLF on Windows, LF in CI).
     private static string Canonical(string json) => Sorted(JsonNode.Parse(json))!.ToJsonString(Indented);
 
     private static JsonNode? Sorted(JsonNode? node) => node switch
@@ -44,6 +45,7 @@ public class OpenApiSnapshotTests(PostgresFixture db)
         JsonObject o => new JsonObject(o.OrderBy(p => p.Key, StringComparer.Ordinal)
             .Select(p => KeyValuePair.Create(p.Key, Sorted(p.Value)))),
         JsonArray a => new JsonArray(a.Select(Sorted).ToArray()),
+        JsonValue v when v.TryGetValue(out string? s) => JsonValue.Create(s.Replace("\r\n", "\n")),
         _ => node?.DeepClone()
     };
 

@@ -1,4 +1,4 @@
-using BasicApi.Services;
+using BasicApi.Features.Auth;
 
 namespace BasicApi.Hubs;
 

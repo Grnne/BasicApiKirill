@@ -41,7 +41,7 @@ public class Program
         // A key pair for push notifications, in the form .env.prod takes it; nothing else starts.
         if (args.Contains("--generate-vapid-keys"))
         {
-            var (publicKey, privateKey) = Services.Push.VapidKeys.Generate();
+            var (publicKey, privateKey) = Features.Push.VapidKeys.Generate();
             Console.WriteLine($"PUSH_VAPID_PUBLIC_KEY={publicKey}");
             Console.WriteLine($"PUSH_VAPID_PRIVATE_KEY={privateKey}");
             return;

@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Security.Claims;
 using System.Threading.RateLimiting;
 using BasicApi.Extensions;
+using BasicApi.Features.Auth;
 using BasicApi.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;

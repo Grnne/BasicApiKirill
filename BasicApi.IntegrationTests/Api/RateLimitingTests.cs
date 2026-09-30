@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
+using BasicApi.Features.Auth;
 using BasicApi.IntegrationTests.Infrastructure;
-using BasicApi.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 

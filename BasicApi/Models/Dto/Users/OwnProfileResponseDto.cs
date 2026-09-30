@@ -1,7 +1,7 @@
 namespace BasicApi.Models.Dto.Users;
 
 /// <summary>
-/// The caller's own profile — <see cref="Auth.AuthResponseDto"/> minus the token fields,
+/// The caller's own profile — <c>AuthResponseDto</c> minus the token fields,
 /// so a client restoring a session from a stored token recovers exactly the user data
 /// login/register would have given it.
 /// Unlike <see cref="UserProfileResponseDto"/> this includes the email, which is

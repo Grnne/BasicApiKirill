@@ -1,4 +1,5 @@
 using BasicApi.Extensions;
+using BasicApi.Features.Push;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Moq;
@@ -130,8 +131,8 @@ public class ConfigurationValidationTests
     [Fact]
     public void Push_NeedsAMatchingKeyPair_AndASubject()
     {
-        var (publicKey, privateKey) = BasicApi.Services.Push.VapidKeys.Generate();
-        var (otherPublic, _) = BasicApi.Services.Push.VapidKeys.Generate();
+        var (publicKey, privateKey) = VapidKeys.Generate();
+        var (otherPublic, _) = VapidKeys.Generate();
 
         ConfigurationValidation.Validate(WithPush(publicKey, privateKey), Env("Production"));
         ConfigurationValidation.Validate(WithPush(null, null, subject: null), Env("Production")); // push off

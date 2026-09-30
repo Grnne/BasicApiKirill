@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Threading.Channels;
-using BasicApi.Services.Push;
+using BasicApi.Features.Push;
 using BasicApi.Storage.Interfaces;
 
 namespace BasicApi.IntegrationTests.Infrastructure;
