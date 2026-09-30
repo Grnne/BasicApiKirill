@@ -305,7 +305,7 @@
             <strong>Доставка — «хотя бы один раз».</strong> <code>MessageCreated</code>, <code>ChatListUpdated</code>,
             <code>MessageUpdated</code>, <code>MessageDeleted</code>, <code>ReactionsChanged</code>,
             <code>MessagesDelivered</code>, <code>MessagesRead</code>, <code>ReadStateChanged</code>,
-            <code>DraftUpdated</code>, <code>ChatCreated</code>, <code>ChatUpdated</code>, <code>ChatDeleted</code>,
+            <code>DraftUpdated</code>, <code>ChatCreated</code>, <code>ChatUpdated</code>, <code>ChatDeleted</code>, <code>UserUpdated</code>,
             <code>MemberAdded</code>, <code>MemberRemoved</code> и <code>MemberUpdated</code> сохраняются в той же транзакции, что и само изменение, и рассылаются
             из очереди: сбой сервера не теряет событие, но изредка оно может прийти дважды — сообщения
             различаются по <code>id</code> (или <code>chatId</code> + <code>seq</code>). Пропущенное, пока
@@ -344,14 +344,15 @@
                     <tr><td><code>status</code></td><td class="type-cell">string?</td><td>Только у своих: <code>sent</code> / <code>delivered</code> / <code>read</code>. В истории и поиске; в событиях <code>null</code></td></tr>
                     <tr><td><code>seq</code></td><td class="type-cell">long</td><td>Номер сообщения в чате: 1, 2, 3, … — сообщения упорядочены по нему</td></tr>
                     <tr><td><code>clientMessageId</code></td><td class="type-cell">Guid?</td><td>ID, который отправитель передал при REST-отправке; иначе <code>null</code></td></tr>
-                    <tr><td><code>type</code></td><td class="type-cell">string</td><td><code>"text"</code> или <code>"system"</code> — запись о событии группы (см. <code>action</code>). Незнакомый тип — показать заглушкой</td></tr>
+                    <tr><td><code>type</code></td><td class="type-cell">string</td><td><code>"text"</code>, <code>"media"</code> — с файлами (см. <code>attachments</code>), <code>text</code> — подпись, может быть пустой; <code>"system"</code> — запись о событии группы (см. <code>action</code>). Незнакомый тип — показать заглушкой</td></tr>
                     <tr><td><code>editedAt</code></td><td class="type-cell">DateTime?</td><td>Когда текст правили; <code>null</code> — не правили</td></tr>
                     <tr><td><code>entities</code></td><td class="type-cell">MessageEntity[]</td><td>Разметка и упоминания поверх <code>text</code>, смещения в UTF-16; пусто — обычный текст</td></tr>
                     <tr><td><code>reactions</code></td><td class="type-cell">{ emoji, count }[]</td><td>Реакции, самые популярные первыми</td></tr>
                     <tr><td><code>myReaction</code></td><td class="type-cell">string?</td><td>Своя реакция — только в истории и поиске; в событиях <code>null</code></td></tr>
                     <tr><td><code>replyTo</code></td><td class="type-cell">object?</td><td>Ответ на: <code>messageId</code>, <code>senderId</code>, <code>senderName</code>, <code>text</code> (≤ 100 символов), <code>deleted</code></td></tr>
                     <tr><td><code>forwardFrom</code></td><td class="type-cell">object?</td><td>Переслано от: <code>senderId</code>, <code>senderName</code> — автор оригинала</td></tr>
-                    <tr><td><code>action</code></td><td class="type-cell">object?</td><td>У системных: <code>type</code> (<code>group_created</code>, <code>title_changed</code>, <code>members_added</code>, <code>member_removed</code>, <code>member_left</code>), <code>userIds</code>, <code>title</code>; <code>text</code> — то же словами</td></tr>
+                    <tr><td><code>action</code></td><td class="type-cell">object?</td><td>У системных: <code>type</code> (<code>group_created</code>, <code>title_changed</code>, <code>members_added</code>, <code>member_removed</code>, <code>member_left</code>, <code>photo_changed</code>, <code>photo_removed</code>), <code>userIds</code>, <code>title</code>; <code>text</code> — то же словами</td></tr>
+                    <tr><td><code>attachments</code></td><td class="type-cell">object[]</td><td>Файлы в порядке альбома: <code>id</code>, <code>kind</code> (<code>photo</code>, <code>video</code>, <code>file</code>, <code>voice</code>), <code>fileName</code>, <code>mimeType</code>, <code>size</code>, <code>width</code>, <code>height</code>, <code>durationMs</code>, <code>waveform</code>, <code>hasThumbnail</code>, <code>state</code>; пусто — нет. Ссылки на сами файлы — <code>POST /api/media/links</code></td></tr>
                 </tbody>
             </table>
             <div class="note">
@@ -574,16 +575,36 @@
                 <span class="event-name">ChatUpdated</span>
             </div>
             <div class="method-description" style="margin-top: 0.5rem;">
-                Группу переименовали или изменили права участников по умолчанию (<code>PATCH /api/chats/{chatId}</code>). Получают все участники.
+                Группу переименовали, изменили права участников по умолчанию (<code>PATCH /api/chats/{chatId}</code>) или фото (<code>PUT/DELETE /api/chats/{chatId}/avatar</code>). Получают все участники.
             </div>
             <table>
                 <thead><tr><th>Аргумент</th><th>Тип</th><th>Описание</th></tr></thead>
                 <tbody>
-                    <tr><td><code>update</code></td><td class="type-cell">object</td><td><code>chatId</code>, <code>title</code>, <code>memberPermissions</code> — права участников по умолчанию</td></tr>
+                    <tr><td><code>update</code></td><td class="type-cell">object</td><td><code>chatId</code>, <code>title</code>, <code>memberPermissions</code> — права участников по умолчанию, <code>avatarId</code> — фото группы или <code>null</code></td></tr>
                 </tbody>
             </table>
             <div class="note">
                 <strong>Клиент:</strong> обновить название в списке и шапке; свои права — <code>GET /api/chats/{chatId}</code> → <code>myPermissions</code>.
+            </div>
+        </div>
+
+        <div class="event-card">
+            <div class="event-header">
+                <span class="direction-badge server-client">Server → Client</span>
+                <span class="event-name">UserUpdated</span>
+            </div>
+            <div class="method-description" style="margin-top: 0.5rem;">
+                Пользователь сменил публичный профиль — аватар (<code>PUT/DELETE /api/users/me/avatar</code>). Получают его устройства
+                и все, с кем у него есть общий чат.
+            </div>
+            <table>
+                <thead><tr><th>Аргумент</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                    <tr><td><code>update</code></td><td class="type-cell">object</td><td><code>userId</code>, <code>displayName</code>, <code>username</code>, <code>avatarId</code> — фото или <code>null</code></td></tr>
+                </tbody>
+            </table>
+            <div class="note">
+                <strong>Клиент:</strong> обновить имя и аватар во всех местах, где показан этот пользователь; картинка — по <code>avatarId</code> через <code>POST /api/media/links</code>.
             </div>
         </div>
 
@@ -742,7 +763,7 @@
         <footer>
             <a href="/swagger">REST API (Swagger)</a> ·
             <a href="/signalr-docs">SignalR Docs</a> ·
-            v1.4
+            v1.5
         </footer>
     </div>
 </body>
