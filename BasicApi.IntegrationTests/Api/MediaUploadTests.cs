@@ -275,7 +275,7 @@ public class MediaUploadTests(PostgresFixture db, StorageFixture storage) : DbTe
         var third = await api.PostAsJsonAsync("/api/media/uploads", new { kind = "file", fileName = "d.txt", mimeType = "text/plain", size = 5 });
         Assert.Equal("TOO_MANY_UPLOADS", await third.ErrorCodeAsync());
 
-        Assert.Equal(2, await factory.Services.GetRequiredService<MediaCleanup>().CleanupAsync());
+        Assert.Equal(2, (await factory.Services.GetRequiredService<MediaCleanup>().CleanupAsync()).StaleUploads);
         var objects = factory.Services.GetRequiredService<IObjectStorage>();
         Assert.Null(await objects.GetSizeAsync(MediaService.OriginalKey(first.Id("attachmentId"))));
         Assert.NotNull(await objects.GetSizeAsync(MediaService.OriginalKey(done.Id())));

@@ -77,12 +77,15 @@ public sealed class AttachmentRepository(IDbSession db) : IAttachmentRepository
             WHERE a.id = ANY(@ids) AND a.storage_state <> 'pending' AND ({AccessibleTo})",
             new { userId, ids = attachmentIds.Distinct().ToArray() }, ct);
 
-    public Task LinkToMessageAsync(
+    public Task<int> LinkToMessageAsync(
         Guid messageId, Guid chatId, long seq, IReadOnlyList<AttachmentRef> files, CancellationToken ct = default) =>
+        // Joined with the files: one removed by the cleanup a moment ago is skipped, not a foreign
+        // key error — the caller sees the count fall short.
         db.ExecuteAsync(@"
             INSERT INTO message_attachments (message_id, position, attachment_id, chat_id, seq, kind)
             SELECT @messageId, f.position - 1, f.id, @chatId, @seq, f.kind
-            FROM unnest(@ids, @kinds) WITH ORDINALITY AS f(id, kind, position)",
+            FROM unnest(@ids, @kinds) WITH ORDINALITY AS f(id, kind, position)
+            JOIN attachments a ON a.id = f.id",
             new
             {
                 messageId, chatId, seq,
@@ -98,6 +101,43 @@ public sealed class AttachmentRepository(IDbSession db) : IAttachmentRepository
             ORDER BY a.created_at
             LIMIT @limit",
             new { startedBefore, limit }, ct);
+
+    /// <summary>Nothing points to the file: no message, no user or group avatar.</summary>
+    private const string Unreferenced = @"
+        NOT EXISTS (SELECT 1 FROM message_attachments ma WHERE ma.attachment_id = a.id)
+        AND NOT EXISTS (SELECT 1 FROM users u WHERE u.avatar_attachment_id = a.id)
+        AND NOT EXISTS (SELECT 1 FROM chats c WHERE c.avatar_attachment_id = a.id)";
+
+    public Task<IReadOnlyList<Attachment>> DeleteUnreferencedAsync(
+        DateTime storedBefore, int limit, CancellationToken ct = default) =>
+        // One statement: a file sent again while the cleanup looks is kept — the row it points to
+        // is locked by the reference, and the check sees it.
+        db.QueryAsync<Attachment>($@"
+            DELETE FROM attachments
+            WHERE id IN (
+                SELECT a.id FROM attachments a
+                WHERE a.storage_state <> 'pending' AND a.stored_at < @storedBefore AND {Unreferenced}
+                ORDER BY a.stored_at
+                LIMIT @limit
+                FOR UPDATE SKIP LOCKED)
+            RETURNING id AS Id, storage_key AS StorageKey, thumbnail_key AS ThumbnailKey, storage_state AS StorageState",
+            new { storedBefore, limit }, ct);
+
+    public Task<IReadOnlyList<Attachment>> GetExpiringAsync(DateTime storedBefore, int limit, CancellationToken ct = default) =>
+        // Avatars are kept whole: they are shown all the time, and their preview is all they need anyway.
+        db.QueryAsync<Attachment>($@"
+            SELECT {Columns} FROM attachments a
+            WHERE a.storage_state = 'stored' AND a.stored_at < @storedBefore
+              AND NOT EXISTS (SELECT 1 FROM users u WHERE u.avatar_attachment_id = a.id)
+              AND NOT EXISTS (SELECT 1 FROM chats c WHERE c.avatar_attachment_id = a.id)
+            ORDER BY a.stored_at
+            LIMIT @limit",
+            new { storedBefore, limit }, ct);
+
+    public Task<int> MarkExpiredAsync(IReadOnlyCollection<Guid> attachmentIds, CancellationToken ct = default) =>
+        db.ExecuteAsync(
+            "UPDATE attachments SET storage_state = 'expired' WHERE id = ANY(@ids) AND storage_state = 'stored'",
+            new { ids = attachmentIds.ToArray() }, ct);
 
     public Task<int> DeleteAsync(IReadOnlyCollection<Guid> attachmentIds, CancellationToken ct = default) =>
         db.ExecuteAsync("DELETE FROM attachments WHERE id = ANY(@ids)", new { ids = attachmentIds.ToArray() }, ct);

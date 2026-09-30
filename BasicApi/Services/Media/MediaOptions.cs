@@ -61,8 +61,20 @@ public sealed class MediaOptions
     /// <summary>How many unfinished uploads one user may have at once.</summary>
     public int MaxPendingUploads { get; set; } = 50;
 
-    /// <summary>How often stale uploads are swept.</summary>
+    /// <summary>How often stale uploads, unused files and expired originals are swept.</summary>
     public int CleanupIntervalMinutes { get; set; } = 60;
+
+    /// <summary>
+    /// A file nothing points to (never sent, or its messages deleted for everyone) is removed after
+    /// this long: time enough to send an upload, or to take it back.
+    /// </summary>
+    public int UnusedFileHours { get; set; } = 24;
+
+    /// <summary>
+    /// Retention policy (D2): originals older than this many days are removed, previews are kept
+    /// (the file becomes <c>expired</c>). 0 — keep forever, the default. Avatars are kept whole.
+    /// </summary>
+    public int RetentionDays { get; set; }
 
     public long MaxFileSize => MaxFileSizeMb * 1024L * 1024;
     public long MaxPhotoSize => MaxPhotoSizeMb * 1024L * 1024;

@@ -258,8 +258,7 @@ public sealed class MessageService(
 
                 if (withFiles)
                 {
-                    await attachments.LinkToMessageAsync(
-                        created.Id, chatId, created.Seq, [.. files.Select(f => new AttachmentRef(f.Id, f.Kind))], ct);
+                    await LinkAsync(created, [.. files.Select(f => new AttachmentRef(f.Id, f.Kind))], ct);
                     created.Attachments = [.. files.Select(MediaService.ToDto)];
                 }
 
@@ -378,8 +377,7 @@ public sealed class MessageService(
                 var files = MessageAttachments.Read(source.AttachmentsJson);
                 if (files.Count > 0)
                 {
-                    await attachments.LinkToMessageAsync(
-                        created.Id, chatId, created.Seq, [.. files.Select(f => new AttachmentRef(f.Id, f.Kind))], ct);
+                    await LinkAsync(created, [.. files.Select(f => new AttachmentRef(f.Id, f.Kind))], ct);
                     created.Attachments = files;
                 }
 
@@ -518,6 +516,13 @@ public sealed class MessageService(
             ? files
             : throw new BadRequestException(
                 "An album is photos and videos, or files only; a voice message goes alone", "INVALID_ALBUM");
+    }
+
+    /// <summary>Puts the files into the new message; one swept by the cleanup meanwhile undoes the send.</summary>
+    private async Task LinkAsync(MessageDto message, IReadOnlyList<AttachmentRef> files, CancellationToken ct)
+    {
+        if (await attachments.LinkToMessageAsync(message.Id, message.ChatId, message.Seq, files, ct) != files.Count)
+            throw new NotFoundException("A file is not found or not available to you", "ATTACHMENT_NOT_FOUND");
     }
 
     private static string NormalizeText(string? text, bool allowEmpty = false)

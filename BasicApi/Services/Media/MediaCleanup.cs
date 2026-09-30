@@ -1,11 +1,16 @@
+using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
 using Microsoft.Extensions.Options;
 
 namespace BasicApi.Services.Media;
 
+/// <summary>What one cleanup pass removed.</summary>
+public sealed record MediaCleanupResult(int StaleUploads, int UnusedFiles, int ExpiredOriginals);
+
 /// <summary>
 /// Sweep every <c>Media:CleanupIntervalMinutes</c>: uploads not completed within
-/// <c>Media:PendingUploadHours</c> are removed with their objects.
+/// <c>Media:PendingUploadHours</c>, files nothing points to for <c>Media:UnusedFileHours</c>, and —
+/// when <c>Media:RetentionDays</c> is set — originals older than that (previews stay).
 /// </summary>
 public sealed class MediaCleanup(
     IServiceScopeFactory scopes,
@@ -40,30 +45,59 @@ public sealed class MediaCleanup(
         while (await WaitAsync(timer, stoppingToken));
     }
 
-    /// <summary>One pass; returns how many stale uploads were removed.</summary>
-    public async Task<int> CleanupAsync(CancellationToken ct = default)
+    /// <summary>One pass.</summary>
+    public async Task<MediaCleanupResult> CleanupAsync(CancellationToken ct = default)
     {
         await using var scope = scopes.CreateAsyncScope();
         var attachments = scope.ServiceProvider.GetRequiredService<IAttachmentRepository>();
         var storage = scope.ServiceProvider.GetRequiredService<IObjectStorage>();
-        var startedBefore = time.GetUtcNow().UtcDateTime - TimeSpan.FromHours(options.Value.PendingUploadHours);
+        var now = time.GetUtcNow().UtcDateTime;
+        var o = options.Value;
 
-        var removed = 0;
-        IReadOnlyList<Storage.Entities.Attachment> stale;
+        // Unfinished uploads: objects first — a row without its object is harmless, an object
+        // without a row is lost space.
+        var stale = 0;
+        IReadOnlyList<Attachment> batch;
         do
         {
-            stale = await attachments.GetStalePendingAsync(startedBefore, BatchSize, ct);
-            // Objects first: a row without its object is harmless, an object without a row is lost space.
-            await storage.DeleteAsync(stale.SelectMany(a =>
+            batch = await attachments.GetStalePendingAsync(now - TimeSpan.FromHours(o.PendingUploadHours), BatchSize, ct);
+            await storage.DeleteAsync(batch.SelectMany(a =>
                 new[] { a.StorageKey, MediaService.ClientThumbnailKey(a.Id), MediaService.ThumbnailKey(a.Id) }), ct);
-            removed += await attachments.DeleteAsync([.. stale.Select(a => a.Id)], ct);
+            stale += await attachments.DeleteAsync([.. batch.Select(a => a.Id)], ct);
         }
-        while (stale.Count == BatchSize);
+        while (batch.Count == BatchSize);
 
-        if (removed > 0)
-            logger.LogInformation("Media cleanup: {Uploads} stale uploads removed", removed);
-        return removed;
+        // Unused files: the row first — its deletion is what checks that nothing points to it.
+        var unused = 0;
+        do
+        {
+            batch = await attachments.DeleteUnreferencedAsync(now - TimeSpan.FromHours(o.UnusedFileHours), BatchSize, ct);
+            await storage.DeleteAsync(batch.SelectMany(Keys), ct);
+            unused += batch.Count;
+        }
+        while (batch.Count == BatchSize);
+
+        var expired = 0;
+        if (o.RetentionDays > 0)
+        {
+            do
+            {
+                batch = await attachments.GetExpiringAsync(now - TimeSpan.FromDays(o.RetentionDays), BatchSize, ct);
+                await storage.DeleteAsync(batch.Select(a => a.StorageKey), ct);
+                expired += await attachments.MarkExpiredAsync([.. batch.Select(a => a.Id)], ct);
+            }
+            while (batch.Count == BatchSize);
+        }
+
+        if (stale + unused + expired > 0)
+            logger.LogInformation(
+                "Media cleanup: {Stale} stale uploads, {Unused} unused files removed, {Expired} originals expired",
+                stale, unused, expired);
+        return new MediaCleanupResult(stale, unused, expired);
     }
+
+    private static IEnumerable<string> Keys(Attachment a) =>
+        a.ThumbnailKey is null ? [a.StorageKey] : [a.StorageKey, a.ThumbnailKey];
 
     private static async Task<bool> WaitAsync(PeriodicTimer timer, CancellationToken ct)
     {
