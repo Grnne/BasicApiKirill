@@ -1,9 +1,9 @@
 using System.Text.Json;
+using BasicApi.Features.Media;
 using BasicApi.Middleware.Exceptions;
 using BasicApi.Models.Dto.Chat;
 using BasicApi.Models.Dto.Message;
 using BasicApi.Services.Events;
-using BasicApi.Services.Media;
 using BasicApi.Storage;
 using BasicApi.Storage.Dto;
 using BasicApi.Storage.Entities;

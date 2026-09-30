@@ -1,6 +1,4 @@
 using BasicApi.Extensions;
-using BasicApi.Models.Dto.Sync;
-using BasicApi.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 

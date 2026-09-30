@@ -1,7 +1,5 @@
 using BasicApi.Extensions;
-using BasicApi.Models.Dto.Media;
 using BasicApi.Models.Dto.Message;
-using BasicApi.Services.Media;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;

@@ -1181,7 +1181,7 @@
       },
       "OwnProfileResponseDto": {
         "additionalProperties": false,
-        "description": "The caller's own profile — `AuthResponseDto` minus the token fields,\nso a client restoring a session from a stored token recovers exactly the user data\nlogin/register would have given it.\nUnlike BasicApi.Models.Dto.Users.UserProfileResponseDto this includes the email, which is\nprivate to the account owner.",
+        "description": "The caller's own profile — `AuthResponseDto` minus the token fields,\nso a client restoring a session from a stored token recovers exactly the user data\nlogin/register would have given it.\nUnlike `UserProfileResponseDto` this includes the email, which is\nprivate to the account owner.",
         "properties": {
           "avatarId": {
             "description": "The photo; null — none. Fetched by `POST /api/media/links`.",
@@ -1869,7 +1869,7 @@
       },
       "UploadTicketDto": {
         "additionalProperties": false,
-        "description": "Where to upload: `PUT` the file to BasicApi.Models.Dto.Media.UploadTicketDto.UploadUrl, then complete the upload.",
+        "description": "Where to upload: `PUT` the file to BasicApi.Features.Media.UploadTicketDto.UploadUrl, then complete the upload.",
         "properties": {
           "attachmentId": {
             "format": "uuid",
@@ -1885,7 +1885,7 @@
             "type": "string"
           },
           "thumbnailContentType": {
-            "description": "The `Content-Type` for BasicApi.Models.Dto.Media.UploadTicketDto.ThumbnailUploadUrl.",
+            "description": "The `Content-Type` for BasicApi.Features.Media.UploadTicketDto.ThumbnailUploadUrl.",
             "nullable": true,
             "type": "string"
           },
@@ -1895,7 +1895,7 @@
             "type": "string"
           },
           "uploadUrl": {
-            "description": "A signed link; the request must carry exactly BasicApi.Models.Dto.Media.UploadTicketDto.ContentType.",
+            "description": "A signed link; the request must carry exactly BasicApi.Features.Media.UploadTicketDto.ContentType.",
             "nullable": true,
             "type": "string"
           }
@@ -1915,7 +1915,7 @@
       },
       "UserProfileResponseDto": {
         "additionalProperties": false,
-        "description": "Public profile of a user, safe to show to any authenticated user.\nCarries the same fields as BasicApi.Models.Dto.Users.UserSearchResultDto, so a client can\nstore search results and profile lookups as one record.\nEmail is deliberately absent — see BasicApi.Models.Dto.Users.OwnProfileResponseDto for your own.",
+        "description": "Public profile of a user, safe to show to any authenticated user.\nCarries the same fields as BasicApi.Features.Users.UserSearchResultDto, so a client can\nstore search results and profile lookups as one record.\nEmail is deliberately absent — see BasicApi.Models.Dto.Users.OwnProfileResponseDto for your own.",
         "properties": {
           "avatarId": {
             "description": "The photo; null — none. Fetched by `POST /api/media/links`.",

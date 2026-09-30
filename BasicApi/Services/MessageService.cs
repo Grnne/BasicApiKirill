@@ -3,7 +3,6 @@ using BasicApi.Models;
 using BasicApi.Models.Dto.Chat;
 using BasicApi.Models.Dto.Message;
 using BasicApi.Services.Events;
-using BasicApi.Services.Media;
 using BasicApi.Storage;
 using BasicApi.Storage.Dto;
 using BasicApi.Storage.Entities;

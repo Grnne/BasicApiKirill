@@ -1,11 +1,12 @@
+using System.IO.Compression;
 using BasicApi.Extensions;
+using BasicApi.Features.Media;
 using BasicApi.Hubs;
 using BasicApi.Middleware;
 using FluentMigrator.Runner;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.Net.Http.Headers;
-using System.IO.Compression;
 
 namespace BasicApi;
 
@@ -95,8 +96,8 @@ public class Program
         // several typical attacks: content type spoofing, embedding the page
         // in a foreign iframe, address leakage via Referer and, through CSP,
         // most of the consequences of XSS.
-        var storage = app.Configuration.GetSection(Services.Media.StorageOptions.Section)
-            .Get<Services.Media.StorageOptions>();
+        var storage = app.Configuration.GetSection(StorageOptions.Section)
+            .Get<StorageOptions>();
         var contentSecurityPolicy = ContentSecurityPolicyWith(storage?.PublicOrigin);
         app.Use(async (context, next) =>
         {

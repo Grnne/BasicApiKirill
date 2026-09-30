@@ -3,7 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
-using BasicApi.IntegrationTests.Api;
+using BasicApi.IntegrationTests.Features.Media;
 
 namespace BasicApi.IntegrationTests.E2E;
 

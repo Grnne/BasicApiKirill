@@ -43,7 +43,7 @@ public static class MessageMapper
             }
             : null,
         Action = SystemMessages.Read(m.ContentJson),
-        Attachments = Media.MessageAttachments.Read(m.AttachmentsJson)
+        Attachments = MessageAttachments.Read(m.AttachmentsJson)
     };
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);

@@ -1,8 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
-using System.Text.Json;
 using BasicApi.IntegrationTests.Infrastructure;
-using static BasicApi.IntegrationTests.Api.MediaUploadTests;
+using static BasicApi.IntegrationTests.Features.Media.MediaUploadTests;
 
 namespace BasicApi.IntegrationTests.Api;
 

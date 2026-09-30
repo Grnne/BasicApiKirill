@@ -49,7 +49,7 @@ public static class ChatListItemMapper
             SenderName = r.LastMessageSenderName ?? "Unknown",
             Text = r.LastMessageText ?? string.Empty,
             Type = r.LastMessageType ?? Storage.Entities.MessageTypes.Text,
-            Attachments = Media.MessageAttachments.Read(r.LastMessageAttachmentsJson),
+            Attachments = MessageAttachments.Read(r.LastMessageAttachmentsJson),
             CreatedAt = r.LastMessageCreatedAt!.Value,
             IsRead = r.LastMessageIsOwn
                 ? r.LastMessageSeq <= r.OutboxReadSeq && r.HasOthers
