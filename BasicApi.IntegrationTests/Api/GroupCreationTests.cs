@@ -75,6 +75,13 @@ public class GroupCreationTests(PostgresFixture db) : DbTest(db)
         using var carolApi = factory.CreateClient(carol.Token);
         Assert.Single(await aliceApi.JournalAsync("ChatCreated"), c => c.Id("chatId") == chatId);
         Assert.Single(await carolApi.JournalAsync("ChatCreated"), c => c.Id("chatId") == chatId);
+
+        // After the card, the opening message comes whole: the card has only its preview (plan 2, F8).
+        var carolsUpdates = (await carolApi.GetJsonAsync("/api/sync?since=0")).GetProperty("updates").EnumerateArray().ToList();
+        Assert.Equal(["ChatCreated", "MessageCreated", "MessageCreated"], carolsUpdates.Select(u => u.GetProperty("type").GetString()));
+        var journaled = carolsUpdates[1].GetProperty("payload");
+        Assert.Equal(system.Id(), journaled.Id());
+        Assert.Equal("group_created", journaled.GetProperty("action").GetProperty("type").GetString());
     }
 
     [Fact]

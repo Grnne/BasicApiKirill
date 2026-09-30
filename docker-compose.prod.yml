@@ -118,6 +118,11 @@ services:
       Storage__Bucket: media
       Storage__AccessKey: ${STORAGE_ACCESS_KEY}
       Storage__SecretKey: ${STORAGE_SECRET_KEY}
+      # Push notifications (plan 2, F7): off while the keys are empty. The API reaches the
+      # push services (Google, Mozilla, Microsoft, Apple) through the edge network.
+      Push__VapidPublicKey: ${PUSH_VAPID_PUBLIC_KEY:-}
+      Push__VapidPrivateKey: ${PUSH_VAPID_PRIVATE_KEY:-}
+      Push__Subject: ${PUSH_SUBJECT:-https://${DOMAIN}}
 
     # No published ports: all traffic goes through Caddy over the edge network.
     expose:

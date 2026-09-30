@@ -38,6 +38,15 @@ public class Program
 
     public static void Main(string[] args)
     {
+        // A key pair for push notifications, in the form .env.prod takes it; nothing else starts.
+        if (args.Contains("--generate-vapid-keys"))
+        {
+            var (publicKey, privateKey) = Services.Push.VapidKeys.Generate();
+            Console.WriteLine($"PUSH_VAPID_PUBLIC_KEY={publicKey}");
+            Console.WriteLine($"PUSH_VAPID_PRIVATE_KEY={privateKey}");
+            return;
+        }
+
         var builder = WebApplication.CreateBuilder(args);
 
         // Fail before startup if the config is dangerous or incomplete (default JWT key and the like).

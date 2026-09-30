@@ -4,6 +4,7 @@ namespace BasicApi.Storage.Interfaces;
 
 public interface ISessionRepository
 {
+    /// <summary>Inserts the session; the first one of a chain also registers its device.</summary>
     Task CreateAsync(Session session, CancellationToken ct = default);
 
     /// <summary>

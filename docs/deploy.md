@@ -90,6 +90,30 @@ curl -fsS "https://$DOMAIN/health/ready"   # Healthy (через Caddy и TLS)
 с файлами (план 2, Ф4) в `.env.prod` нужно добавить `STORAGE_ACCESS_KEY` и
 `STORAGE_SECRET_KEY` (см. `.env.prod.example`).
 
+## Push-уведомления
+
+С плана 2, Ф7 сервер умеет слать WebPush. Без ключей push выключен (клиенту
+`GET /api/push/config` отвечает `enabled: false`), остальное работает как раньше. Включить:
+
+```bash
+$COMPOSE --env-file .env.prod run --rm --no-deps basicapi --generate-vapid-keys
+```
+
+Команда печатает две строки `PUSH_VAPID_PUBLIC_KEY=…` и `PUSH_VAPID_PRIVATE_KEY=…` — вписать их
+в `.env.prod` и перезапустить `basicapi`. `PUSH_SUBJECT` — как push-сервисы свяжутся с
+владельцем сервера (`mailto:…` или `https://…`, по умолчанию `https://DOMAIN`).
+
+- **Ключи не менять.** Подписки браузеров привязаны к публичному ключу: с новой парой все
+  подписки перестают работать, пользователям придётся подписаться заново.
+- Приватный ключ — секрет наравне с `JWT_KEY`: с ним можно слать уведомления подписчикам от
+  имени сервера. Несовпадающая пара или половина пары — приложение не стартует
+  (`Invalid configuration`).
+- API ходит к push-сервисам (Google, Mozilla, Microsoft, Apple) по https через сеть `edge`;
+  если на сервере исходящий трафик закрыт фаерволом, открыть 443 наружу.
+- В логе `basicapi`: `Push service … refused a notification` — push-сервис отказал (в тексте код
+  и ответ), `… is unreachable` — нет связи с ним, `Push queue is full` — уведомления
+  не успевают уходить.
+
 ## 4. Проверка
 
 1. Контейнер `basicapi` в статусе `healthy`, `/health/ready` отвечает `Healthy`.

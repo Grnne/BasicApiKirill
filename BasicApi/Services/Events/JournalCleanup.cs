@@ -4,7 +4,8 @@ namespace BasicApi.Services.Events;
 
 /// <summary>
 /// Cleanup every <c>Sync:CleanupIntervalMinutes</c>: the change journal is kept for
-/// <c>Sync:RetentionDays</c> (30 days), dispatched outbox events for a week.
+/// <c>Sync:RetentionDays</c> (30 days), dispatched outbox events for a week; devices whose
+/// sign-in has ended are removed.
 /// Deletes in batches to avoid holding long locks.
 /// </summary>
 public sealed class JournalCleanup(
@@ -40,23 +41,27 @@ public sealed class JournalCleanup(
         while (await WaitAsync(timer, stoppingToken));
     }
 
-    /// <summary>One cleanup pass; returns how many journal records and outbox events were deleted.</summary>
-    public async Task<(int Updates, int Events)> CleanupAsync(CancellationToken ct = default)
+    /// <summary>One cleanup pass; returns how many journal records, outbox events and devices were deleted.</summary>
+    public async Task<(int Updates, int Events, int Devices)> CleanupAsync(CancellationToken ct = default)
     {
         await using var scope = scopes.CreateAsyncScope();
         var journal = scope.ServiceProvider.GetRequiredService<IUpdateJournal>();
         var outbox = scope.ServiceProvider.GetRequiredService<IOutboxRepository>();
+        var devices = scope.ServiceProvider.GetRequiredService<IDeviceRepository>();
         var now = time.GetUtcNow().UtcDateTime;
 
-        int updates = 0, events = 0, deleted;
+        int updates = 0, events = 0, dead = 0, deleted;
         do updates += deleted = await journal.DeleteOlderThanAsync(now - JournalRetention, BatchSize, ct);
         while (deleted == BatchSize);
         do events += deleted = await outbox.DeleteProcessedOlderThanAsync(now - OutboxRetention, BatchSize, ct);
         while (deleted == BatchSize);
+        do dead += deleted = await devices.DeleteDeadAsync(BatchSize, ct);
+        while (deleted == BatchSize);
 
-        if (updates + events > 0)
-            logger.LogInformation("Journal cleanup: {Updates} updates, {Events} outbox events deleted", updates, events);
-        return (updates, events);
+        if (updates + events + dead > 0)
+            logger.LogInformation("Journal cleanup: {Updates} updates, {Events} outbox events, {Devices} devices deleted",
+                updates, events, dead);
+        return (updates, events, dead);
     }
 
     private static async Task<bool> WaitAsync(PeriodicTimer timer, CancellationToken ct)

@@ -172,6 +172,15 @@ public class StackE2ETests(E2EUsers users)
         Assert.Equal(["hello from alice", "hello back"], updates.Take(2)
             .Select(u => u.GetProperty("payload").GetProperty("text").GetString()));
         Assert.Equal(0, updates[2].GetProperty("payload").GetProperty("unreadCount").GetInt32());
+
+        // The snapshot holds the whole state of the user (plan 2, F8); the sign-in is a device (F7)
+        Assert.Equal(bob.UserId, state.GetProperty("me").GetProperty("userId").GetGuid());
+        Assert.Equal(JsonValueKind.Array, state.GetProperty("folders").ValueKind);
+        Assert.Equal("everybody", state.GetProperty("privacy").GetProperty("lastSeen").GetString());
+        var devices = await (await bobApi.GetAsync("api/devices")).ReadAsync<JsonElement>();
+        Assert.True(devices.GetProperty("items").EnumerateArray().Single().GetProperty("isCurrent").GetBoolean());
+        var push = await (await bobApi.GetAsync("api/push/config")).ReadAsync<JsonElement>();
+        Assert.Equal(push.GetProperty("enabled").GetBoolean(), push.GetProperty("vapidPublicKey").ValueKind == JsonValueKind.String);
     }
 
     [E2EFact]

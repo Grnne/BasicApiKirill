@@ -35,15 +35,22 @@ public sealed class SyncService(
     IUpdateJournal journal,
     IChatService chats,
     IMessageRepository messages,
-    IChatEventPublisher events) : ISyncService
+    IChatEventPublisher events,
+    IFolderService folders,
+    IPrivacyService privacy,
+    IUserService users) : ISyncService
 {
     public Task<SyncStateDto> GetStateAsync(Guid userId, CancellationToken ct = default) =>
-        // One database snapshot for pts and the chat list: a change that made it into the list also made it into pts,
-        // and vice versa — nothing is lost or counted twice.
+        // One database snapshot for pts and everything else: a change that made it into the state also
+        // made it into pts, and vice versa — nothing is lost or counted twice.
         db.InTransactionAsync(async ct => new SyncStateDto
         {
             Pts = await journal.GetPtsAsync(userId, ct),
-            Chats = await chats.GetUserChatsAsync(userId, ct)
+            Chats = await chats.GetUserChatsAsync(userId, ct),
+            Folders = [.. await folders.GetAllAsync(userId, ct)],
+            Privacy = await privacy.GetAsync(userId, ct),
+            BlockedUserIds = [.. (await privacy.GetBlockedAsync(userId, ct)).Select(u => u.UserId)],
+            Me = await users.GetOwnProfileAsync(userId, ct)
         }, IsolationLevel.RepeatableRead, ct);
 
     public async Task<SyncDifferenceDto> GetDifferenceAsync(Guid userId, long since, int limit, CancellationToken ct = default)

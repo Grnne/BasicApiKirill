@@ -114,4 +114,32 @@ public class ConfigurationValidationTests
             ConfigurationValidation.Validate(WithStorage("chat-media", "CHANGE_ME__openssl_rand_-base64_24"), Env("Production")));
         Assert.Contains("Storage:SecretKey", ex.Message);
     }
+
+    private static IConfiguration WithPush(string? publicKey, string? privateKey, string? subject = "mailto:admin@example.com") =>
+        new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Jwt:Key"] = StrongKey,
+            ["Jwt:Issuer"] = "ChatApi",
+            ["Jwt:Audience"] = "ChatClient",
+            ["ConnectionStrings:DefaultConnection"] = "Host=db",
+            ["Push:VapidPublicKey"] = publicKey,
+            ["Push:VapidPrivateKey"] = privateKey,
+            ["Push:Subject"] = subject
+        }).Build();
+
+    [Fact]
+    public void Push_NeedsAMatchingKeyPair_AndASubject()
+    {
+        var (publicKey, privateKey) = BasicApi.Services.Push.VapidKeys.Generate();
+        var (otherPublic, _) = BasicApi.Services.Push.VapidKeys.Generate();
+
+        ConfigurationValidation.Validate(WithPush(publicKey, privateKey), Env("Production"));
+        ConfigurationValidation.Validate(WithPush(null, null, subject: null), Env("Production")); // push off
+        Assert.Contains("both", Assert.Throws<InvalidOperationException>(() =>
+            ConfigurationValidation.Validate(WithPush(publicKey, null), Env("Production"))).Message);
+        Assert.Contains("key pair", Assert.Throws<InvalidOperationException>(() =>
+            ConfigurationValidation.Validate(WithPush(otherPublic, privateKey), Env("Production"))).Message);
+        Assert.Contains("Push:Subject", Assert.Throws<InvalidOperationException>(() =>
+            ConfigurationValidation.Validate(WithPush(publicKey, privateKey, subject: "admin@example.com"), Env("Production"))).Message);
+    }
 }

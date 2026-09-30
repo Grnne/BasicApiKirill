@@ -1,4 +1,7 @@
+using System.Text.Json;
 using BasicApi.Hubs;
+using BasicApi.Models.Dto.Push;
+using BasicApi.Services.Push;
 using BasicApi.Storage;
 using BasicApi.Storage.Dto;
 using BasicApi.Storage.Interfaces;
@@ -33,6 +36,7 @@ public sealed class OutboxDispatcher(
     IHubContext<ChatHub> hub,
     HubConnectionRegistry connections,
     OutboxSignal signal,
+    PushQueue pushes,
     IConfiguration configuration,
     ILogger<OutboxDispatcher> logger) : BackgroundService
 {
@@ -124,6 +128,14 @@ public sealed class OutboxDispatcher(
     {
         foreach (var send in OutboxEnvelope.Deserialize(row.Payload).Sends)
         {
+            if (send.Target == "push")
+            {
+                // Slow and unreliable push services must not hold up the events behind this one.
+                pushes.Enqueue(new PushJob(Guid.Parse(send.Ids[0]), Guid.Parse(send.Ids[1]),
+                    send.Args[0].Deserialize<PushNotificationDto>(OutboxEnvelope.Json)!));
+                continue;
+            }
+
             if (send.Target == "leave-group")
             {
                 await connections.RemoveFromGroupAsync(hub.Groups, send.Ids.Select(Guid.Parse), send.Method, ct);

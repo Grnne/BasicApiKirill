@@ -14,6 +14,7 @@ public sealed class AuthService(
     IUserRepository userRepository,
     IJwtService jwtService,
     ISessionService sessionService,
+    IDeviceRepository devices,
     HubConnectionRegistry hubConnections)
 {
     /// <summary>bcrypt limit: anything beyond it is ignored.</summary>
@@ -115,16 +116,12 @@ public sealed class AuthService(
         // We also close this sign-in's hub connections: otherwise the "signed-out" device
         // would keep receiving messages as long as it holds the connection.
         var familyId = await sessionService.RevokeAsync(refreshToken, ct);
-        if (familyId is not null)
-            hubConnections.AbortSessionFamily(familyId.Value);
+        if (familyId is null)
+            return;
+        await devices.DeleteAsync(familyId.Value, ct);
+        hubConnections.AbortSessionFamily(familyId.Value);
     }
 
-    /// <summary>
-    /// Ends every session of the current user — "log out on all devices".
-    /// The current access token keeps working for REST until it expires (minutes), but
-    /// no new one can be obtained; open hub connections are closed right away and cannot
-    /// be reopened with the old token.
-    /// </summary>
     /// <summary>
     /// Changes the password and ends every other sign-in of the user, with their hub connections;
     /// the one that asked stays. Errors: 400 <c>WRONG_PASSWORD</c>/<c>PASSWORD_TOO_LONG</c>.
@@ -145,12 +142,20 @@ public sealed class AuthService(
         await userRepository.SetPasswordHashAsync(userId, BCrypt.Net.BCrypt.HashPassword(newPassword), ct);
         // Whoever might know the old password is signed out everywhere else, at once.
         await sessionService.RevokeOthersAsync(userId, sessionFamilyId, ct);
+        await devices.DeleteAllExceptAsync(userId, sessionFamilyId, ct);
         hubConnections.AbortUserExcept(userId, sessionFamilyId);
     }
 
+    /// <summary>
+    /// Ends every session of the current user — "log out on all devices".
+    /// The current access token keeps working for REST until it expires (minutes), but
+    /// no new one can be obtained; open hub connections are closed right away and cannot
+    /// be reopened with the old token.
+    /// </summary>
     public async Task LogoutAllAsync(Guid userId, CancellationToken ct = default)
     {
         await sessionService.RevokeAllForUserAsync(userId, ct);
+        await devices.DeleteAllExceptAsync(userId, null, ct);
         hubConnections.AbortUser(userId);
     }
 

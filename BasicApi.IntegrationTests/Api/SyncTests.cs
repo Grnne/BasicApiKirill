@@ -190,7 +190,7 @@ public class SyncTests(PostgresFixture db) : DbTest(db)
         await ExecuteAsync("UPDATE outbox SET processed_at = now() - interval '8 days' WHERE id = (SELECT MIN(id) FROM outbox)");
         await ExecuteAsync("INSERT INTO outbox (type, payload, created_at) VALUES ('Pending', '{}', now() - interval '60 days')");
 
-        var (updates, events) = await factory.Services.GetRequiredService<JournalCleanup>().CleanupAsync();
+        var (updates, events, _) = await factory.Services.GetRequiredService<JournalCleanup>().CleanupAsync();
 
         Assert.Equal((2, 1), (updates, events)); // one entry each for Alice and Bob; one event
         await using var connection = new NpgsqlConnection(Db.ConnectionString);
