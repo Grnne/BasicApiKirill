@@ -15,11 +15,10 @@ using BasicApi.Storage.Repositories;
 using BasicApi.Storage.Services;
 using FluentMigrator.Runner;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 
@@ -147,7 +146,8 @@ public static class ServiceExtensions
         // Push: WebPush with the VAPID keys from Push:*; without them push is off.
         services.Configure<PushOptions>(configuration.GetSection(PushOptions.Section));
         services.AddScoped<IPushService, PushService>();
-        services.AddSingleton<PushQueue>();
+        services.AddSingleton(sp => new PushQueue(
+            sp.GetRequiredService<IOptions<PushOptions>>().Value.IsConfigured, sp.GetRequiredService<ILogger<PushQueue>>()));
         services.AddHttpClient<IPushTransport, WebPushTransport>(client => client.Timeout = TimeSpan.FromSeconds(10));
         services.AddSingleton<PushSender>();
         services.AddHostedService(sp => sp.GetRequiredService<PushSender>());

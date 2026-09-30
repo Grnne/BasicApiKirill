@@ -103,7 +103,7 @@ Namespace = папка: `BasicApi.Features.Messages` и т. д.; DTO функц�
 | `MessageOptions` | политика и реакции |
 | `PresenceService`, `IUserStatusService`, `UserStatusService` | чаты, группы, пользователи, приватность, хаб, push |
 | `MessageMapper`, `MessageStatuses`, `SystemMessages` | сообщения, группы, реакции |
-| `ChatListItemMapper`, `ChatStates` (только статические помощники) | чаты, папки, группы, сообщения |
+| `ChatListItemMapper`, `ChatStates` (+ `ChatStateService`: закреп и архив меняют и чаты, и новые сообщения) | чаты, папки, группы, сообщения |
 | `MessageAttachments` (из `Services/Media/`) | мапперы сообщений и карточек |
 | `PostgresHealthCheck` | health checks (сквозное, не выделяем) |
 | `Events/*` + **очередь push** (`PushJob`, `PushQueue`, `PushNotifications` из `Services/Push/PushSender.cs`) | все функции пишут события; диспетчер outbox кладёт задания в очередь push |
@@ -130,7 +130,7 @@ Namespace = папка: `BasicApi.Features.Messages` и т. д.; DTO функц�
 | Auth | `AuthService`, `SessionService`, `ISessionService`, `JwtService`, `IJwtService` | все из `Models/Dto/Auth` | `AuthController` |
 | Devices | `DeviceService` | `DeviceDtos` | `DevicesController` |
 | Push | `PushService`, `PushOptions` (+`VapidKeys`), `PushSender` (только класс отправщика), `WebPushTransport` | `PushConfigDto`, `PushSubscriptionDto`, `PushSubscriptionKeysDto` | `PushController` |
-| Chats | `ChatService`, `IChatService` (+`PrivateChatResult`), `ChatStateService` + `IChatStateService` (из `ChatStates.cs`) | `ChatDetailDto`, `ChatParticipantDto`, `SearchChatsResponseDto`, `SetPinnedDto`, `SetArchivedDto`, `SetMutedDto` | `ChatsController` (часть) |
+| Chats | `ChatService`, `IChatService` (+`PrivateChatResult`) | `ChatDetailDto`, `ChatParticipantDto`, `SearchChatsResponseDto`, `SetPinnedDto`, `SetArchivedDto`, `SetMutedDto` | `ChatsController` (часть) |
 | Messages | `MessageService`, `ReactionService`, `ReadStateService`, `DraftService` | `SendMessageDto`, `EditMessageDto`, `ForwardMessagesDto` (+ответ), `MarkMessageReadDto`, `MarkUnreadDto`, `SaveDraftDto`, `SetReactionDto`, `TypingDto`, `SearchMessagesResponseDto`, `GlobalSearchDtos` | `MessagesController` (из `ChatsController`), `SearchController` |
 | Groups | `GroupService`, `GroupOptions` | `CreateGroupDto`, `AddMembersDto`, `UpdateGroupDto`, `SetRoleDto`, `AuditEntryDto`, `AuditPageDto` | `GroupsController` |
 | Folders | `FolderService` | `SaveFolderDto`, `FolderOrderDto` | `FoldersController` |
@@ -162,7 +162,7 @@ Namespace = папка: `BasicApi.Features.Messages` и т. д.; DTO функц�
 | # | Что | Проверка |
 |---|---|---|
 | С0 | **Снимок OpenAPI.** Интеграционный тест сравнивает `/swagger/v1/swagger.json` с файлом в репозитории; обновить снимок — осознанно, переменной окружения. Остаётся навсегда: любое изменение контракта станет видно в диффе. | тест зелёный на текущем коде |
-| С1 | **Развести смешанные файлы на месте**, без переносов: DTO-файлы, где рядом запросы одной функции и общие нагрузки событий (`ChatStateDtos`, `DraftDtos`, `FolderDtos`, `GroupDtos`, `ReadStateDto`, `ReactionDtos`, `MediaDtos`, `PushDtos`, `ProfileDtos`); `ChatStates.cs` → помощники и `ChatStateService`; очередь push → `Services/Events/PushQueue.cs`. | тесты, OpenAPI без изменений |
+| С1 | **Развести смешанные файлы на месте**, без переносов: DTO-файлы, где рядом запросы одной функции и общие нагрузки событий (`ChatStateDtos`, `DraftDtos`, `FolderDtos`, `GroupDtos`, `ReadStateDto`, `ReactionDtos`, `MediaDtos`, `PushDtos`, `ProfileDtos`); очередь push → `Services/Events/PushQueue.cs` (вместо настроек push получает флаг «включено»); общие статические помощники из сервисов функций — в общие мапперы (`ReactionService.Summary` → `MessageMapper.Reactions`, `MediaService.ToDto` → `MessageAttachments.ToDto`). | тесты, OpenAPI без изменений |
 | С2 | **Перенос по функциям**: Auth, Devices, Push, Media, Users, Sync, Folders, Groups, Chats, Messages — файлы в `Features/X/`, namespace, `using`. Тесты — сразу по той же раскладке (структура выше). | тесты, OpenAPI; `git diff -M --stat` показывает переименования, а не удаление и создание |
 | С3 | **Деление `ChatsController`** на `ChatsController` и `MessagesController` (одним файлом: сообщения, черновики и прочтение — близкие ответственности). | тесты, OpenAPI без изменений |
 | С4 | **Регистрация по функциям**: `Features/X/XFeature.cs` с `AddXFeature()`; в `ServiceExtensions` остаются общие сервисы, хранилище, события, аутентификация, лимиты, SignalR. | тесты; приложение стартует с теми же сервисами |

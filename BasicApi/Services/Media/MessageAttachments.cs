@@ -1,5 +1,6 @@
 using System.Text.Json;
-using BasicApi.Models.Dto.Media;
+using BasicApi.Models.Dto.Message;
+using BasicApi.Storage.Entities;
 
 namespace BasicApi.Services.Media;
 
@@ -30,6 +31,21 @@ public static class MessageAttachments
             State = r.State
         })];
     }
+
+    public static AttachmentDto ToDto(Attachment a) => new()
+    {
+        Id = a.Id,
+        Kind = a.Kind,
+        FileName = a.FileName,
+        MimeType = a.Mime,
+        Size = a.Size,
+        Width = a.Width,
+        Height = a.Height,
+        DurationMs = a.DurationMs,
+        Waveform = a.Waveform?.Select(b => (int)b).ToList(),
+        HasThumbnail = a.ThumbnailKey is not null,
+        State = a.StorageState
+    };
 
     private sealed record Row(
         Guid Id, string Kind, string FileName, string MimeType, long Size, int? Width, int? Height,

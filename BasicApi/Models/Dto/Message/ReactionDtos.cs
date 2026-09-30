@@ -6,12 +6,6 @@ public class ReactionCountDto
     public int Count { get; set; }
 }
 
-public class SetReactionDto
-{
-    /// <summary>One of the instance's allowed reactions.</summary>
-    public string? Emoji { get; set; }
-}
-
 /// <summary>
 /// The reactions of a message after a change: the answer to setting a reaction and the payload
 /// of the <c>ReactionsChanged</c> event.

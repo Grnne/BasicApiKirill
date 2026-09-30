@@ -1,9 +1,7 @@
-using System.Text.Json;
 using BasicApi.Middleware.Exceptions;
 using BasicApi.Models.Dto.Message;
 using BasicApi.Services.Events;
 using BasicApi.Storage;
-using BasicApi.Storage.Dto;
 using BasicApi.Storage.Interfaces;
 using Microsoft.Extensions.Options;
 
@@ -64,7 +62,7 @@ public sealed class ReactionService(
             {
                 ChatId = chatId,
                 MessageId = messageId,
-                Reactions = Summary(change.SummaryJson),
+                Reactions = MessageMapper.Reactions(change.SummaryJson),
                 UserId = userId,
                 Emoji = emoji
             };
@@ -84,9 +82,4 @@ public sealed class ReactionService(
             : options.Value.AllowedReactions.FirstOrDefault(a => Bare(a) == Bare(emoji));
 
     private static string Bare(string emoji) => emoji.Replace(VariationSelector.ToString(), string.Empty);
-
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
-
-    public static List<ReactionCountDto> Summary(string? json) =>
-        string.IsNullOrEmpty(json) ? [] : JsonSerializer.Deserialize<List<ReactionCountDto>>(json, Json) ?? [];
 }

@@ -1,6 +1,6 @@
 using BasicApi.Models.Dto.Chat;
-using BasicApi.Models.Dto.Users;
 using BasicApi.Models.Dto.Message;
+using BasicApi.Models.Dto.Users;
 using BasicApi.Storage;
 using BasicApi.Storage.Interfaces;
 
@@ -27,7 +27,7 @@ public sealed class OutboxChatEventPublisher(
             await EnqueueAsync(UpdateTypes.MessageCreated, ct,
                 HubSend.Group(message.ChatId, "MessageCreated", message),
                 HubSend.Users(memberIds, "ChatListUpdated", message.ChatId, SignalRChatEventPublisher.Preview(message)),
-                HubSend.Push(message.ChatId, message.SenderId, Push.PushNotifications.Of(message)));
+                HubSend.Push(message.ChatId, message.SenderId, PushNotifications.Of(message)));
             return true;
         }, ct: ct);
 

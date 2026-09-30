@@ -306,7 +306,7 @@ public sealed class MessageService(
                 if (withFiles)
                 {
                     await LinkAsync(created, [.. files.Select(f => new AttachmentRef(f.Id, f.Kind))], ct);
-                    created.Attachments = [.. files.Select(MediaService.ToDto)];
+                    created.Attachments = [.. files.Select(MessageAttachments.ToDto)];
                 }
 
                 if (mentioned.Count > 0)

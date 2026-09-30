@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using BasicApi.Middleware.Exceptions;
 using BasicApi.Models.Dto.Media;
+using BasicApi.Models.Dto.Message;
 using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
 using Microsoft.Extensions.Options;
@@ -114,7 +115,7 @@ public sealed partial class MediaService(
         var attachment = await attachments.GetOwnAsync(userId, attachmentId, ct)
             ?? throw new NotFoundException("No such upload", "UPLOAD_NOT_FOUND");
         if (attachment.StorageState != StorageStates.Pending)
-            return ToDto(attachment);
+            return MessageAttachments.ToDto(attachment);
 
         var size = await storage.GetSizeAsync(attachment.StorageKey, ct)
             ?? throw new BadRequestException("The file has not been uploaded yet", "UPLOAD_INCOMPLETE");
@@ -137,11 +138,11 @@ public sealed partial class MediaService(
         {
             // A concurrent completion got there first, or the upload was swept as stale.
             return await attachments.GetOwnAsync(userId, attachmentId, ct) is { StorageState: not StorageStates.Pending } done
-                ? ToDto(done)
+                ? MessageAttachments.ToDto(done)
                 : throw new NotFoundException("No such upload", "UPLOAD_NOT_FOUND");
         }
         attachment.StorageState = StorageStates.Stored;
-        return ToDto(attachment);
+        return MessageAttachments.ToDto(attachment);
     }
 
     /// <summary>
@@ -298,20 +299,6 @@ public sealed partial class MediaService(
         return $"attachment; filename=\"{ascii}\"; filename*=UTF-8''{Uri.EscapeDataString(a.FileName)}";
     }
 
-    public static AttachmentDto ToDto(Attachment a) => new()
-    {
-        Id = a.Id,
-        Kind = a.Kind,
-        FileName = a.FileName,
-        MimeType = a.Mime,
-        Size = a.Size,
-        Width = a.Width,
-        Height = a.Height,
-        DurationMs = a.DurationMs,
-        Waveform = a.Waveform?.Select(b => (int)b).ToList(),
-        HasThumbnail = a.ThumbnailKey is not null,
-        State = a.StorageState
-    };
 
     private static (int? Width, int? Height, int? Duration, byte[]? Waveform) Metadata(string kind, CreateUploadDto r)
     {
