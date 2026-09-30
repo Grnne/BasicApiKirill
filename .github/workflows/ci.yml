@@ -1,0 +1,59 @@
+# CI (plan 2, F9): the same checks as scripts/test.ps1 on every push and pull request.
+# No secrets and no access to any server: everything runs on a throwaway GitHub machine,
+# Postgres and SeaweedFS for the integration tests start there in containers. Deploy stays manual.
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+# Read-only token: a pull request from a fork gets nothing it could misuse.
+permissions:
+  contents: read
+
+# A newer push to the same branch cancels the run that became useless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Build, tests, package audit
+    # Branches of this repository are checked on push; pull_request only adds forks' ones.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: scripts/test.ps1
+        shell: pwsh
+        run: ./scripts/test.ps1
+
+      - name: Test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results
+          path: TestResults/**/*.trx
+          if-no-files-found: ignore
+          retention-days: 14
+
+  image:
+    name: Docker image
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      # The production image, frontend included; built to be sure it builds, published nowhere.
+      - name: docker build
+        run: docker build -f BasicApi/Dockerfile -t basicapi:ci .
