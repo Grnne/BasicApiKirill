@@ -1,6 +1,6 @@
 # Ручной деплой
 
-Проверки гоняет CI (GitHub Actions, `.github/workflows/ci.yml`, план 2, Ф9) на каждый push; прод
+Проверки гоняет CI (GitHub Actions, `.github/workflows/ci.yml`) на каждый push; прод
 обновляется вручную по этой инструкции — автоматического деплоя нет, у CI нет доступа к серверу. Сервер — Ubuntu с Docker,
 стек описан в `docker-compose.prod.yml`, секреты — в `.env.prod` (шаблон
 `.env.prod.example`). Снаружи открыт только Caddy (80/443, TLS от Let's Encrypt,
@@ -37,7 +37,7 @@ $COMPOSE exec -T postgres pg_dump -U "$DB_USER" -d "$DB_NAME" -Fc > "$BACKUP"
 ls -lh "$BACKUP"    # размер не нулевой
 ```
 
-**Файлы** (с плана 2, Ф4) лежат в томе `basicchat_media_data` хранилища SeaweedFS. Их
+**Файлы** лежат в томе `basicchat_media_data` хранилища SeaweedFS. Их
 бэкап — копия тома; на время копирования хранилище останавливается, чтобы данные тома были
 согласованы (сообщения при этом работают, не грузятся только файлы):
 
@@ -87,13 +87,13 @@ curl -fsS "https://$DOMAIN/health/ready"   # Healthy (через Caddy и TLS)
 
 Всё остальное с `"LogLevel":"Error"` при старте — повод разбираться. Если старт упал с `Invalid configuration` — в `.env.prod`
 не задан или слабый секрет (например, `JWT_KEY`, `STORAGE_SECRET_KEY`); приложение не
-стартует с JWT-ключом короче 32 байт или с заглушкой `CHANGE_ME`. При обновлении на версию
-с файлами (план 2, Ф4) в `.env.prod` нужно добавить `STORAGE_ACCESS_KEY` и
+стартует с JWT-ключом короче 32 байт или с заглушкой `CHANGE_ME`. При обновлении с версии
+без файлов в `.env.prod` нужно добавить `STORAGE_ACCESS_KEY` и
 `STORAGE_SECRET_KEY` (см. `.env.prod.example`).
 
 ## Push-уведомления
 
-С плана 2, Ф7 сервер умеет слать WebPush. Без ключей push выключен (клиенту
+Сервер умеет слать WebPush. Без ключей push выключен (клиенту
 `GET /api/push/config` отвечает `enabled: false`), остальное работает как раньше. Включить:
 
 ```bash
