@@ -37,7 +37,7 @@ public class AuthServiceTests
                 RefreshTokenExpiresAt = DateTime.UtcNow.AddDays(30)
             });
 
-        _service = new AuthService(_userRepoMock.Object, _jwtServiceMock.Object, _sessionServiceMock.Object,
+        _service = new AuthService(_userRepoMock.Object, _jwtServiceMock.Object, _sessionServiceMock.Object, Mock.Of<IDeviceRepository>(),
             new BasicApi.Hubs.HubConnectionRegistry());
     }
 

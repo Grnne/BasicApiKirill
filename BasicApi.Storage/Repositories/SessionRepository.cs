@@ -6,6 +6,11 @@ namespace BasicApi.Storage.Repositories;
 public class SessionRepository(IDbSession db) : ISessionRepository
 {
     private const string InsertSql = @"
+        WITH device AS (
+            INSERT INTO devices (id, user_id, created_at)
+            VALUES (@FamilyId, @UserId, @CreatedAt)
+            ON CONFLICT (id) DO NOTHING
+        )
         INSERT INTO sessions
             (id, user_id, family_id, refresh_token_hash, created_at, expires_at,
              revoked_at, replaced_by_session_id, user_agent, ip)

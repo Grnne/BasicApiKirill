@@ -21,7 +21,7 @@ public class AuthServicePasswordTests
             .ReturnsAsync(Guid.NewGuid());
         _sessions.Setup(s => s.IssueForUserAsync(It.IsAny<User>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new AuthResponseDto());
-        _service = new AuthService(_users.Object, Mock.Of<IJwtService>(), _sessions.Object, new HubConnectionRegistry());
+        _service = new AuthService(_users.Object, Mock.Of<IJwtService>(), _sessions.Object, Mock.Of<IDeviceRepository>(), new HubConnectionRegistry());
     }
 
     private static RegisterRequestDto Register(string password) =>
