@@ -306,6 +306,7 @@
             <code>MessageUpdated</code>, <code>MessageDeleted</code>, <code>ReactionsChanged</code>,
             <code>MessagesDelivered</code>, <code>MessagesRead</code>, <code>ReadStateChanged</code>,
             <code>DraftUpdated</code>, <code>ChatCreated</code>, <code>ChatUpdated</code>, <code>ChatDeleted</code>, <code>UserUpdated</code>, <code>PrivacyUpdated</code>, <code>BlockListChanged</code>,
+            <code>PinnedChatsChanged</code>, <code>ChatStateChanged</code>, <code>FoldersChanged</code>,
             <code>MemberAdded</code>, <code>MemberRemoved</code> и <code>MemberUpdated</code> сохраняются в той же транзакции, что и само изменение, и рассылаются
             из очереди: сбой сервера не теряет событие, но изредка оно может прийти дважды — сообщения
             различаются по <code>id</code> (или <code>chatId</code> + <code>seq</code>). Пропущенное, пока
@@ -650,6 +651,63 @@
         <div class="event-card">
             <div class="event-header">
                 <span class="direction-badge server-client">Server → Client</span>
+                <span class="event-name">PinnedChatsChanged</span>
+            </div>
+            <div class="method-description" style="margin-top: 0.5rem;">
+                Пользователь закрепил, открепил или переставил чаты (<code>PUT /api/chats/{chatId}/pinned</code>, <code>PUT /api/chats/pinned</code>), в том числе когда архивирование открепило чат. Получают его устройства.
+            </div>
+            <table>
+                <thead><tr><th>Аргумент</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                    <tr><td><code>pinned</code></td><td class="type-cell">object</td><td><code>chatIds</code> — все закреплённые, сверху вниз</td></tr>
+                </tbody>
+            </table>
+            <div class="note">
+                <strong>Клиент:</strong> переставить закреплённые наверху списка; у остальных <code>pinnedPosition</code> — <code>null</code>.
+            </div>
+        </div>
+
+        <div class="event-card">
+            <div class="event-header">
+                <span class="direction-badge server-client">Server → Client</span>
+                <span class="event-name">ChatStateChanged</span>
+            </div>
+            <div class="method-description" style="margin-top: 0.5rem;">
+                Чат ушёл в архив или вернулся, его заглушили или сняли mute (<code>PUT /api/chats/{chatId}/archived</code>, <code>/muted</code>). Приходит и когда новое сообщение вернуло чат из архива. Получают устройства этого участника.
+            </div>
+            <table>
+                <thead><tr><th>Аргумент</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                    <tr><td><code>state</code></td><td class="type-cell">object</td><td><code>chatId</code>, <code>archived</code>, <code>isMuted</code>, <code>mutedUntil</code> — до когда; <code>null</code> — навсегда или не заглушён</td></tr>
+                </tbody>
+            </table>
+            <div class="note">
+                <strong>Клиент:</strong> перенести чат между основным списком и архивом, показать значок mute.
+            </div>
+        </div>
+
+        <div class="event-card">
+            <div class="event-header">
+                <span class="direction-badge server-client">Server → Client</span>
+                <span class="event-name">FoldersChanged</span>
+            </div>
+            <div class="method-description" style="margin-top: 0.5rem;">
+                Пользователь создал, изменил, удалил или переставил папки (<code>/api/folders</code>). Получают его устройства.
+            </div>
+            <table>
+                <thead><tr><th>Аргумент</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                    <tr><td><code>folders</code></td><td class="type-cell">object</td><td><code>folders</code> — все папки по порядку: <code>id</code>, <code>title</code>, <code>includePrivate</code>, <code>includeGroups</code>, <code>onlyUnread</code>, <code>chatIds</code>, <code>pinnedChatIds</code></td></tr>
+                </tbody>
+            </table>
+            <div class="note">
+                <strong>Клиент:</strong> заменить папки целиком; чаты открытой папки — <code>GET /api/folders/{id}/chats</code>.
+            </div>
+        </div>
+
+        <div class="event-card">
+            <div class="event-header">
+                <span class="direction-badge server-client">Server → Client</span>
                 <span class="event-name">ChatDeleted</span>
             </div>
             <div class="method-description" style="margin-top: 0.5rem;">
@@ -805,7 +863,7 @@
         <footer>
             <a href="/swagger">REST API (Swagger)</a> ·
             <a href="/signalr-docs">SignalR Docs</a> ·
-            v1.6
+            v1.7
         </footer>
     </div>
 </body>
