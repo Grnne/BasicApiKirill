@@ -94,6 +94,14 @@ public class UserRepository(IDbSession db) : IUserRepository
         return await db.QueryFirstOrDefaultAsync<User>(sql, new { Id = id }, ct);
     }
 
+    public Task SetPasswordHashAsync(Guid userId, string passwordHash, CancellationToken ct = default) =>
+        db.ExecuteAsync("UPDATE users SET password_hash = @passwordHash WHERE id = @userId", new { userId, passwordHash }, ct);
+
+    public async Task<bool> SetDisplayNameAsync(Guid userId, string displayName, CancellationToken ct = default) =>
+        await db.ExecuteAsync(
+            "UPDATE users SET display_name = @displayName WHERE id = @userId AND display_name <> @displayName",
+            new { userId, displayName }, ct) > 0;
+
     public Task SetLastSeenAsync(Guid userId, DateTime at, CancellationToken ct = default) =>
         db.ExecuteAsync("UPDATE users SET last_seen_at = @at WHERE id = @userId", new { userId, at }, ct);
 

@@ -26,6 +26,11 @@ public interface IUserRepository
     /// </summary>
     Task<User?> GetByIdAsync(Guid id, CancellationToken ct = default);
 
+    Task SetPasswordHashAsync(Guid userId, string passwordHash, CancellationToken ct = default);
+
+    /// <summary>Sets the name shown to others; false when it was already so.</summary>
+    Task<bool> SetDisplayNameAsync(Guid userId, string displayName, CancellationToken ct = default);
+
     /// <summary>Records when the user was last seen online.</summary>
     Task SetLastSeenAsync(Guid userId, DateTime at, CancellationToken ct = default);
 

@@ -37,4 +37,7 @@ public interface ISessionRepository
 
     /// <summary>Revokes every live session of a user — "log out everywhere".</summary>
     Task<int> RevokeAllForUserAsync(Guid userId, DateTime revokedAt, CancellationToken ct = default);
+
+    /// <summary>Revokes every live session of the user except those of one sign-in (null — all).</summary>
+    Task<int> RevokeAllForUserExceptAsync(Guid userId, Guid? keepFamilyId, DateTime revokedAt, CancellationToken ct = default);
 }

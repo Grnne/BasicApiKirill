@@ -102,6 +102,32 @@ public class AuthController(AuthService auth) : ControllerBase
     }
 
     /// <summary>
+    /// Change the password.
+    /// </summary>
+    /// <remarks>
+    /// Needs the current password. Every other sign-in of the user ends at once — their refresh
+    /// tokens stop working and their hub connections close; this device stays signed in. Access
+    /// tokens already issued to other devices work until they expire (minutes). Limited like
+    /// sign-in: 5 attempts a minute from one IP.
+    ///
+    /// Errors: <c>400 WRONG_PASSWORD</c>, <c>400 PASSWORD_TOO_LONG</c>, <c>400 VALIDATION_ERROR</c>
+    /// (new password shorter than 6), <c>429 RATE_LIMITED</c>.
+    /// </remarks>
+    [Authorize]
+    [HttpPost("password")]
+    [EnableRateLimiting("auth")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordDto request)
+    {
+        await auth.ChangePasswordAsync(User.GetUserId(), User.GetSessionFamilyId(),
+            request.CurrentPassword, request.NewPassword, HttpContext.RequestAborted);
+        return NoContent();
+    }
+
+    /// <summary>
     /// Log out of every session on all devices.
     /// </summary>
     /// <remarks>

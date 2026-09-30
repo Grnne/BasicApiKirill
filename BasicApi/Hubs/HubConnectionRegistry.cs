@@ -42,6 +42,10 @@ public sealed class HubConnectionRegistry
     /// <summary>Drops all connections of a user; returns their count.</summary>
     public int AbortUser(Guid userId) => Abort(e => e.UserId == userId);
 
+    /// <summary>Drops the user's connections except those of one sign-in (null — all).</summary>
+    public int AbortUserExcept(Guid userId, Guid? keepSessionFamilyId) =>
+        Abort(e => e.UserId == userId && (keepSessionFamilyId is null || e.SessionFamilyId != keepSessionFamilyId));
+
     /// <summary>Drops connections opened with tokens of one session chain (one sign-in).</summary>
     public int AbortSessionFamily(Guid sessionFamilyId) => Abort(e => e.SessionFamilyId == sessionFamilyId);
 

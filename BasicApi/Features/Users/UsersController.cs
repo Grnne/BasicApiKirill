@@ -99,6 +99,24 @@ public class UsersController(
         => Ok(await users.GetOwnProfileAsync(User.GetUserId(), ct));
 
     /// <summary>
+    /// Change the caller's profile.
+    /// </summary>
+    /// <remarks>
+    /// <c>displayName</c> — the name shown to others, 1–100 characters after trimming. Answers with
+    /// the own profile; the caller's other devices and everyone who shares a chat with them get
+    /// <c>UserUpdated</c>. Messages already sent show the new name too: it is not copied into them.
+    ///
+    /// Errors: <c>400 INVALID_DISPLAY_NAME</c>.
+    /// </remarks>
+    [Authorize]
+    [HttpPatch("me")]
+    [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
+    [ProducesResponseType(typeof(OwnProfileResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileDto dto, CancellationToken ct)
+        => Ok(await profile.UpdateAsync(User.GetUserId(), dto, ct));
+
+    /// <summary>
     /// The caller's privacy settings.
     /// </summary>
     /// <remarks>

@@ -107,6 +107,15 @@ public class SessionRepository(IDbSession db) : ISessionRepository
         return await db.ExecuteAsync(sql, new { familyId, revokedAt }, ct);
     }
 
+    public Task<int> RevokeAllForUserExceptAsync(
+        Guid userId, Guid? keepFamilyId, DateTime revokedAt, CancellationToken ct = default) =>
+        db.ExecuteAsync(@"
+            UPDATE sessions
+            SET revoked_at = @revokedAt
+            WHERE user_id = @userId AND revoked_at IS NULL
+              AND family_id IS DISTINCT FROM @keepFamilyId",
+            new { userId, keepFamilyId, revokedAt }, ct);
+
     public async Task<int> RevokeAllForUserAsync(Guid userId, DateTime revokedAt, CancellationToken ct = default)
     {
         const string sql = @"
