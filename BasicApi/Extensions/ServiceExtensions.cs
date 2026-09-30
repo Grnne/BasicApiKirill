@@ -26,7 +26,6 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
-using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 
@@ -126,39 +125,22 @@ public static class ServiceExtensions
         // Domain services: controllers and the hub are only adapters over them.
         services.AddScoped<IMembershipService, MembershipService>();
         services.Configure<MessageOptions>(configuration.GetSection(MessageOptions.Section));
-        services.Configure<GroupOptions>(configuration.GetSection(GroupOptions.Section));
         services.AddScoped<IChatPolicy, ChatPolicy>();
-        services.AddScoped<IChatService, ChatService>();
-        services.AddScoped<IMessageService, MessageService>();
-        services.AddScoped<IReactionService, ReactionService>();
-        services.AddScoped<IReadStateService, ReadStateService>();
-        services.AddScoped<IDraftService, DraftService>();
-        services.AddScoped<IGroupService, GroupService>();
-        // Files: kept in S3-compatible storage; without Storage:Endpoint media is off (503).
-        services.Configure<StorageOptions>(configuration.GetSection(StorageOptions.Section));
-        services.Configure<MediaOptions>(configuration.GetSection(MediaOptions.Section));
-        services.AddSingleton<IObjectStorage, S3ObjectStorage>();
-        services.AddScoped<IMediaService, MediaService>();
-        services.AddSingleton<MediaCleanup>();
-        services.AddHostedService(sp => sp.GetRequiredService<MediaCleanup>());
         services.AddScoped<IPresenceService, PresenceService>();
-        services.AddScoped<IUserService, UserService>();
-        services.AddScoped<IProfileService, ProfileService>();
-        services.AddScoped<IPrivacyService, PrivacyService>();
         services.AddScoped<IChatStateService, ChatStateService>();
-        services.AddScoped<IFolderService, FolderService>();
-        services.AddScoped<ISyncService, SyncService>();
-        services.AddScoped<AuthService>();
-        services.AddScoped<ISessionService, SessionService>();
-        services.AddScoped<IDeviceService, DeviceService>();
-        // Push: WebPush with the VAPID keys from Push:*; without them push is off.
-        services.Configure<PushOptions>(configuration.GetSection(PushOptions.Section));
-        services.AddScoped<IPushService, PushService>();
-        services.AddSingleton(sp => new PushQueue(
-            sp.GetRequiredService<IOptions<PushOptions>>().Value.IsConfigured, sp.GetRequiredService<ILogger<PushQueue>>()));
-        services.AddHttpClient<IPushTransport, WebPushTransport>(client => client.Timeout = TimeSpan.FromSeconds(10));
-        services.AddSingleton<PushSender>();
-        services.AddHostedService(sp => sp.GetRequiredService<PushSender>());
+
+        services
+            .AddChatsFeature()
+            .AddMessagesFeature()
+            .AddGroupsFeature(configuration)
+            .AddMediaFeature(configuration)
+            .AddUsersFeature()
+            .AddFoldersFeature()
+            .AddSyncFeature()
+            .AddAuthFeature()
+            .AddDevicesFeature()
+            .AddPushFeature(configuration);
+
         // Events: messages and new chats go through the outbox in the transaction of the change,
         // "typing" and online go out immediately (ephemeral).
         services.AddScoped<SignalRChatEventPublisher>();
@@ -172,9 +154,6 @@ public static class ServiceExtensions
         services.AddSingleton<IUserStatusService, UserStatusService>();
         services.AddSingleton<HubConnectionRegistry>();
         services.AddHostedService<HubSessionMonitor>();
-
-        // JWT
-        services.AddScoped<IJwtService, JwtService>();
 
         // Behind a reverse proxy the connection address is the proxy's address. The real
         // client IP (for limits and sessions) is taken from X-Forwarded-For, but only if the
