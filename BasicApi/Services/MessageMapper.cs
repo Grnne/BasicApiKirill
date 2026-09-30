@@ -41,7 +41,8 @@ public static class MessageMapper
                 SenderName = m.ForwardFromUserName ?? "Unknown"
             }
             : null,
-        Action = SystemMessages.Read(m.ContentJson)
+        Action = SystemMessages.Read(m.ContentJson),
+        Attachments = Media.MessageAttachments.Read(m.AttachmentsJson)
     };
 
     private static string Preview(string? text) =>

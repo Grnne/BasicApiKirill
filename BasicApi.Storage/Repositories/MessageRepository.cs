@@ -32,7 +32,8 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
         fu.display_name AS ForwardFromUserName,
         m.forward_from_chat_id AS ForwardFromChatId,
         m.forward_from_message_id AS ForwardFromMessageId,
-        m.content::text AS ContentJson";
+        m.content::text AS ContentJson,
+        " + AttachmentRepository.AttachmentsJsonOf + "m.id)::text AS AttachmentsJson";
 
     /// <summary>Sender, the answered message with its author, the original author of a forward.</summary>
     private const string Joins = @"
@@ -168,7 +169,7 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
             new { messageId, text, entitiesJson, editedAt }, ct);
 
     public async Task<bool> DeleteForEveryoneAsync(Guid messageId, DateTime deletedAt, CancellationToken ct = default) =>
-        // A tombstone keeps nothing of the content: text, formatting and reactions go.
+        // A tombstone keeps nothing of the content: text, formatting, reactions and files go.
         await db.ExecuteScalarAsync<long>(@"
             WITH m AS (
                 UPDATE messages SET deleted_at = @deletedAt, text = '', entities = NULL, reactions_summary = NULL
@@ -176,6 +177,9 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
                 RETURNING id
             ), r AS (
                 DELETE FROM message_reactions WHERE message_id IN (SELECT id FROM m)
+            ), f AS (
+                -- The files leave the message, and with it the chat's access to them.
+                DELETE FROM message_attachments WHERE message_id IN (SELECT id FROM m)
             )
             SELECT COUNT(*) FROM m",
             new { messageId, deletedAt }, ct) > 0;

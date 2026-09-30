@@ -28,7 +28,11 @@ public class MessageDto
     /// <summary>Id supplied by the sender when sending via REST; null — not supplied.</summary>
     public Guid? ClientMessageId { get; set; }
 
-    /// <summary>Kind of message: <c>text</c> or <c>system</c> (see <see cref="Action"/>); more kinds will come — show an unknown one as a stub.</summary>
+    /// <summary>
+    /// Kind of message: <c>text</c>, <c>media</c> (files in <see cref="Attachments"/>, the text is the
+    /// caption and may be empty) or <c>system</c> (see <see cref="Action"/>); more kinds will come —
+    /// show an unknown one as a stub.
+    /// </summary>
     public string Type { get; set; } = "text";
 
     /// <summary>When the text was last edited; null — never edited.</summary>
@@ -51,6 +55,9 @@ public class MessageDto
 
     /// <summary>For a forwarded message — its original author; null — not a forward.</summary>
     public MessageForwardDto? ForwardFrom { get; set; }
+
+    /// <summary>The files, in album order; empty — none. The bytes are fetched by <c>POST /api/media/links</c>.</summary>
+    public List<Media.AttachmentDto> Attachments { get; set; } = [];
 
     /// <summary>
     /// For a system message (<see cref="Type"/> <c>system</c>) — what happened; the sender is who did

@@ -29,6 +29,9 @@ public interface IChatPolicy
     /// <summary>Write messages and show "typing"; in a group — with the permission to send.</summary>
     Task<PolicyDecision> CanPostAsync(Guid userId, Guid chatId, CancellationToken ct = default);
 
+    /// <summary>Send files; in a group — with the permissions to send messages and media.</summary>
+    Task<PolicyDecision> CanPostMediaAsync(Guid userId, Guid chatId, CancellationToken ct = default);
+
     /// <summary>Edit the text of a message. The caller has already checked they can post in the chat.</summary>
     Task<PolicyDecision> CanEditMessageAsync(Guid userId, MessageWithSender message, CancellationToken ct = default);
 
@@ -86,12 +89,22 @@ public sealed class ChatPolicy(
             _ => PolicyDecision.Allow
         };
 
+    public async Task<PolicyDecision> CanPostMediaAsync(Guid userId, Guid chatId, CancellationToken ct = default) =>
+        await membership.GetMemberAsync(chatId, userId, ct) switch
+        {
+            null => NotAMember(),
+            { ChatType: ChatTypes.Group } member when GroupRights.Effective(member) is var rights &&
+                                                      !(rights.SendMessages && rights.SendMedia) =>
+                PermissionDenied("You may not send media in this group"),
+            _ => PolicyDecision.Allow
+        };
+
     public Task<PolicyDecision> CanReactAsync(Guid userId, Guid chatId, CancellationToken ct = default) =>
         MemberOnlyAsync(userId, chatId, ct);
 
     public Task<PolicyDecision> CanEditMessageAsync(Guid userId, MessageWithSender message, CancellationToken ct = default) =>
         Task.FromResult(
-            message.Type != MessageTypes.Text && message.SenderId == userId
+            message.Type == MessageTypes.System && message.SenderId == userId
                 ? PolicyDecision.Deny(MessageNotEditableCode, "A system message cannot be edited")
             : message.IsForward && message.SenderId == userId
                 // Someone else's words: the one who forwarded them may not change them.
@@ -103,7 +116,7 @@ public sealed class ChatPolicy(
         Guid userId, MessageWithSender message, CancellationToken ct = default)
     {
         // A system message is the group's record, not its author's words: only a moderator removes it.
-        var asAuthor = message.Type == MessageTypes.Text
+        var asAuthor = message.Type != MessageTypes.System
             ? AuthorWithin(userId, message, _messages.DeleteWindowHours,
                 DeleteWindowExpiredCode, "The time to delete this message for everyone has passed")
             : PolicyDecision.Deny(NotMessageAuthorCode, "Only a group admin can delete a system message");
@@ -220,6 +233,10 @@ public static class ChatPolicyExtensions
     /// <summary>Throws 403 with the code from the policy decision if writing is not allowed.</summary>
     public static async Task DemandPostAsync(this IChatPolicy policy, Guid userId, Guid chatId, CancellationToken ct = default) =>
         (await policy.CanPostAsync(userId, chatId, ct)).Demand();
+
+    /// <summary>Throws 403 with the code from the policy decision if sending files is not allowed.</summary>
+    public static async Task DemandPostMediaAsync(this IChatPolicy policy, Guid userId, Guid chatId, CancellationToken ct = default) =>
+        (await policy.CanPostMediaAsync(userId, chatId, ct)).Demand();
 
     /// <summary>Throws 403 with the code from the decision if the action is not allowed.</summary>
     public static void Demand(this PolicyDecision decision)

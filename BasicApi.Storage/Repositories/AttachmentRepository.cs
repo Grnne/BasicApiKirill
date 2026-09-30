@@ -1,3 +1,4 @@
+using BasicApi.Storage.Dto;
 using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
 
@@ -12,8 +13,30 @@ public sealed class AttachmentRepository(IDbSession db) : IAttachmentRepository
         a.thumbnail_key AS ThumbnailKey, a.storage_state AS StorageState, a.created_at AS CreatedAt,
         a.stored_at AS StoredAt";
 
-    /// <summary>Who may download a file: for now only whoever uploaded it.</summary>
-    private const string AccessibleTo = "a.owner_id = @userId";
+    /// <summary>
+    /// Who may download a file: whoever uploaded it, and the members of every chat it was sent
+    /// to. Deleting a message for everyone unlinks its files, so that access goes with it.
+    /// </summary>
+    private const string AccessibleTo = @"
+        a.owner_id = @userId
+        OR EXISTS (
+            SELECT 1 FROM message_attachments ma
+            JOIN chat_members cm ON cm.chat_id = ma.chat_id AND cm.user_id = @userId
+            WHERE ma.attachment_id = a.id)";
+
+    /// <summary>
+    /// The files of a message as a JSON array, in album order, for queries that return
+    /// messages: one subquery by the primary key instead of a second round trip.
+    /// Append the message id column and <c>)::text</c>.
+    /// </summary>
+    public const string AttachmentsJsonOf = @"
+        (SELECT json_agg(json_build_object(
+                    'id', a.id, 'kind', a.kind, 'fileName', a.file_name, 'mimeType', a.mime, 'size', a.size,
+                    'width', a.width, 'height', a.height, 'durationMs', a.duration_ms,
+                    'waveform', encode(a.waveform, 'base64'), 'hasThumbnail', a.thumbnail_key IS NOT NULL,
+                    'state', a.storage_state) ORDER BY ma.position)
+         FROM message_attachments ma JOIN attachments a ON a.id = ma.attachment_id
+         WHERE ma.message_id = ";
 
     public Task CreateAsync(Attachment attachment, CancellationToken ct = default) =>
         db.ExecuteAsync(@"
@@ -47,6 +70,19 @@ public sealed class AttachmentRepository(IDbSession db) : IAttachmentRepository
             SELECT {Columns} FROM attachments a
             WHERE a.id = ANY(@ids) AND a.storage_state <> 'pending' AND ({AccessibleTo})",
             new { userId, ids = attachmentIds.Distinct().ToArray() }, ct);
+
+    public Task LinkToMessageAsync(
+        Guid messageId, Guid chatId, long seq, IReadOnlyList<AttachmentRef> files, CancellationToken ct = default) =>
+        db.ExecuteAsync(@"
+            INSERT INTO message_attachments (message_id, position, attachment_id, chat_id, seq, kind)
+            SELECT @messageId, f.position - 1, f.id, @chatId, @seq, f.kind
+            FROM unnest(@ids, @kinds) WITH ORDINALITY AS f(id, kind, position)",
+            new
+            {
+                messageId, chatId, seq,
+                ids = files.Select(f => f.Id).ToArray(),
+                kinds = files.Select(f => f.Kind).ToArray()
+            }, ct);
 
     public Task<IReadOnlyList<Attachment>> GetStalePendingAsync(
         DateTime startedBefore, int limit, CancellationToken ct = default) =>

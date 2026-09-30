@@ -99,7 +99,7 @@ public class ChatPolicyEnforcementTests
     }
 
     private MessageService Messages() =>
-        new(new FakeDbSession(), _msgRepoMock.Object, new MembershipService(_chatRepoMock.Object), _policyMock.Object, _eventsMock.Object, Mock.Of<IDraftRepository>(), Mock.Of<IGroupRepository>());
+        new(new FakeDbSession(), _msgRepoMock.Object, new MembershipService(_chatRepoMock.Object), _policyMock.Object, _eventsMock.Object, Mock.Of<IDraftRepository>(), Mock.Of<IGroupRepository>(), Mock.Of<IAttachmentRepository>());
 
     private static async Task AssertDenied(Func<Task> action) =>
         Assert.Equal(Code, (await Assert.ThrowsAsync<ForbiddenException>(action)).ErrorCode);

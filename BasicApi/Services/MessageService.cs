@@ -3,6 +3,7 @@ using BasicApi.Models;
 using BasicApi.Models.Dto.Chat;
 using BasicApi.Models.Dto.Message;
 using BasicApi.Services.Events;
+using BasicApi.Services.Media;
 using BasicApi.Storage;
 using BasicApi.Storage.Dto;
 using BasicApi.Storage.Entities;
@@ -32,14 +33,17 @@ public interface IMessageService
     /// Send: the text is trimmed at the edges and validated; an event goes to the members.
     /// With <paramref name="clientMessageId"/> sending is idempotent: a repeat returns the already
     /// created message (<c>Created = false</c>) and broadcasts nothing.
-    /// Mentioned members get the message counted in their unread mentions.
+    /// Mentioned members get the message counted in their unread mentions. With
+    /// <paramref name="attachmentIds"/> it is a media message (an album) and the text is its caption.
     /// Errors: 400 <c>MESSAGE_EMPTY</c>/<c>MESSAGE_TOO_LONG</c>/<c>REPLY_TARGET_NOT_FOUND</c>/
-    /// <c>INVALID_ENTITIES</c>, 403 <c>NOT_A_MEMBER</c>,
+    /// <c>INVALID_ENTITIES</c>/<c>INVALID_ALBUM</c>, 403 <c>NOT_A_MEMBER</c>/<c>PERMISSION_DENIED</c>,
+    /// 404 <c>ATTACHMENT_NOT_FOUND</c>,
     /// 409 <c>CLIENT_MESSAGE_ID_CONFLICT</c> - this id is already taken by a message in another chat.
     /// </summary>
     Task<SendResult> SendAsync(
         Guid chatId, Guid senderId, string? text, Guid? clientMessageId = null, Guid? replyToMessageId = null,
-        IReadOnlyList<MessageEntityDto>? entities = null, CancellationToken ct = default);
+        IReadOnlyList<MessageEntityDto>? entities = null, IReadOnlyList<Guid>? attachmentIds = null,
+        CancellationToken ct = default);
 
     /// <summary>
     /// Copies messages of <paramref name="fromChatId"/> into <paramref name="chatId"/> in their
@@ -88,7 +92,8 @@ public sealed class MessageService(
     IChatPolicy policy,
     IChatEventPublisher events,
     IDraftRepository drafts,
-    IGroupRepository groups) : IMessageService
+    IGroupRepository groups,
+    IAttachmentRepository attachments) : IMessageService
 {
     /// <summary>How many messages one forward may carry.</summary>
     public const int MaxForward = 100;
@@ -162,13 +167,22 @@ public sealed class MessageService(
 
     public async Task<SendResult> SendAsync(
         Guid chatId, Guid senderId, string? text, Guid? clientMessageId = null, Guid? replyToMessageId = null,
-        IReadOnlyList<MessageEntityDto>? entities = null, CancellationToken ct = default)
+        IReadOnlyList<MessageEntityDto>? entities = null, IReadOnlyList<Guid>? attachmentIds = null,
+        CancellationToken ct = default)
     {
         // Validate the text and its formatting before going to the DB: it is free.
-        var normalized = NormalizeText(text);
-        var formatting = NormalizeEntities(entities, text!, normalized);
+        var withFiles = attachmentIds is { Count: > 0 };
+        var normalized = NormalizeText(text, allowEmpty: withFiles);
+        var formatting = NormalizeEntities(entities, text ?? string.Empty, normalized);
+        if (withFiles && (attachmentIds!.Count > MessageAttachments.MaxPerMessage ||
+                          attachmentIds.Distinct().Count() != attachmentIds.Count))
+            throw new BadRequestException(
+                $"attachmentIds must be 1 to {MessageAttachments.MaxPerMessage} distinct files", "INVALID_ALBUM");
 
-        await policy.DemandPostAsync(senderId, chatId, ct);
+        if (withFiles)
+            await policy.DemandPostMediaAsync(senderId, chatId, ct);
+        else
+            await policy.DemandPostAsync(senderId, chatId, ct);
 
         // A repeated send (retry after a network drop) - the same message, without a second event.
         if (clientMessageId is { } retryId &&
@@ -180,10 +194,12 @@ public sealed class MessageService(
         // A reply to a message of another chat would leak its text into this one. System messages
         // are the server's record of the group, not something said: nobody answers them.
         if (replyToMessageId is { } replyId &&
-            await messageRepository.GetAsync(chatId, replyId, ct) is not { DeletedAt: null, Type: MessageTypes.Text })
+            await messageRepository.GetAsync(chatId, replyId, ct) is not { DeletedAt: null, Type: not MessageTypes.System })
         {
             throw new BadRequestException("The message to reply to is not in this chat", "REPLY_TARGET_NOT_FOUND");
         }
+
+        var files = withFiles ? await FilesToSendAsync(senderId, attachmentIds!, ct) : [];
 
         var memberIds = await membership.GetMemberIdsAsync(chatId, ct);
         var mentioned = MentionedMembers(formatting, memberIds, senderId);
@@ -200,9 +216,17 @@ public sealed class MessageService(
                     SenderId = senderId,
                     Text = normalized,
                     CreatedAt = DateTime.UtcNow,
+                    Type = withFiles ? MessageTypes.Media : MessageTypes.Text,
                     ReplyToMessageId = replyToMessageId,
                     EntitiesJson = MessageEntities.Serialize(formatting)
                 }, clientMessageId, ct));
+
+                if (withFiles)
+                {
+                    await attachments.LinkToMessageAsync(
+                        created.Id, chatId, created.Seq, [.. files.Select(f => new AttachmentRef(f.Id, f.Kind))], ct);
+                    created.Attachments = [.. files.Select(MediaService.ToDto)];
+                }
 
                 if (mentioned.Count > 0)
                     await messageRepository.SetMentionsAsync(created.Id, chatId, created.Seq, mentioned, ct);
@@ -250,8 +274,11 @@ public sealed class MessageService(
         // What the user does not see (deleted, hidden, another chat) cannot be forwarded, nor can
         // the record of what happened in a group.
         var sources = await messageRepository.GetVisibleAsync(fromChatId, userId, messageIds, ct);
-        if (sources.Count != messageIds.Count || sources.Any(s => s.Type != MessageTypes.Text))
+        if (sources.Count != messageIds.Count || sources.Any(s => s.Type == MessageTypes.System))
             throw MessageNotFound();
+        // Files travel by reference, but a group may still forbid sending media.
+        if (sources.Any(s => s.AttachmentsJson is not null))
+            await policy.DemandPostMediaAsync(userId, chatId, ct);
 
         var clientIds = clientMessageIds is null
             ? null
@@ -303,6 +330,7 @@ public sealed class MessageService(
                     ChatId = chatId,
                     SenderId = userId,
                     Text = source.Text,
+                    Type = source.Type,
                     // Mentions stay as formatting but notify nobody: the forwarder did not mention anyone.
                     EntitiesJson = source.EntitiesJson,
                     CreatedAt = DateTime.UtcNow,
@@ -310,6 +338,15 @@ public sealed class MessageService(
                     ForwardFromChatId = source.IsForward ? source.ForwardFromChatId : source.ChatId,
                     ForwardFromMessageId = source.IsForward ? source.ForwardFromMessageId : source.Id
                 }, clientIds?[source.Id], ct));
+
+                // The same files, not copies: forwarding uploads nothing again.
+                var files = MessageAttachments.Read(source.AttachmentsJson);
+                if (files.Count > 0)
+                {
+                    await attachments.LinkToMessageAsync(
+                        created.Id, chatId, created.Seq, [.. files.Select(f => new AttachmentRef(f.Id, f.Kind))], ct);
+                    created.Attachments = files;
+                }
 
                 await events.MessageCreatedAsync(created, memberIds, ct);
                 items.Add(created);
@@ -324,12 +361,15 @@ public sealed class MessageService(
         Guid chatId, Guid userId, Guid messageId, string? text, IReadOnlyList<MessageEntityDto>? entities = null,
         CancellationToken ct = default)
     {
-        var normalized = NormalizeText(text);
-        var formatting = NormalizeEntities(entities, text!, normalized);
+        // An empty text is checked once the message is known: a caption may be removed.
+        var normalized = NormalizeText(text, allowEmpty: true);
+        var formatting = NormalizeEntities(entities, text ?? string.Empty, normalized);
         await policy.DemandPostAsync(userId, chatId, ct);
 
         var message = await FindAsync(chatId, messageId, ct);
         (await policy.CanEditMessageAsync(userId, message, ct)).Demand();
+        if (normalized.Length == 0 && message.Type != MessageTypes.Media)
+            throw new BadRequestException("Message text is empty", MessageText.EmptyCode);
 
         if (message.Text == normalized && MessageEntities.Deserialize(message.EntitiesJson).SequenceEqual(formatting))
             return Map(message);
@@ -377,7 +417,7 @@ public sealed class MessageService(
                     return true;
 
                 // A group admin removing what is not theirs: the other admins see it in the log.
-                if (message.SenderId != userId || message.Type != MessageTypes.Text)
+                if (message.SenderId != userId || message.Type == MessageTypes.System)
                     await groups.AppendAuditAsync(new ChatAuditEntry
                     {
                         ChatId = chatId,
@@ -422,9 +462,34 @@ public sealed class MessageService(
             ? message
             : throw MessageNotFound();
 
-    private static string NormalizeText(string? text)
+    /// <summary>
+    /// The files to send, in the order given: uploaded (not pending, not expired) and visible to the
+    /// sender — their own or seen in their chats — and making a valid album.
+    /// </summary>
+    private async Task<List<Attachment>> FilesToSendAsync(Guid senderId, IReadOnlyList<Guid> ids, CancellationToken ct)
+    {
+        var found = (await attachments.GetAccessibleAsync(senderId, ids, ct))
+            .Where(a => a.StorageState == StorageStates.Stored)
+            .ToDictionary(a => a.Id);
+        if (found.Count != ids.Count)
+            throw new NotFoundException("A file is not found or not available to you", "ATTACHMENT_NOT_FOUND");
+
+        var files = ids.Select(id => found[id]).ToList();
+        var kinds = files.Select(f => f.Kind).ToHashSet();
+        var valid = kinds.IsSubsetOf([AttachmentKinds.Photo, AttachmentKinds.Video])
+                    || kinds.SetEquals([AttachmentKinds.File])
+                    || kinds.SetEquals([AttachmentKinds.Voice]) && files.Count == 1;
+        return valid
+            ? files
+            : throw new BadRequestException(
+                "An album is photos and videos, or files only; a voice message goes alone", "INVALID_ALBUM");
+    }
+
+    private static string NormalizeText(string? text, bool allowEmpty = false)
     {
         var error = MessageText.Normalize(text, out var normalized);
+        if (error == MessageText.EmptyCode && allowEmpty)
+            return string.Empty;
         if (error == MessageText.EmptyCode)
             throw new BadRequestException("Message text is empty", error);
         if (error == MessageText.TooLongCode)

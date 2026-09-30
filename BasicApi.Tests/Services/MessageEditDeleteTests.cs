@@ -4,6 +4,7 @@ using BasicApi.Models.Dto.Message;
 using BasicApi.Services;
 using BasicApi.Services.Events;
 using BasicApi.Storage.Dto;
+using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
 using BasicApi.Tests.TestDoubles;
 using Microsoft.Extensions.Options;
@@ -41,7 +42,7 @@ public class MessageEditDeleteTests
     {
         var membership = new MembershipService(_chatRepoMock.Object);
         var policy = new ChatPolicy(membership, Options.Create(options ?? new MessageOptions()));
-        return new MessageService(new FakeDbSession(), _msgRepoMock.Object, membership, policy, _eventsMock.Object, Mock.Of<IDraftRepository>(), Mock.Of<IGroupRepository>());
+        return new MessageService(new FakeDbSession(), _msgRepoMock.Object, membership, policy, _eventsMock.Object, Mock.Of<IDraftRepository>(), Mock.Of<IGroupRepository>(), Mock.Of<IAttachmentRepository>());
     }
 
     private MessageWithSender Stored(
@@ -149,13 +150,32 @@ public class MessageEditDeleteTests
     }
 
     [Fact]
-    public async Task Edit_EmptyText_IsRejectedBeforeTheDatabase()
+    public async Task Edit_EmptyText_OfATextMessage_IsRejected_BeforeAnythingIsWritten()
     {
+        // Emptiness depends on the message: a media message may lose its caption, a text may not.
+        Existing(Stored());
+
         var ex = await Assert.ThrowsAsync<BadRequestException>(() =>
             Service().EditAsync(_chatId, _author, _messageId, "   "));
 
         Assert.Equal(MessageText.EmptyCode, ex.ErrorCode);
-        _msgRepoMock.VerifyNoOtherCalls();
+        _msgRepoMock.Verify(r => r.EditTextAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string?>(),
+            It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Edit_EmptyText_OfAMediaMessage_RemovesTheCaption()
+    {
+        var media = Stored("caption");
+        media.Type = MessageTypes.Media;
+        Existing(media);
+        _msgRepoMock
+            .Setup(r => r.EditTextAsync(_messageId, "", null, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Stored(""));
+
+        var edited = await Service().EditAsync(_chatId, _author, _messageId, " ");
+
+        Assert.Equal("", edited.Text);
     }
 
     [Fact]

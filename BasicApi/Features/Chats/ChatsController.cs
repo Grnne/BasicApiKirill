@@ -217,7 +217,8 @@ public class ChatsController(
     public async Task<IActionResult> SendMessage(Guid chatId, [FromBody] SendMessageDto dto, CancellationToken ct)
     {
         var result = await messages.SendAsync(
-            chatId, User.GetUserId(), dto.Text, dto.ClientMessageId, dto.ReplyToMessageId, dto.Entities, ct);
+            chatId, User.GetUserId(), dto.Text, dto.ClientMessageId, dto.ReplyToMessageId, dto.Entities,
+            dto.AttachmentIds, ct);
         return result.Created ? Created(string.Empty, result.Message) : Ok(result.Message);
     }
 

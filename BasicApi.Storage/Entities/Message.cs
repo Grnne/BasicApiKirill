@@ -28,6 +28,9 @@ public static class MessageTypes
 {
     public const string Text = "text";
 
+    /// <summary>A message with files (an album); its text is the caption and may be empty.</summary>
+    public const string Media = "media";
+
     /// <summary>A record of what happened in a group ("members added" and the like), written by the server.</summary>
     public const string System = "system";
 }

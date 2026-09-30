@@ -48,7 +48,7 @@ public class MessageReplyForwardTests
             });
 
         var membership = new MembershipService(_chatRepoMock.Object);
-        _service = new MessageService(new FakeDbSession(), _msgRepoMock.Object, membership, new ChatPolicy(membership), _eventsMock.Object, Mock.Of<IDraftRepository>(), Mock.Of<IGroupRepository>());
+        _service = new MessageService(new FakeDbSession(), _msgRepoMock.Object, membership, new ChatPolicy(membership), _eventsMock.Object, Mock.Of<IDraftRepository>(), Mock.Of<IGroupRepository>(), Mock.Of<IAttachmentRepository>());
     }
 
     private MessageWithSender Source(string text, long seq, Guid? forwardFromUser = null) => new()

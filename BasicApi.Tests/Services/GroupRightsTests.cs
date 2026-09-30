@@ -88,6 +88,19 @@ public class GroupPolicyTests
         (await _policy.CanManageAsync(actor.UserId, _chatId, action, target)).Allowed;
 
     [Fact]
+    public async Task Media_NeedsBothSendingRights()
+    {
+        var noMedia = Member(ChatRoles.Member, """{"sendMedia":false}""");
+        var readOnly = Member(ChatRoles.Member, """{"sendMessages":false,"sendMedia":true}""");
+
+        Assert.True((await _policy.CanPostMediaAsync(_member.UserId, _chatId)).Allowed);
+        Assert.False((await _policy.CanPostMediaAsync(noMedia.UserId, _chatId)).Allowed);
+        Assert.True((await _policy.CanPostAsync(noMedia.UserId, _chatId)).Allowed);
+        Assert.False((await _policy.CanPostMediaAsync(readOnly.UserId, _chatId)).Allowed);
+        Assert.Equal(ChatPolicy.NotAMemberCode, (await _policy.CanPostMediaAsync(Guid.NewGuid(), _chatId)).Code);
+    }
+
+    [Fact]
     public async Task RemovingMembers_OwnerAnyoneButThemselves_AdminOnlyMembers_MemberNobody()
     {
         Assert.True(await Can(_owner, GroupAction.RemoveMember, _admin));

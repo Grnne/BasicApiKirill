@@ -46,6 +46,9 @@ public class MessageWithSender
     /// <summary>What a system message is about, as JSON; null for text messages.</summary>
     public string? ContentJson { get; set; }
 
+    /// <summary>The message's files as a JSON array in album order; null — none.</summary>
+    public string? AttachmentsJson { get; set; }
+
     /// <summary>A copy of another message (its links may be cleared if the original is gone).</summary>
     public bool IsForward => ForwardFromUserId is not null || ForwardFromChatId is not null || ForwardFromMessageId is not null;
 }

@@ -158,7 +158,7 @@ public class ChatHubTests
 
         await Hub().SendMessage(chatId, "hello");
 
-        _messagesMock.Verify(m => m.SendAsync(chatId, _userId, "hello", null, null, null, It.IsAny<CancellationToken>()), Times.Once);
+        _messagesMock.Verify(m => m.SendAsync(chatId, _userId, "hello", null, null, null, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -177,7 +177,8 @@ public class ChatHubTests
         Assert.StartsWith("RATE_LIMITED:", last.Message);
         _messagesMock.Verify(m => m.SendAsync(
             It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(),
-            It.IsAny<IReadOnlyList<Models.Dto.Message.MessageEntityDto>?>(), It.IsAny<CancellationToken>()),
+            It.IsAny<IReadOnlyList<Models.Dto.Message.MessageEntityDto>?>(), It.IsAny<IReadOnlyList<Guid>?>(),
+            It.IsAny<CancellationToken>()),
             Times.Exactly(20));
     }
 

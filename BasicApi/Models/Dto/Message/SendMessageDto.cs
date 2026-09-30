@@ -2,7 +2,10 @@ namespace BasicApi.Models.Dto.Message;
 
 public class SendMessageDto
 {
-    /// <summary>Text; leading and trailing whitespace is trimmed, then it must be 1 to 4096 characters.</summary>
+    /// <summary>
+    /// Text; leading and trailing whitespace is trimmed, then it must be 1 to 4096 characters.
+    /// With files it is the caption and may be empty.
+    /// </summary>
     public string? Text { get; set; }
 
     /// <summary>
@@ -16,4 +19,10 @@ public class SendMessageDto
 
     /// <summary>Formatting and mentions; offsets are over <see cref="Text"/> as sent, before trimming.</summary>
     public List<MessageEntityDto>? Entities { get; set; }
+
+    /// <summary>
+    /// Completed uploads (or files the sender can see in their chats) to send, up to 10 — an album.
+    /// Photos and videos go together; files only with files; a voice message alone.
+    /// </summary>
+    public List<Guid>? AttachmentIds { get; set; }
 }

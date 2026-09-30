@@ -1,3 +1,4 @@
+using BasicApi.Storage.Dto;
 using BasicApi.Storage.Entities;
 
 namespace BasicApi.Storage.Interfaces;
@@ -19,11 +20,14 @@ public interface IAttachmentRepository
     Task<bool> MarkStoredAsync(Attachment checkedFile, CancellationToken ct = default);
 
     /// <summary>
-    /// Of the given stored files, those the user may download: their own, and (from later stages)
-    /// the ones in messages of their chats and on avatars they see.
+    /// Of the given uploaded files, those the user may use and download: their own and the ones
+    /// sent to chats they are in.
     /// </summary>
     Task<IReadOnlyList<Attachment>> GetAccessibleAsync(
         Guid userId, IReadOnlyCollection<Guid> attachmentIds, CancellationToken ct = default);
+
+    /// <summary>Puts the files into the message, in this order.</summary>
+    Task LinkToMessageAsync(Guid messageId, Guid chatId, long seq, IReadOnlyList<AttachmentRef> files, CancellationToken ct = default);
 
     /// <summary>Uploads started before the moment and never finished, oldest first.</summary>
     Task<IReadOnlyList<Attachment>> GetStalePendingAsync(DateTime startedBefore, int limit, CancellationToken ct = default);

@@ -33,6 +33,10 @@ public class ChatListResult
     public long? LastMessageSeq { get; set; }
     public Guid? LastMessageSenderId { get; set; }
     public string? LastMessageText { get; set; }
+    public string? LastMessageType { get; set; }
+
+    /// <summary>The last message's files as a JSON array; null — none.</summary>
+    public string? LastMessageAttachmentsJson { get; set; }
     public DateTime? LastMessageCreatedAt { get; set; }
     public string? LastMessageSenderName { get; set; }
     public bool LastMessageIsOwn { get; set; }
