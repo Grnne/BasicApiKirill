@@ -74,6 +74,32 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
         return Page(rows, limit);
     }
 
+    public async Task<CursorResult<MessageWithSender>> GetGalleryPageAsync(
+        Guid chatId, Guid viewerId, IReadOnlyCollection<string> kinds, bool links, long? beforeSeq, int limit,
+        CancellationToken ct = default)
+    {
+        // Files: the chat's index of message_attachments names the messages; links: a partial index.
+        var match = links
+            ? "m.has_links"
+            : $@"m.seq IN (SELECT ma.seq FROM message_attachments ma
+                           WHERE ma.chat_id = @chatId AND ma.kind = ANY(@kinds)
+                           {(beforeSeq is null ? "" : "AND ma.seq < @beforeSeq")})";
+        var sql = $@"
+            SELECT {SelectColumns}{MyReactionColumn}
+            FROM messages m
+            {Joins}
+            WHERE m.chat_id = @chatId
+              AND {VisibleToViewer}
+              AND {match}
+              {(beforeSeq is null ? "" : "AND m.seq < @beforeSeq")}
+            ORDER BY m.seq DESC
+            LIMIT @fetchSize";
+
+        var rows = await db.QueryAsync<MessageWithSender>(
+            sql, new { chatId, viewerId, kinds = kinds.ToArray(), beforeSeq, fetchSize = limit + 1 }, ct);
+        return Page(rows, limit);
+    }
+
     public Task<MessageWithSender> CreateAsync(
         Message message, Guid? clientMessageId = null, CancellationToken ct = default) =>
         db.InTransactionAsync(async ct =>

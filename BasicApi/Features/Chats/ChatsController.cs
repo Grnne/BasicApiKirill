@@ -497,6 +497,33 @@ public class ChatsController(
     }
 
     /// <summary>
+    /// The chat's gallery: photos and videos, files, voice messages or links.
+    /// </summary>
+    /// <remarks>
+    /// Messages of the chat that carry files of the kind (<c>media</c> — photos and videos,
+    /// <c>files</c>, <c>voice</c>) or web links (<c>links</c> — an address in the text or a link in
+    /// the formatting), **newest first**, as a gallery shows them. The same <c>MessageDto</c> as the
+    /// history, with <c>attachments</c>; previews come from <c>POST /api/media/links</c>. What the
+    /// caller deleted for themselves is left out.
+    ///
+    /// Errors: <c>400 INVALID_FILTER</c>, <c>400 INVALID_CURSOR</c>, <c>403 NOT_A_MEMBER</c>.
+    /// </remarks>
+    /// <param name="chatId">Chat ID.</param>
+    /// <param name="filter"><c>media</c>, <c>files</c>, <c>voice</c> or <c>links</c>.</param>
+    /// <param name="cursor">From the previous page; omit for the newest.</param>
+    /// <param name="limit">Messages per page (default 50, max 100).</param>
+    /// <param name="ct">Request cancellation.</param>
+    [HttpGet("{chatId}/media")]
+    [ProducesResponseType(typeof(CursorPaginatedResponse<MessageDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetGallery(
+        Guid chatId, [FromQuery] string? filter, [FromQuery] string? cursor, [FromQuery] int limit = 50,
+        CancellationToken ct = default)
+        => Ok(await messages.GetGalleryAsync(chatId, User.GetUserId(), filter, cursor, Math.Clamp(limit, 1, 100), ct));
+
+    /// <summary>
     /// Full-text search for messages within a chat.
     /// </summary>
     /// <remarks>

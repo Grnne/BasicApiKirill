@@ -14,6 +14,14 @@ public interface IMessageRepository
         Guid chatId, Guid viewerId, long? beforeSeq, int limit, CancellationToken ct = default);
 
     /// <summary>
+    /// The chat's gallery: messages the viewer sees that carry files of the given kinds, or —
+    /// with <paramref name="links"/> — web links; newest first, before <paramref name="beforeSeq"/>.
+    /// </summary>
+    Task<CursorResult<MessageWithSender>> GetGalleryPageAsync(
+        Guid chatId, Guid viewerId, IReadOnlyCollection<string> kinds, bool links, long? beforeSeq, int limit,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Seq of the oldest message strictly after the given moment (UTC), or null.
     /// "Jump to date" uses it as an exclusive cursor so the page ends at the date.
     /// </summary>

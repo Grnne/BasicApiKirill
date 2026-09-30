@@ -25,6 +25,14 @@ public interface IMessageService
     Task<CursorPaginatedResponse<MessageDto>> GetPageAtAsync(
         Guid chatId, Guid userId, DateTime date, int limit, CancellationToken ct = default);
 
+    /// <summary>
+    /// The chat's gallery, newest first: <c>media</c> (photos and videos), <c>files</c>,
+    /// <c>voice</c> or <c>links</c>. Errors: 400 <c>INVALID_FILTER</c>/<c>INVALID_CURSOR</c>,
+    /// 403 <c>NOT_A_MEMBER</c>.
+    /// </summary>
+    Task<CursorPaginatedResponse<MessageDto>> GetGalleryAsync(
+        Guid chatId, Guid userId, string? filter, string? cursor, int limit, CancellationToken ct = default);
+
     /// <summary>Full-text search in a chat with cursor pagination.</summary>
     Task<SearchMessagesResponseDto> SearchAsync(
         Guid chatId, Guid userId, string query, string? cursor, int limit, CancellationToken ct = default);
@@ -137,6 +145,33 @@ public sealed class MessageService(
         return new CursorPaginatedResponse<MessageDto>
         {
             Items = [.. messages.OrderBy(m => m.Seq)],
+            NextCursor = NextCursor(messages, result.HasMore),
+            HasMore = result.HasMore
+        };
+    }
+
+    public async Task<CursorPaginatedResponse<MessageDto>> GetGalleryAsync(
+        Guid chatId, Guid userId, string? filter, string? cursor, int limit, CancellationToken ct = default)
+    {
+        string[] kinds = filter switch
+        {
+            "media" => [AttachmentKinds.Photo, AttachmentKinds.Video],
+            "files" => [AttachmentKinds.File],
+            "voice" => [AttachmentKinds.Voice],
+            "links" => [],
+            _ => throw new BadRequestException("filter must be media, files, voice or links", "INVALID_FILTER")
+        };
+        var parsed = ParseCursor(cursor);
+        await policy.DemandReadAsync(userId, chatId, ct);
+
+        var beforeSeq = await ResolveCursorAsync(chatId, parsed, ct);
+        var result = await messageRepository.GetGalleryPageAsync(chatId, userId, kinds, filter == "links", beforeSeq, limit, ct);
+        var messages = await MapForViewerAsync(result.Items, chatId, userId, ct);
+
+        // Newest first, as a gallery shows them.
+        return new CursorPaginatedResponse<MessageDto>
+        {
+            Items = messages,
             NextCursor = NextCursor(messages, result.HasMore),
             HasMore = result.HasMore
         };
