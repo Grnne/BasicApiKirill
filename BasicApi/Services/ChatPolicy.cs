@@ -89,6 +89,7 @@ public sealed class ChatPolicy(
     public const string MessageNotEditableCode = "MESSAGE_NOT_EDITABLE";
     public const string PermissionDeniedCode = "PERMISSION_DENIED";
     public const string PrivacyRestrictedCode = "PRIVACY_RESTRICTED";
+    public const string UserBlockedCode = "USER_BLOCKED";
 
     private readonly MessageOptions _messages = options?.Value ?? new MessageOptions();
     private readonly TimeProvider _time = time ?? TimeProvider.System;
@@ -102,8 +103,27 @@ public sealed class ChatPolicy(
             null => NotAMember(),
             { ChatType: ChatTypes.Group } member when !GroupRights.Effective(member).SendMessages =>
                 PermissionDenied("You may not send messages in this group"),
+            { ChatType: ChatTypes.Private } => await PrivateChatBlockAsync(userId, chatId, ct),
             _ => PolicyDecision.Allow
         };
+
+    /// <summary>
+    /// In a private chat a block either way stops messages, reactions and "typing": the blocked one
+    /// is not told it is a block (the same code as for privacy), the blocker is told to unblock.
+    /// </summary>
+    private async Task<PolicyDecision> PrivateChatBlockAsync(Guid userId, Guid chatId, CancellationToken ct)
+    {
+        if (privacy is null)
+            return PolicyDecision.Allow;
+        var otherId = (await membership.GetMemberIdsAsync(chatId, ct)).FirstOrDefault(id => id != userId);
+        if (otherId == Guid.Empty)
+            return PolicyDecision.Allow;
+        if (await privacy.IsBlockedAsync(otherId, userId, ct))
+            return PolicyDecision.Deny(PrivacyRestrictedCode, "This user does not accept messages from you");
+        return await privacy.IsBlockedAsync(userId, otherId, ct)
+            ? PolicyDecision.Deny(UserBlockedCode, "You blocked this user; unblock them to write")
+            : PolicyDecision.Allow;
+    }
 
     public async Task<PolicyDecision> CanPostMediaAsync(Guid userId, Guid chatId, CancellationToken ct = default) =>
         await membership.GetMemberAsync(chatId, userId, ct) switch
@@ -112,11 +132,17 @@ public sealed class ChatPolicy(
             { ChatType: ChatTypes.Group } member when GroupRights.Effective(member) is var rights &&
                                                       !(rights.SendMessages && rights.SendMedia) =>
                 PermissionDenied("You may not send media in this group"),
+            { ChatType: ChatTypes.Private } => await PrivateChatBlockAsync(userId, chatId, ct),
             _ => PolicyDecision.Allow
         };
 
-    public Task<PolicyDecision> CanReactAsync(Guid userId, Guid chatId, CancellationToken ct = default) =>
-        MemberOnlyAsync(userId, chatId, ct);
+    public async Task<PolicyDecision> CanReactAsync(Guid userId, Guid chatId, CancellationToken ct = default) =>
+        await membership.GetMemberAsync(chatId, userId, ct) switch
+        {
+            null => NotAMember(),
+            { ChatType: ChatTypes.Private } => await PrivateChatBlockAsync(userId, chatId, ct),
+            _ => PolicyDecision.Allow
+        };
 
     public Task<PolicyDecision> CanEditMessageAsync(Guid userId, MessageWithSender message, CancellationToken ct = default) =>
         Task.FromResult(

@@ -19,14 +19,14 @@ public interface IUserService
     /// Public profile. No email — it is visible only to the owner. No online status either:
     /// it is available only to counterparts, via <see cref="IPresenceService"/>.
     /// </summary>
-    Task<UserProfileResponseDto> GetUserProfileAsync(Guid userId, CancellationToken ct = default);
+    Task<UserProfileResponseDto> GetUserProfileAsync(Guid userId, CancellationToken ct = default, Guid? viewerId = null);
 
     /// <summary>Search by name or login (ILIKE), excluding the caller.</summary>
     Task<SearchUsersResponseDto> SearchUsersAsync(
         Guid currentUserId, string query, int limit, CancellationToken ct = default);
 }
 
-public sealed class UserService(IUserRepository userRepository) : IUserService
+public sealed class UserService(IUserRepository userRepository, IPrivacyRepository? privacy = null) : IUserService
 {
     public async Task<UserIdResponseDto> GetUserIdAsync(string username, CancellationToken ct = default)
     {
@@ -45,10 +45,12 @@ public sealed class UserService(IUserRepository userRepository) : IUserService
         return OwnProfile(user);
     }
 
-    public async Task<UserProfileResponseDto> GetUserProfileAsync(Guid userId, CancellationToken ct = default)
+    public async Task<UserProfileResponseDto> GetUserProfileAsync(Guid userId, CancellationToken ct = default, Guid? viewerId = null)
     {
         var user = await userRepository.GetByIdAsync(userId, ct)
             ?? throw UserNotFound();
+        if (viewerId is { } viewer && await HiddenAvatarsAsync(viewer, [user.Id], ct) is { Count: > 0 })
+            user.AvatarAttachmentId = null;
 
         return new UserProfileResponseDto
         {
@@ -69,6 +71,7 @@ public sealed class UserService(IUserRepository userRepository) : IUserService
         var countTask = userRepository.CountBySearchQueryAsync(query, currentUserId, ct);
 
         await Task.WhenAll(usersTask, countTask);
+        var hidden = await HiddenAvatarsAsync(currentUserId, [.. usersTask.Result.Select(u => u.Id)], ct);
 
         return new SearchUsersResponseDto
         {
@@ -77,12 +80,16 @@ public sealed class UserService(IUserRepository userRepository) : IUserService
                 UserId = u.Id,
                 Username = u.Username,
                 DisplayName = u.DisplayName,
-                AvatarId = u.AvatarAttachmentId
+                AvatarId = hidden.Contains(u.Id) ? null : u.AvatarAttachmentId
             })],
             Query = query,
             TotalCount = countTask.Result
         };
     }
+
+    /// <summary>Of these users, those who blocked the viewer: their avatars are not shown to them.</summary>
+    private async Task<IReadOnlySet<Guid>> HiddenAvatarsAsync(Guid viewerId, IReadOnlyCollection<Guid> userIds, CancellationToken ct) =>
+        privacy is null ? new HashSet<Guid>() : await privacy.GetBlockersAsync(viewerId, userIds, ct);
 
     public static OwnProfileResponseDto OwnProfile(Storage.Entities.User user) => new()
     {

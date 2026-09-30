@@ -157,7 +157,8 @@ public class ChatRepository(IDbSession db) : IChatRepository
             comp.id AS CompanionId,
             comp.display_name AS CompanionName,
             comp.username AS CompanionUsername,
-            comp.avatar_attachment_id AS CompanionAvatarId,
+            CASE WHEN EXISTS (SELECT 1 FROM user_blocks b WHERE b.blocker_id = comp.id AND b.blocked_id = @userId)
+                 THEN NULL ELSE comp.avatar_attachment_id END AS CompanionAvatarId,
             c.avatar_attachment_id AS ChatAvatarId,
 
             -- Unread: other members' messages after the read pointer. Own messages do not count,

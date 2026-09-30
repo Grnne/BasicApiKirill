@@ -23,6 +23,7 @@ public sealed class ProfileService(
     IUserRepository users,
     IAttachmentRepository attachments,
     IMembershipService membership,
+    IPrivacyRepository privacy,
     IChatEventPublisher events) : IProfileService
 {
     public async Task<OwnProfileResponseDto> SetAvatarAsync(Guid userId, Guid? attachmentId, CancellationToken ct = default)
@@ -40,10 +41,15 @@ public sealed class ProfileService(
         }, ct: ct);
     }
 
-    /// <summary>The new public profile to the user's devices and to everyone who shares a chat with them.</summary>
+    /// <summary>
+    /// The new public profile to the user's devices and to everyone who shares a chat with them —
+    /// except whom the user blocked.
+    /// </summary>
     private async Task AnnounceAsync(User user, CancellationToken ct)
     {
-        var recipients = await membership.GetContactIdsAsync(user.Id, ct);
+        var contacts = await membership.GetContactIdsAsync(user.Id, ct);
+        var blocked = await privacy.GetBlockedAmongAsync(user.Id, contacts, ct);
+        var recipients = contacts.Where(id => !blocked.Contains(id)).ToList();
         await events.UserUpdatedAsync(new UserUpdatedDto
         {
             UserId = user.Id,

@@ -22,6 +22,7 @@ public class ReactionServiceTests
 
     public ReactionServiceTests()
     {
+        _chatRepoMock.WithMembersFromIsMember();
         _chatRepoMock.Setup(r => r.IsMemberAsync(_chatId, _userId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
         _chatRepoMock.Setup(r => r.GetMemberIdsAsync(_chatId, It.IsAny<CancellationToken>())).ReturnsAsync([_userId, Guid.NewGuid()]);
     }

@@ -113,6 +113,7 @@ public sealed class GroupService(
     IPresenceService presence,
     IChatEventPublisher events,
     IAttachmentRepository attachments,
+    IPrivacyRepository privacy,
     IOptions<GroupOptions> options,
     TimeProvider? time = null) : IGroupService
 {
@@ -156,7 +157,10 @@ public sealed class GroupService(
     public async Task<IReadOnlyList<GroupMemberDto>> GetMembersAsync(Guid chatId, Guid userId, CancellationToken ct = default)
     {
         await DemandGroupAsync(chatId, userId, ct);
-        return [.. (await groups.GetMembersAsync(chatId, ct)).Select(ToDto)];
+        var members = await groups.GetMembersAsync(chatId, ct);
+        // Those who blocked the caller do not show their avatar to them.
+        var hidden = await privacy.GetBlockersAsync(userId, [.. members.Select(m => m.UserId)], ct);
+        return [.. members.Select(m => ToDto(m) is var dto && hidden.Contains(m.UserId) ? WithoutAvatar(dto) : dto)];
     }
 
     public async Task<GroupMemberDto> SetRoleAsync(
@@ -490,6 +494,12 @@ public sealed class GroupService(
     private async Task<ChatMember> MemberAsync(Guid chatId, Guid userId, CancellationToken ct) =>
         await chats.GetMemberAsync(chatId, userId, ct)
         ?? throw new NotFoundException("The user is not a member of this group", "MEMBER_NOT_FOUND");
+
+    private static GroupMemberDto WithoutAvatar(GroupMemberDto dto)
+    {
+        dto.AvatarId = null;
+        return dto;
+    }
 
     public static GroupMemberDto ToDto(ChatMember member) => new()
     {

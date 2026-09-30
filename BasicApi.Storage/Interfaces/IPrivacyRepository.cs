@@ -26,6 +26,9 @@ public interface IPrivacyRepository
     /// <summary>Of <paramref name="userIds"/>, those who blocked <paramref name="userId"/>.</summary>
     Task<IReadOnlySet<Guid>> GetBlockersAsync(Guid userId, IReadOnlyCollection<Guid> userIds, CancellationToken ct = default);
 
+    /// <summary>Of <paramref name="userIds"/>, those <paramref name="blockerId"/> blocked.</summary>
+    Task<IReadOnlySet<Guid>> GetBlockedAmongAsync(Guid blockerId, IReadOnlyCollection<Guid> userIds, CancellationToken ct = default);
+
     /// <summary>Adds the block; false when it was there.</summary>
     Task<bool> BlockAsync(Guid blockerId, Guid blockedId, DateTime now, CancellationToken ct = default);
 

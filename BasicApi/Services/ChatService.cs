@@ -15,7 +15,8 @@ public sealed class ChatService(
     IUserRepository userRepository,
     IChatPolicy policy,
     IPresenceService presence,
-    IChatEventPublisher events) : IChatService
+    IChatEventPublisher events,
+    IPrivacyRepository? privacy = null) : IChatService
 {
     public async Task<List<ChatListItemDto>> GetUserChatsAsync(Guid userId, CancellationToken ct = default)
     {
@@ -67,6 +68,10 @@ public sealed class ChatService(
 
         var participants = await chatRepository.GetChatParticipantsAsync(chatId, ct);
         var me = await chatRepository.GetMemberAsync(chatId, userId, ct);
+        // Those who blocked the caller do not show their avatar to them.
+        var hidden = privacy is null
+            ? new HashSet<Guid>()
+            : await privacy.GetBlockersAsync(userId, [.. participants.Select(p => p.UserId)], ct);
         var isGroup = chat.Type == ChatTypes.Group;
 
         return new ChatDetailDto
@@ -80,10 +85,10 @@ public sealed class ChatService(
                 DisplayName = p.DisplayName,
                 Username = p.Username,
                 Role = p.Role,
-                AvatarId = p.AvatarId
+                AvatarId = hidden.Contains(p.UserId) ? null : p.AvatarId
             })],
             AvatarId = chat.Type == ChatTypes.Private
-                ? participants.FirstOrDefault(p => p.UserId != userId)?.AvatarId
+                ? participants.FirstOrDefault(p => p.UserId != userId && !hidden.Contains(p.UserId))?.AvatarId
                 : chat.AvatarAttachmentId,
             CreatedBy = chat.CreatedBy,
             MyRole = me?.Role ?? ChatRoles.Member,

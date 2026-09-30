@@ -67,6 +67,14 @@ public sealed class PrivacyRepository(IDbSession db) : IPrivacyRepository
                 "SELECT blocker_id FROM user_blocks WHERE blocked_id = @userId AND blocker_id = ANY(@userIds)",
                 new { userId, userIds = userIds.ToArray() }, ct)).ToHashSet();
 
+    public async Task<IReadOnlySet<Guid>> GetBlockedAmongAsync(
+        Guid blockerId, IReadOnlyCollection<Guid> userIds, CancellationToken ct = default) =>
+        userIds.Count == 0
+            ? new HashSet<Guid>()
+            : (await db.QueryAsync<Guid>(
+                "SELECT blocked_id FROM user_blocks WHERE blocker_id = @blockerId AND blocked_id = ANY(@userIds)",
+                new { blockerId, userIds = userIds.ToArray() }, ct)).ToHashSet();
+
     public async Task<bool> BlockAsync(Guid blockerId, Guid blockedId, DateTime now, CancellationToken ct = default) =>
         await db.ExecuteAsync(@"
             INSERT INTO user_blocks (blocker_id, blocked_id, created_at) VALUES (@blockerId, @blockedId, @now)
