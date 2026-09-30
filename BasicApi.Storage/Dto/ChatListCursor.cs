@@ -5,7 +5,8 @@ namespace BasicApi.Storage.Dto;
 /// <summary>
 /// Chat list pagination cursor, opaque to the client (base64url): version byte 1, then the
 /// last chat of the page — its last activity (UTC ticks, int64 LE) and id. The next page is the
-/// chats strictly after it in (last activity desc, id desc) order.
+/// chats strictly after it in (last activity desc, id desc) order. The global message search pages
+/// by the same (moment, id) pair: a message's time and id.
 /// </summary>
 public readonly record struct ChatListCursor(DateTime LastActivityAt, Guid ChatId)
 {

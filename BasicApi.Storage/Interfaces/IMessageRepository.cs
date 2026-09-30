@@ -38,6 +38,14 @@ public interface IMessageRepository
         Guid chatId, Guid viewerId, string query, long? beforeSeq, int limit, CancellationToken ct = default);
 
     /// <summary>
+    /// Full-text search across all chats the viewer is in now (D10), newest first by time and id,
+    /// strictly after <paramref name="before"/> (the last hit of the previous page). Skips what the
+    /// viewer does not see and system messages.
+    /// </summary>
+    Task<IReadOnlyList<MessageSearchHit>> SearchAllAsync(
+        Guid viewerId, string query, MessageSearchFilter filter, ChatListCursor? before, int limit, CancellationToken ct = default);
+
+    /// <summary>
     /// Inserts a message with the next seq of its chat; returns it with the sender's display name.
     /// Throws <see cref="Exceptions.DuplicateKeyException"/> when the sender already has a message
     /// with this <paramref name="clientMessageId"/> (a concurrent retry won).

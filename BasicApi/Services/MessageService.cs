@@ -33,6 +33,13 @@ public interface IMessageService
     Task<CursorPaginatedResponse<MessageDto>> GetGalleryAsync(
         Guid chatId, Guid userId, string? filter, string? cursor, int limit, CancellationToken ct = default);
 
+    /// <summary>
+    /// Search across all the user's chats (D10), newest first, with filters. Errors: 400
+    /// <c>INVALID_QUERY</c>/<c>INVALID_CURSOR</c>/<c>INVALID_FILTER</c>, 403 <c>NOT_A_MEMBER</c> (the chat filter).
+    /// </summary>
+    Task<GlobalSearchResponseDto> SearchAllAsync(
+        Guid userId, string? query, MessageSearchFilter filter, string? cursor, int limit, CancellationToken ct = default);
+
     /// <summary>Full-text search in a chat with cursor pagination.</summary>
     Task<SearchMessagesResponseDto> SearchAsync(
         Guid chatId, Guid userId, string query, string? cursor, int limit, CancellationToken ct = default);
@@ -175,6 +182,45 @@ public sealed class MessageService(
             Items = messages,
             NextCursor = NextCursor(messages, result.HasMore),
             HasMore = result.HasMore
+        };
+    }
+
+    public async Task<GlobalSearchResponseDto> SearchAllAsync(
+        Guid userId, string? query, MessageSearchFilter filter, string? cursor, int limit, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(query) || query.Trim().Length < 2)
+            throw new BadRequestException("Query must be at least 2 characters long", "INVALID_QUERY");
+        if (filter.Type is not (null or MessageTypes.Text or MessageTypes.Media))
+            throw new BadRequestException("type must be text or media", "INVALID_FILTER");
+        ChatListCursor? before = null;
+        if (!string.IsNullOrEmpty(cursor))
+            before = ChatListCursor.TryDecode(cursor, out var parsed) ? parsed : throw InvalidCursor();
+        if (filter.ChatId is { } chatId)
+            await policy.DemandReadAsync(userId, chatId, ct);
+        filter.From = filter.From?.ToUniversalTime();
+        filter.To = filter.To?.ToUniversalTime();
+
+        var rows = await messageRepository.SearchAllAsync(userId, query, filter, before, limit + 1, ct);
+        var page = rows.Take(limit).ToList();
+        var hasMore = rows.Count > limit;
+        return new GlobalSearchResponseDto
+        {
+            Query = query,
+            HasMore = hasMore,
+            NextCursor = hasMore ? new ChatListCursor(page[^1].CreatedAt, page[^1].Id).Encode() : null,
+            Items = [.. page.Select(h => new GlobalSearchHitDto
+            {
+                Message = Map(h),
+                Chat = new SearchChatDto
+                {
+                    ChatId = h.ChatId,
+                    Type = h.ChatType,
+                    Title = h.ChatTitle,
+                    CompanionId = h.CompanionId,
+                    CompanionName = h.CompanionName,
+                    AvatarId = h.ChatAvatarId
+                }
+            })]
         };
     }
 

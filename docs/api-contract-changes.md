@@ -1513,6 +1513,33 @@ MessagesRead:      { "chatId": "…", "userId": "<кто прочитал>", "se
 - Ошибки: `400 INVALID_TITLE`, `400 TOO_MANY_FOLDERS`, `400 INVALID_REQUEST`, `400 INVALID_CURSOR`,
   `404 FOLDER_NOT_FOUND`.
 
+### 17.3. Глобальный поиск
+
+**`GET /api/search/messages?q=&chatId=&senderId=&from=&to=&type=&cursor=&limit=`** — поиск по
+сообщениям всех чатов, где пользователь состоит сейчас; тот же полнотекстовый поиск, что в чате
+(русская морфология, слова как префиксы). Удалённые, скрытые у себя и системные сообщения не
+находятся; вышел из группы — её сообщения пропадают из поиска.
+
+```json
+{
+  "items": [
+    {
+      "message": MessageDto,
+      "chat": { "chatId": "…", "type": "group", "title": "Команда", "companionId": null,
+                "companionName": null, "avatarId": null }
+    }
+  ],
+  "nextCursor": "AQ…", "hasMore": true, "query": "запуск"
+}
+```
+
+- Новые первыми (по времени), по 20 (до 100).
+- Фильтры: `chatId`, `senderId`, `from`/`to` (время, `to` не включается), `type` — `text` или
+  `media` (ищется подпись).
+- В `message` не заполнены `status` и `isRead` — их даёт история чата.
+- Ошибки: `400 INVALID_QUERY` (короче 2 символов), `400 INVALID_FILTER`, `400 INVALID_CURSOR`,
+  `403 NOT_A_MEMBER` (`chatId` чужого чата).
+
 ---
 
 ## Справочник кодов ошибок
@@ -1544,7 +1571,7 @@ MessagesRead:      { "chatId": "…", "userId": "<кто прочитал>", "se
 | `INVALID_PERMISSIONS` | 400 | Участнику — право админа (`removeMembers`, `deleteMessages`, `addAdmins`) |
 | `INVALID_MEDIA` | 400 | Загрузка: неизвестный `kind`, неверные размеры, длительность или волна; при завершении — содержимое не того вида (фото не картинка и т. п.) |
 | `TOO_MANY_PINNED` | 400 | Закрепление: уже 10 закреплённых чатов |
-| `INVALID_FILTER` | 400 | Галерея чата: `filter` не `media`, `files`, `voice` или `links` |
+| `INVALID_FILTER` | 400 | Галерея чата: `filter` не `media`, `files`, `voice` или `links`; глобальный поиск: `type` не `text` или `media` |
 | `INVALID_ALBUM` | 400 | Отправка с файлами: больше 10, повторы, несовместимые виды (фото с файлом, два голосовых) |
 | `INVALID_AVATAR` | 400 | Аватар: файл не фото |
 | `INVALID_PRIVACY` | 400 | Настройки приватности: значение не `everybody`, `contacts` или `nobody` |

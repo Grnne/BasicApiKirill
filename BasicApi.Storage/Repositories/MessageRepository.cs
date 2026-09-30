@@ -364,6 +364,56 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
         return (Page(rows, limit), totalCount);
     }
 
+    public Task<IReadOnlyList<MessageSearchHit>> SearchAllAsync(
+        Guid viewerId, string query, MessageSearchFilter filter, ChatListCursor? before, int limit, CancellationToken ct = default)
+    {
+        // The chats the viewer is in now: leaving a chat takes its messages out of the search.
+        var sql = $@"
+            SELECT {SelectColumns}{MyReactionColumn},
+                   c.type AS ChatType,
+                   c.title AS ChatTitle,
+                   comp.id AS CompanionId,
+                   comp.display_name AS CompanionName,
+                   CASE WHEN c.type = 'private' THEN comp.avatar_attachment_id ELSE c.avatar_attachment_id END AS ChatAvatarId
+            FROM messages m
+            JOIN chat_members me ON me.chat_id = m.chat_id AND me.user_id = @viewerId
+            JOIN chats c ON c.id = m.chat_id
+            {Joins}
+            LEFT JOIN LATERAL (
+                SELECT ou.id, ou.display_name,
+                       CASE WHEN EXISTS (SELECT 1 FROM user_blocks b WHERE b.blocker_id = ou.id AND b.blocked_id = @viewerId)
+                            THEN NULL ELSE ou.avatar_attachment_id END AS avatar_attachment_id
+                FROM chat_members o JOIN users ou ON ou.id = o.user_id
+                WHERE o.chat_id = m.chat_id AND o.user_id <> @viewerId
+                LIMIT 1
+            ) comp ON c.type = 'private'
+            WHERE m.search_vector @@ to_tsquery('russian', @prefixQuery)
+              AND m.type <> 'system'
+              AND {VisibleToViewer}
+              {(filter.ChatId is null ? "" : "AND m.chat_id = @chatId")}
+              {(filter.SenderId is null ? "" : "AND m.sender_id = @senderId")}
+              {(filter.From is null ? "" : "AND m.created_at >= @from")}
+              {(filter.To is null ? "" : "AND m.created_at < @to")}
+              {(filter.Type is null ? "" : "AND m.type = @type")}
+              {(before is null ? "" : "AND (m.created_at, m.id) < (@beforeAt, @beforeId)")}
+            ORDER BY m.created_at DESC, m.id DESC
+            LIMIT @limit";
+
+        return db.QueryAsync<MessageSearchHit>(sql, new
+        {
+            viewerId,
+            prefixQuery = ToPrefixQuery(query),
+            chatId = filter.ChatId,
+            senderId = filter.SenderId,
+            from = filter.From,
+            to = filter.To,
+            type = filter.Type,
+            beforeAt = before?.LastActivityAt,
+            beforeId = before?.ChatId,
+            limit
+        }, ct);
+    }
+
     /// <summary>
     /// Query words are matched as word prefixes: "запуск" finds both "запускаем" and "до запуска"
     /// (the Russian stemmer reduces them to different stems), and the query works as you type.
