@@ -13,6 +13,12 @@ public class ChatListItemDto
     /// <summary>Companion username (private chats only, null for groups).</summary>
     public string? CompanionUsername { get; set; }
 
+    /// <summary>
+    /// The photo to show for the chat: the group's, or the companion's in a private chat; null — none.
+    /// Fetched by <c>POST /api/media/links</c>.
+    /// </summary>
+    public Guid? AvatarId { get; set; }
+
     public MessageDto? LastMessage { get; set; }
     public int UnreadCount { get; set; }
 

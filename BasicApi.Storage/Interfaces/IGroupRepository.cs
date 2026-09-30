@@ -40,6 +40,9 @@ public interface IGroupRepository
     /// <summary>Deletes the group with its messages and members.</summary>
     Task DeleteAsync(Guid chatId, CancellationToken ct = default);
 
+    /// <summary>Sets or clears the group's photo; false when it was already so.</summary>
+    Task<bool> SetAvatarAsync(Guid chatId, Guid? attachmentId, DateTime now, CancellationToken ct = default);
+
     Task AppendAuditAsync(ChatAuditEntry entry, CancellationToken ct = default);
 
     /// <summary>Newest first, strictly before <paramref name="beforeId"/> when given.</summary>

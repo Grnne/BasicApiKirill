@@ -5,5 +5,6 @@ public record ChatParticipantDto(
     Guid UserId,
     string DisplayName,
     string Username,
-    string Role
+    string Role,
+    Guid? AvatarId
 );

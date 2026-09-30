@@ -16,13 +16,19 @@ public sealed class AttachmentRepository(IDbSession db) : IAttachmentRepository
     /// <summary>
     /// Who may download a file: whoever uploaded it, and the members of every chat it was sent
     /// to. Deleting a message for everyone unlinks its files, so that access goes with it.
+    /// A user's avatar is seen by everyone signed in, a group's — by its members.
     /// </summary>
     private const string AccessibleTo = @"
         a.owner_id = @userId
         OR EXISTS (
             SELECT 1 FROM message_attachments ma
             JOIN chat_members cm ON cm.chat_id = ma.chat_id AND cm.user_id = @userId
-            WHERE ma.attachment_id = a.id)";
+            WHERE ma.attachment_id = a.id)
+        OR EXISTS (SELECT 1 FROM users u WHERE u.avatar_attachment_id = a.id)
+        OR EXISTS (
+            SELECT 1 FROM chats c
+            JOIN chat_members cm ON cm.chat_id = c.id AND cm.user_id = @userId
+            WHERE c.avatar_attachment_id = a.id)";
 
     /// <summary>
     /// The files of a message as a JSON array, in album order, for queries that return

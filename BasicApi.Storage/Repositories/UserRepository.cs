@@ -15,7 +15,7 @@ public class UserRepository(IDbSession db) : IUserRepository
                 username as Username, 
                 email as Email, 
                 password_hash as PasswordHash, 
-                display_name as DisplayName, 
+                display_name as DisplayName, avatar_attachment_id as AvatarAttachmentId,
                 created_at as CreatedAt, 
                 last_login_at as LastLoginAt, 
                 is_active as IsActive
@@ -67,7 +67,7 @@ public class UserRepository(IDbSession db) : IUserRepository
 
     public Task<IReadOnlyList<User>> GetByIdsAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default) =>
         db.QueryAsync<User>(@"
-            SELECT id AS Id, username AS Username, email AS Email, display_name AS DisplayName,
+            SELECT id AS Id, username AS Username, email AS Email, display_name AS DisplayName, avatar_attachment_id AS AvatarAttachmentId,
                    created_at AS CreatedAt, last_login_at AS LastLoginAt, is_active AS IsActive
             FROM users
             WHERE id = ANY(@ids)",
@@ -82,6 +82,7 @@ public class UserRepository(IDbSession db) : IUserRepository
                 email as Email,
                 password_hash as PasswordHash,
                 display_name as DisplayName,
+                avatar_attachment_id as AvatarAttachmentId,
                 created_at as CreatedAt,
                 last_login_at as LastLoginAt,
                 is_active as IsActive
@@ -91,6 +92,12 @@ public class UserRepository(IDbSession db) : IUserRepository
 
         return await db.QueryFirstOrDefaultAsync<User>(sql, new { Id = id }, ct);
     }
+
+    public async Task<bool> SetAvatarAsync(Guid userId, Guid? attachmentId, CancellationToken ct = default) =>
+        await db.ExecuteAsync(@"
+            UPDATE users SET avatar_attachment_id = @attachmentId
+            WHERE id = @userId AND avatar_attachment_id IS DISTINCT FROM @attachmentId",
+            new { userId, attachmentId }, ct) > 0;
 
     public async Task<IEnumerable<User>> SearchByDisplayNameOrUsernameAsync(
         string query, Guid excludeUserId, int limit, CancellationToken ct = default)
@@ -102,6 +109,7 @@ public class UserRepository(IDbSession db) : IUserRepository
                 email as Email,
                 password_hash as PasswordHash,
                 display_name as DisplayName,
+                avatar_attachment_id as AvatarAttachmentId,
                 created_at as CreatedAt,
                 last_login_at as LastLoginAt,
                 is_active as IsActive

@@ -1,5 +1,6 @@
 using BasicApi.Hubs;
 using BasicApi.Models.Dto.Chat;
+using BasicApi.Models.Dto.Users;
 using BasicApi.Models.Dto.Message;
 using Microsoft.AspNetCore.SignalR;
 
@@ -71,6 +72,9 @@ public sealed class SignalRChatEventPublisher(IHubContext<ChatHub> hub, HubConne
 
     public Task ChatUpdatedAsync(ChatUpdatedDto update, IReadOnlyCollection<Guid> memberIds, CancellationToken ct = default) =>
         ToUsers(memberIds, "ChatUpdated", update, ct);
+
+    public Task UserUpdatedAsync(UserUpdatedDto update, IReadOnlyCollection<Guid> recipientIds, CancellationToken ct = default) =>
+        ToUsers(recipientIds, "UserUpdated", update, ct);
 
     public async Task ChatDeletedAsync(ChatDeletedDto deleted, IReadOnlyCollection<Guid> memberIds, CancellationToken ct = default)
     {

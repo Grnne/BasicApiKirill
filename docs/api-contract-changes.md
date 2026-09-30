@@ -1345,6 +1345,30 @@ MessagesRead:      { "chatId": "…", "userId": "<кто прочитал>", "se
 - Ошибки: `400 INVALID_FILTER` (нет или неизвестный `filter`), `400 INVALID_CURSOR`,
   `403 NOT_A_MEMBER`.
 
+### 15.4. Аватары пользователей и групп
+
+Аватар — фото из загрузок пользователя (15.1): сначала загрузить `kind: "photo"`, потом
+назначить. Картинку клиент берёт по `avatarId` через `POST /api/media/links` (`thumbnailUrl` —
+превью до 640 px, для списков его хватает).
+
+- **`PUT /api/users/me/avatar`** `{ "attachmentId": "…" }`, **`DELETE /api/users/me/avatar`** →
+  `200` — свой профиль (`GET /api/users/me`). Свои устройства и все, с кем есть общий чат,
+  получают **`UserUpdated`** `{ userId, displayName, username, avatarId }` (и в журнал
+  `/api/sync`). Аватар пользователя видят все вошедшие.
+- **`PUT /api/chats/{chatId}/avatar`**, **`DELETE /api/chats/{chatId}/avatar`** → `200` —
+  `ChatUpdatedDto`. Только группа (`400 NOT_A_GROUP`), нужно право `changeInfo`
+  (`403 PERMISSION_DENIED`). Участники получают системное сообщение (`photo_changed` /
+  `photo_removed`, «Фото группы изменено» / «Фото группы удалено») и `ChatUpdated`; запись в
+  журнале действий. Фото группы видят её участники.
+- Повтор того же фото — без событий и сообщений.
+- Ошибки назначения: `400 INVALID_AVATAR` (не фото), `404 ATTACHMENT_NOT_FOUND` (не своя
+  завершённая загрузка — выбрать чужое фото из чата нельзя).
+
+Новое поле **`avatarId`** (`null` — нет аватара): `GET /api/users/me`, `GET /api/users/{id}`,
+поиск пользователей, участники в `GET /api/chats/{chatId}` и `GET .../members`, сам
+`ChatDetailDto` и `ChatListItemDto` (для группы — её фото, для личного чата — фото собеседника),
+`ChatUpdated`.
+
 ---
 
 ## Справочник кодов ошибок
@@ -1376,6 +1400,7 @@ MessagesRead:      { "chatId": "…", "userId": "<кто прочитал>", "se
 | `INVALID_MEDIA` | 400 | Загрузка: неизвестный `kind`, неверные размеры, длительность или волна; при завершении — содержимое не того вида (фото не картинка и т. п.) |
 | `INVALID_FILTER` | 400 | Галерея чата: `filter` не `media`, `files`, `voice` или `links` |
 | `INVALID_ALBUM` | 400 | Отправка с файлами: больше 10, повторы, несовместимые виды (фото с файлом, два голосовых) |
+| `INVALID_AVATAR` | 400 | Аватар: файл не фото |
 | `FILE_TOO_LARGE` | 400 | Загрузка: заявленный или загруженный файл больше лимита |
 | `UPLOAD_INCOMPLETE` | 400 | Завершение загрузки: по ссылке ещё ничего не загружено |
 | `PASSWORD_TOO_LONG` | 400 | Регистрация: пароль длиннее 72 байт в UTF-8 |

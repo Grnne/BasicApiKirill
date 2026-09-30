@@ -39,8 +39,8 @@ public class ChatServiceChatDetailsTests
 
         var participants = new List<BasicApi.Storage.Dto.ChatParticipantDto>
         {
-            new(Guid.NewGuid(), "Alice", "alice", "member"),
-            new(Guid.NewGuid(), "Bob", "bob", "member"),
+            new(Guid.NewGuid(), "Alice", "alice", "member", null),
+            new(Guid.NewGuid(), "Bob", "bob", "member", null),
         };
 
         _chatRepoMock.Setup(r => r.GetByIdAsync(chatId, It.IsAny<CancellationToken>())).ReturnsAsync(chat);

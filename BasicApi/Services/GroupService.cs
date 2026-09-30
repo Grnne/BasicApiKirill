@@ -3,6 +3,7 @@ using BasicApi.Middleware.Exceptions;
 using BasicApi.Models.Dto.Chat;
 using BasicApi.Models.Dto.Message;
 using BasicApi.Services.Events;
+using BasicApi.Services.Media;
 using BasicApi.Storage;
 using BasicApi.Storage.Dto;
 using BasicApi.Storage.Entities;
@@ -81,6 +82,14 @@ public interface IGroupService
         Guid chatId, Guid userId, string? title, PermissionsPatchDto? memberPermissions, CancellationToken ct = default);
 
     /// <summary>
+    /// Sets the group's photo to one the user uploaded, or clears it — with the right to change the
+    /// group's info. Members get a system message and <c>ChatUpdated</c>.
+    /// Errors: 400 <c>NOT_A_GROUP</c>/<c>INVALID_AVATAR</c>, 403 <c>NOT_A_MEMBER</c>/<c>PERMISSION_DENIED</c>,
+    /// 404 <c>ATTACHMENT_NOT_FOUND</c>.
+    /// </summary>
+    Task<ChatUpdatedDto> SetAvatarAsync(Guid chatId, Guid userId, Guid? attachmentId, CancellationToken ct = default);
+
+    /// <summary>
     /// Deletes the group with its history for everyone (the owner). Members get <c>ChatDeleted</c>.
     /// Errors: 400 <c>NOT_A_GROUP</c>, 403 <c>NOT_A_MEMBER</c>/<c>PERMISSION_DENIED</c>.
     /// </summary>
@@ -103,6 +112,7 @@ public sealed class GroupService(
     IChatPolicy policy,
     IPresenceService presence,
     IChatEventPublisher events,
+    IAttachmentRepository attachments,
     IOptions<GroupOptions> options,
     TimeProvider? time = null) : IGroupService
 {
@@ -364,7 +374,8 @@ public sealed class GroupService(
             {
                 ChatId = chatId,
                 Title = renamed ? name : chat.Title,
-                MemberPermissions = GroupRights.MemberPermissions(GroupRights.WriteSettings(settings))
+                MemberPermissions = GroupRights.MemberPermissions(GroupRights.WriteSettings(settings)),
+                AvatarId = chat.AvatarAttachmentId
             };
             if (!renamed && !regranted)
                 return current;
@@ -379,6 +390,38 @@ public sealed class GroupService(
             if (regranted)
                 await AuditAsync(chatId, userId, "member_permissions_changed", null, new { memberPermissions = merged }, now, ct);
 
+            await events.ChatUpdatedAsync(current, memberIds, ct);
+            return current;
+        }, ct: ct);
+    }
+
+    public async Task<ChatUpdatedDto> SetAvatarAsync(
+        Guid chatId, Guid userId, Guid? attachmentId, CancellationToken ct = default)
+    {
+        await DemandGroupAsync(chatId, userId, ct);
+        if (attachmentId is { } id)
+            await attachments.DemandOwnPhotoAsync(userId, id, ct);
+
+        var now = Now();
+        return await db.InTransactionAsync(async ct =>
+        {
+            await groups.LockAsync(chatId, ct);
+            (await policy.CanManageAsync(userId, chatId, GroupAction.ChangeInfo, ct: ct)).Demand();
+            var chat = await chats.GetByIdAsync(chatId, ct) ?? throw new NotFoundException("Chat not found", "CHAT_NOT_FOUND");
+            var current = new ChatUpdatedDto
+            {
+                ChatId = chatId,
+                Title = chat.Title,
+                MemberPermissions = GroupRights.MemberPermissions(chat.SettingsJson),
+                AvatarId = attachmentId
+            };
+            if (!await groups.SetAvatarAsync(chatId, attachmentId, now, ct))
+                return current;
+
+            var memberIds = await chats.GetMemberIdsAsync(chatId, ct);
+            await PostSystemMessageAsync(chatId, userId, SystemMessages.Photo(removed: attachmentId is null), now, memberIds, ct);
+            await AuditAsync(chatId, userId, attachmentId is null ? "photo_removed" : "photo_changed", null,
+                new { attachmentId }, now, ct);
             await events.ChatUpdatedAsync(current, memberIds, ct);
             return current;
         }, ct: ct);
@@ -452,6 +495,7 @@ public sealed class GroupService(
         DisplayName = member.DisplayName,
         Username = member.Username,
         Role = member.Role,
+        AvatarId = member.AvatarId,
         Permissions = GroupRights.Effective(member)
     };
 

@@ -16,6 +16,7 @@ public class ChatMember
 
     public DateTime JoinedAt { get; set; }
     public string DisplayName { get; set; } = string.Empty;
+    public Guid? AvatarId { get; set; }
     public string Username { get; set; } = string.Empty;
 }
 

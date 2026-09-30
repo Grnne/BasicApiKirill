@@ -71,6 +71,41 @@ public class GroupsController(IGroupService groups) : ControllerBase
         Ok(await groups.UpdateAsync(chatId, User.GetUserId(), dto.Title, dto.MemberPermissions, ct));
 
     /// <summary>
+    /// Set the group's photo.
+    /// </summary>
+    /// <remarks>
+    /// A photo the caller uploaded (<c>POST /api/media/uploads</c>, kind <c>photo</c>). Needs the
+    /// <c>changeInfo</c> permission. Members get a system message (<c>photo_changed</c>) and
+    /// <c>ChatUpdated</c> with <c>avatarId</c>; the same photo again changes nothing.
+    ///
+    /// Errors: <c>400 NOT_A_GROUP</c>, <c>400 INVALID_AVATAR</c> (not a photo), <c>403 NOT_A_MEMBER</c>,
+    /// <c>403 PERMISSION_DENIED</c>, <c>404 ATTACHMENT_NOT_FOUND</c>.
+    /// </remarks>
+    [HttpPut("{chatId}/avatar")]
+    [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
+    [ProducesResponseType(typeof(ChatUpdatedDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SetAvatar(Guid chatId, [FromBody] Models.Dto.Users.SetAvatarDto dto, CancellationToken ct) =>
+        Ok(await groups.SetAvatarAsync(chatId, User.GetUserId(), dto.AttachmentId, ct));
+
+    /// <summary>
+    /// Remove the group's photo.
+    /// </summary>
+    /// <remarks>
+    /// Like setting one: <c>changeInfo</c>, a system message (<c>photo_removed</c>), <c>ChatUpdated</c>
+    /// with <c>avatarId: null</c>.
+    /// </remarks>
+    [HttpDelete("{chatId}/avatar")]
+    [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
+    [ProducesResponseType(typeof(ChatUpdatedDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> RemoveAvatar(Guid chatId, CancellationToken ct) =>
+        Ok(await groups.SetAvatarAsync(chatId, User.GetUserId(), null, ct));
+
+    /// <summary>
     /// Delete a group for everyone.
     /// </summary>
     /// <remarks>

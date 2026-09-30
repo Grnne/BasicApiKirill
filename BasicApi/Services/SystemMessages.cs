@@ -14,6 +14,8 @@ public static class SystemMessages
     public const string MembersAdded = "members_added";
     public const string MemberRemoved = "member_removed";
     public const string MemberLeft = "member_left";
+    public const string PhotoChanged = "photo_changed";
+    public const string PhotoRemoved = "photo_removed";
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -32,6 +34,11 @@ public static class SystemMessages
 
     public static (MessageActionDto Action, string Text) Left(Guid userId, string name) =>
         (new MessageActionDto { Type = MemberLeft, UserIds = [userId] }, $"Участник {name} покинул группу");
+
+    public static (MessageActionDto Action, string Text) Photo(bool removed) =>
+        removed
+            ? (new MessageActionDto { Type = PhotoRemoved }, "Фото группы удалено")
+            : (new MessageActionDto { Type = PhotoChanged }, "Фото группы изменено");
 
     public static string Write(MessageActionDto action) => JsonSerializer.Serialize(action, Json);
 

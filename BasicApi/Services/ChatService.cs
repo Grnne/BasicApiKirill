@@ -79,8 +79,12 @@ public sealed class ChatService(
                 UserId = p.UserId,
                 DisplayName = p.DisplayName,
                 Username = p.Username,
-                Role = p.Role
+                Role = p.Role,
+                AvatarId = p.AvatarId
             })],
+            AvatarId = chat.Type == ChatTypes.Private
+                ? participants.FirstOrDefault(p => p.UserId != userId)?.AvatarId
+                : chat.AvatarAttachmentId,
             CreatedBy = chat.CreatedBy,
             MyRole = me?.Role ?? ChatRoles.Member,
             MyPermissions = isGroup && me is not null ? GroupRights.Effective(me) : null,

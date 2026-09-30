@@ -42,13 +42,7 @@ public sealed class UserService(IUserRepository userRepository) : IUserService
         var user = await userRepository.GetByIdAsync(userId, ct)
             ?? throw UserNotFound();
 
-        return new OwnProfileResponseDto
-        {
-            UserId = user.Id,
-            Username = user.Username,
-            Email = user.Email,
-            DisplayName = user.DisplayName
-        };
+        return OwnProfile(user);
     }
 
     public async Task<UserProfileResponseDto> GetUserProfileAsync(Guid userId, CancellationToken ct = default)
@@ -60,7 +54,8 @@ public sealed class UserService(IUserRepository userRepository) : IUserService
         {
             UserId = user.Id,
             Username = user.Username,
-            DisplayName = user.DisplayName
+            DisplayName = user.DisplayName,
+            AvatarId = user.AvatarAttachmentId
         };
     }
 
@@ -81,12 +76,22 @@ public sealed class UserService(IUserRepository userRepository) : IUserService
             {
                 UserId = u.Id,
                 Username = u.Username,
-                DisplayName = u.DisplayName
+                DisplayName = u.DisplayName,
+                AvatarId = u.AvatarAttachmentId
             })],
             Query = query,
             TotalCount = countTask.Result
         };
     }
+
+    public static OwnProfileResponseDto OwnProfile(Storage.Entities.User user) => new()
+    {
+        UserId = user.Id,
+        Username = user.Username,
+        Email = user.Email,
+        DisplayName = user.DisplayName,
+        AvatarId = user.AvatarAttachmentId
+    };
 
     private static NotFoundException UserNotFound() => new("User not found", "USER_NOT_FOUND");
 }

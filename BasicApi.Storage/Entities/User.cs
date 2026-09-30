@@ -1,4 +1,4 @@
-﻿namespace BasicApi.Storage.Entities;
+namespace BasicApi.Storage.Entities;
 
 public class User
 {
@@ -13,4 +13,7 @@ public class User
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? LastLoginAt { get; set; }
     public bool IsActive { get; set; } = true;
+
+    /// <summary>The photo shown for the user; null — none.</summary>
+    public Guid? AvatarAttachmentId { get; set; }
 }

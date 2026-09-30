@@ -70,7 +70,7 @@ public class MessageDto
 /// <summary>What a system message records.</summary>
 public class MessageActionDto
 {
-    /// <summary><c>group_created</c>, <c>title_changed</c>, <c>members_added</c>, <c>member_removed</c>, <c>member_left</c>.</summary>
+    /// <summary><c>group_created</c>, <c>title_changed</c>, <c>members_added</c>, <c>member_removed</c>, <c>member_left</c>, <c>photo_changed</c>, <c>photo_removed</c>.</summary>
     public string Type { get; set; } = string.Empty;
 
     /// <summary>Whom it concerns: the added or removed members, the one who left.</summary>

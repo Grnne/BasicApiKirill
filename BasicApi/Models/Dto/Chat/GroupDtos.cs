@@ -69,6 +69,9 @@ public class GroupMemberDto
     public string Username { get; set; } = string.Empty;
     public string Role { get; set; } = "member";
 
+    /// <summary>The photo; null — none. Fetched by <c>POST /api/media/links</c>.</summary>
+    public Guid? AvatarId { get; set; }
+
     /// <summary>What the member may do now: the role, the group's defaults and their own overrides.</summary>
     public GroupPermissionsDto Permissions { get; set; } = new();
 }
@@ -104,6 +107,9 @@ public class ChatUpdatedDto
     public Guid ChatId { get; set; }
     public string? Title { get; set; }
     public GroupPermissionsDto MemberPermissions { get; set; } = new();
+
+    /// <summary>The group's photo; null — none.</summary>
+    public Guid? AvatarId { get; set; }
 }
 
 /// <summary><c>ChatDeleted</c>: the group is gone for everyone.</summary>

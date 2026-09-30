@@ -26,6 +26,9 @@ public interface IUserRepository
     /// </summary>
     Task<User?> GetByIdAsync(Guid id, CancellationToken ct = default);
 
+    /// <summary>Sets or clears the avatar; false when it was already so.</summary>
+    Task<bool> SetAvatarAsync(Guid userId, Guid? attachmentId, CancellationToken ct = default);
+
     /// <summary>The users with these ids; missing ones are simply absent.</summary>
     Task<IReadOnlyList<User>> GetByIdsAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default);
 

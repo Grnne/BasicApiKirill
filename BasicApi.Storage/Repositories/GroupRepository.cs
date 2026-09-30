@@ -14,7 +14,8 @@ public sealed class GroupRepository(IDbSession db) : IGroupRepository
         c.settings::text AS SettingsJson,
         cm.joined_at AS JoinedAt,
         u.display_name AS DisplayName,
-        u.username AS Username";
+        u.username AS Username,
+        u.avatar_attachment_id AS AvatarId";
 
     public Task CreateAsync(
         Guid chatId, string title, Guid creatorId, IReadOnlyCollection<Guid> memberIds, DateTime now,
@@ -86,6 +87,12 @@ public sealed class GroupRepository(IDbSession db) : IGroupRepository
         db.ExecuteAsync(
             "UPDATE chats SET title = @title, settings = @settingsJson::jsonb, updated_at = @now WHERE id = @chatId",
             new { chatId, title, settingsJson, now }, ct);
+
+    public async Task<bool> SetAvatarAsync(Guid chatId, Guid? attachmentId, DateTime now, CancellationToken ct = default) =>
+        await db.ExecuteAsync(@"
+            UPDATE chats SET avatar_attachment_id = @attachmentId, updated_at = @now
+            WHERE id = @chatId AND avatar_attachment_id IS DISTINCT FROM @attachmentId",
+            new { chatId, attachmentId, now }, ct) > 0;
 
     public Task DeleteAsync(Guid chatId, CancellationToken ct = default) =>
         db.ExecuteAsync("DELETE FROM chats WHERE id = @chatId", new { chatId }, ct);

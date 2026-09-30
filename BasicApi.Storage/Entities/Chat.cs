@@ -15,6 +15,9 @@ public class Chat
 
     /// <summary>Group settings as JSON (the default permissions of members); null — the defaults.</summary>
     public string? SettingsJson { get; set; }
+
+    /// <summary>The group's photo; null — none.</summary>
+    public Guid? AvatarAttachmentId { get; set; }
 }
 
 public static class ChatTypes

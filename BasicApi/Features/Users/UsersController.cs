@@ -1,8 +1,9 @@
-﻿using BasicApi.Models.Dto.Users;
+using BasicApi.Models.Dto.Users;
 using BasicApi.Extensions;
 using BasicApi.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace BasicApi.Features.Users;
 
@@ -11,7 +12,7 @@ namespace BasicApi.Features.Users;
 [Produces("application/json")]
 [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
 [Tags("Users")]
-public class UsersController(IUserService users, IPresenceService presence) : ControllerBase
+public class UsersController(IUserService users, IPresenceService presence, IProfileService profile) : ControllerBase
 {
     /// <summary>
     /// Get a user's ID by username.
@@ -95,6 +96,36 @@ public class UsersController(IUserService users, IPresenceService presence) : Co
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetOwnProfile(CancellationToken ct)
         => Ok(await users.GetOwnProfileAsync(User.GetUserId(), ct));
+
+    /// <summary>
+    /// Set the caller's avatar.
+    /// </summary>
+    /// <remarks>
+    /// A photo the caller uploaded (<c>POST /api/media/uploads</c>, kind <c>photo</c>). Answers with
+    /// the own profile; the caller's other devices and everyone who shares a chat with them get
+    /// <c>UserUpdated</c>. Anyone signed in may download a user's avatar.
+    ///
+    /// Errors: <c>400 INVALID_AVATAR</c> (not a photo), <c>404 ATTACHMENT_NOT_FOUND</c>.
+    /// </remarks>
+    [Authorize]
+    [HttpPut("me/avatar")]
+    [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
+    [ProducesResponseType(typeof(OwnProfileResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SetAvatar([FromBody] SetAvatarDto dto, CancellationToken ct)
+        => Ok(await profile.SetAvatarAsync(User.GetUserId(), dto.AttachmentId, ct));
+
+    /// <summary>
+    /// Remove the caller's avatar.
+    /// </summary>
+    /// <remarks>The same as setting one, with <c>avatarId: null</c>.</remarks>
+    [Authorize]
+    [HttpDelete("me/avatar")]
+    [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
+    [ProducesResponseType(typeof(OwnProfileResponseDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> RemoveAvatar(CancellationToken ct)
+        => Ok(await profile.SetAvatarAsync(User.GetUserId(), null, ct));
 
     /// <summary>
     /// Get online status of all chat members for the current user.

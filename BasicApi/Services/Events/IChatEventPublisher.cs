@@ -1,4 +1,5 @@
 using BasicApi.Models.Dto.Chat;
+using BasicApi.Models.Dto.Users;
 using BasicApi.Models.Dto.Message;
 
 namespace BasicApi.Services.Events;
@@ -54,6 +55,9 @@ public interface IChatEventPublisher
 
     /// <summary><c>ChatUpdated</c> — the group's title or default permissions — to all members.</summary>
     Task ChatUpdatedAsync(ChatUpdatedDto update, IReadOnlyCollection<Guid> memberIds, CancellationToken ct = default);
+
+    /// <summary><c>UserUpdated</c> — a user's public profile — to the user's devices and their contacts.</summary>
+    Task UserUpdatedAsync(UserUpdatedDto update, IReadOnlyCollection<Guid> recipientIds, CancellationToken ct = default);
 
     /// <summary><c>ChatDeleted</c> to all who were members; their connections stop getting the chat's events.</summary>
     Task ChatDeletedAsync(ChatDeletedDto deleted, IReadOnlyCollection<Guid> memberIds, CancellationToken ct = default);

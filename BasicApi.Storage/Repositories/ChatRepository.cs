@@ -22,7 +22,8 @@ public class ChatRepository(IDbSession db) : IChatRepository
                 created_at AS CreatedAt,
                 created_by AS CreatedBy,
                 updated_at AS UpdatedAt,
-                settings::text AS SettingsJson
+                settings::text AS SettingsJson,
+                avatar_attachment_id AS AvatarAttachmentId
             FROM chats
             WHERE id = @chatId";
 
@@ -121,7 +122,8 @@ public class ChatRepository(IDbSession db) : IChatRepository
                 u.id AS UserId,
                 u.display_name AS DisplayName,
                 u.username AS Username,
-                cm.role AS Role
+                cm.role AS Role,
+                u.avatar_attachment_id AS AvatarId
             FROM chat_members cm
             INNER JOIN users u ON cm.user_id = u.id
             WHERE cm.chat_id = @chatId";
@@ -151,6 +153,8 @@ public class ChatRepository(IDbSession db) : IChatRepository
             comp.id AS CompanionId,
             comp.display_name AS CompanionName,
             comp.username AS CompanionUsername,
+            comp.avatar_attachment_id AS CompanionAvatarId,
+            c.avatar_attachment_id AS ChatAvatarId,
 
             -- Unread: other members' messages after the read pointer. Own messages do not count,
             -- nor do deleted ones and those the user deleted for themselves.
@@ -203,7 +207,7 @@ public class ChatRepository(IDbSession db) : IChatRepository
         INNER JOIN chat_members cm ON c.id = cm.chat_id AND cm.user_id = @userId
 
         LEFT JOIN LATERAL (
-            SELECT u.id, u.display_name, u.username
+            SELECT u.id, u.display_name, u.username, u.avatar_attachment_id
             FROM chat_members cm2
             INNER JOIN users u ON u.id = cm2.user_id
             WHERE cm2.chat_id = c.id AND cm2.user_id != @userId

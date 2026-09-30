@@ -7,6 +7,9 @@ public class ChatDetailDto
     public string? Title { get; set; }
     public List<ChatParticipantDto> Participants { get; set; } = new();
 
+    /// <summary>The group's photo, or the companion's in a private chat; null — none.</summary>
+    public Guid? AvatarId { get; set; }
+
     /// <summary>Who created the group; null for other chats.</summary>
     public Guid? CreatedBy { get; set; }
 

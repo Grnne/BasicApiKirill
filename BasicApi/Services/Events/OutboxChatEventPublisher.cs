@@ -1,4 +1,5 @@
 using BasicApi.Models.Dto.Chat;
+using BasicApi.Models.Dto.Users;
 using BasicApi.Models.Dto.Message;
 using BasicApi.Storage;
 using BasicApi.Storage.Interfaces;
@@ -76,6 +77,9 @@ public sealed class OutboxChatEventPublisher(
     public Task ChatUpdatedAsync(ChatUpdatedDto update, IReadOnlyCollection<Guid> memberIds, CancellationToken ct = default) =>
         ToAllAsync(UpdateTypes.ChatUpdated, update, memberIds, ct);
 
+    public Task UserUpdatedAsync(UserUpdatedDto update, IReadOnlyCollection<Guid> recipientIds, CancellationToken ct = default) =>
+        ToAllAsync(UpdateTypes.UserUpdated, update, recipientIds, ct);
+
     public Task ChatDeletedAsync(ChatDeletedDto deleted, IReadOnlyCollection<Guid> memberIds, CancellationToken ct = default) =>
         db.InTransactionAsync(async ct =>
         {
@@ -145,4 +149,5 @@ public static class UpdateTypes
     public const string ChatUpdated = "ChatUpdated";
     public const string ChatDeleted = "ChatDeleted";
     public const string ChatCreated = "ChatCreated";
+    public const string UserUpdated = "UserUpdated";
 }

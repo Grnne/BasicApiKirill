@@ -131,6 +131,7 @@ public static class ServiceExtensions
         services.AddHostedService(sp => sp.GetRequiredService<MediaCleanup>());
         services.AddScoped<IPresenceService, PresenceService>();
         services.AddScoped<IUserService, UserService>();
+        services.AddScoped<IProfileService, ProfileService>();
         services.AddScoped<ISyncService, SyncService>();
         services.AddScoped<AuthService>();
         services.AddScoped<ISessionService, SessionService>();
