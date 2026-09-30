@@ -71,7 +71,7 @@ public sealed class PostgresFixture : IAsyncLifetime
     {
         await using var connection = new NpgsqlConnection(ConnectionString);
         await connection.ExecuteAsync(
-            "TRUNCATE user_blocks, user_privacy, message_attachments, attachments, outbox, user_sync_state, user_updates, user_pts, sessions, messages, chat_members, chats, users RESTART IDENTITY CASCADE");
+            "TRUNCATE folder_chats, folders, user_blocks, user_privacy, message_attachments, attachments, outbox, user_sync_state, user_updates, user_pts, sessions, messages, chat_members, chats, users RESTART IDENTITY CASCADE");
     }
 }
 

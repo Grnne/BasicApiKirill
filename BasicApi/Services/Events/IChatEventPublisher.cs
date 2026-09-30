@@ -65,6 +65,9 @@ public interface IChatEventPublisher
     /// <summary><c>ChatStateChanged</c> — archived, muted — to the member's own devices.</summary>
     Task ChatStateChangedAsync(ChatStateDto state, IReadOnlyCollection<Guid> userIds, CancellationToken ct = default);
 
+    /// <summary><c>FoldersChanged</c> — all the user's folders — to their own devices.</summary>
+    Task FoldersChangedAsync(FoldersDto folders, Guid userId, CancellationToken ct = default);
+
     /// <summary><c>BlockListChanged</c> to the user's own devices.</summary>
     Task BlockListChangedAsync(BlockListChangedDto change, Guid userId, CancellationToken ct = default);
 

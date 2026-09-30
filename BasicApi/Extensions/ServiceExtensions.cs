@@ -112,6 +112,7 @@ public static class ServiceExtensions
         services.AddScoped<IAttachmentRepository, AttachmentRepository>();
         services.AddScoped<IPrivacyRepository, PrivacyRepository>();
         services.AddScoped<IChatStateRepository, ChatStateRepository>();
+        services.AddScoped<IFolderRepository, FolderRepository>();
 
         // Domain services: controllers and the hub are only adapters over them.
         services.AddScoped<IMembershipService, MembershipService>();
@@ -136,6 +137,7 @@ public static class ServiceExtensions
         services.AddScoped<IProfileService, ProfileService>();
         services.AddScoped<IPrivacyService, PrivacyService>();
         services.AddScoped<IChatStateService, ChatStateService>();
+        services.AddScoped<IFolderService, FolderService>();
         services.AddScoped<ISyncService, SyncService>();
         services.AddScoped<AuthService>();
         services.AddScoped<ISessionService, SessionService>();

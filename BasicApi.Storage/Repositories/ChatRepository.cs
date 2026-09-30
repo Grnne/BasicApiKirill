@@ -311,6 +311,39 @@ public class ChatRepository(IDbSession db) : IChatRepository
         }, ct);
     }
 
+    public Task<IReadOnlyList<ChatListResult>> GetFolderChatsAsync(
+        Guid userId, Folder folder, bool pinned, ChatListCursor? before, int limit, CancellationToken ct = default)
+    {
+        // The row's columns are unquoted aliases, so outside the inner query they are lower case.
+        var sql = $@"
+            SELECT * FROM (
+                SELECT x.*, fc.pinned_position AS FolderPinnedPosition
+                FROM ({ChatListBaseSql}
+                      WHERE EXISTS (SELECT 1 FROM folder_chats f WHERE f.folder_id = @folderId AND f.chat_id = c.id)
+                         OR cm.archived_at IS NULL
+                            AND (@includePrivate AND c.type = 'private' OR @includeGroups AND c.type = 'group')) x
+                LEFT JOIN folder_chats fc ON fc.folder_id = @folderId AND fc.chat_id = x.chatid
+            ) y
+            WHERE (NOT @onlyUnread OR y.unreadcount > 0 OR y.markedunread OR y.folderpinnedposition IS NOT NULL)
+              AND y.folderpinnedposition IS {(pinned ? "NOT NULL" : "NULL")}
+              {(before is null || pinned ? "" : "AND (y.lastactivityat, y.chatid) < (@beforeAt, @beforeId)")}
+            ORDER BY {(pinned ? "y.folderpinnedposition" : "y.lastactivityat DESC, y.chatid DESC")}
+            LIMIT @limit";
+
+        return db.QueryAsync<ChatListResult>(sql, new
+        {
+            userId,
+            query = (string?)null,
+            folderId = folder.Id,
+            includePrivate = folder.IncludePrivate,
+            includeGroups = folder.IncludeGroups,
+            onlyUnread = folder.OnlyUnread,
+            beforeAt = before?.LastActivityAt,
+            beforeId = before?.ChatId,
+            limit
+        }, ct);
+    }
+
     public Task<IReadOnlyList<ChatListResult>> GetPinnedChatsAsync(Guid userId, CancellationToken ct = default) =>
         db.QueryAsync<ChatListResult>($@"{ChatListBaseSql}
             WHERE cm.pinned_position IS NOT NULL AND cm.archived_at IS NULL

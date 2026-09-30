@@ -79,6 +79,9 @@ public sealed class SignalRChatEventPublisher(IHubContext<ChatHub> hub, HubConne
     public Task ChatStateChangedAsync(ChatStateDto state, IReadOnlyCollection<Guid> userIds, CancellationToken ct = default) =>
         ToUsers(userIds, "ChatStateChanged", state, ct);
 
+    public Task FoldersChangedAsync(FoldersDto folders, Guid userId, CancellationToken ct = default) =>
+        hub.Clients.User(userId.ToString()).SendAsync("FoldersChanged", folders, ct);
+
     public Task BlockListChangedAsync(BlockListChangedDto change, Guid userId, CancellationToken ct = default) =>
         hub.Clients.User(userId.ToString()).SendAsync("BlockListChanged", change, ct);
 

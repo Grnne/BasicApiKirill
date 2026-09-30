@@ -22,6 +22,15 @@ public interface IChatRepository
         Guid userId, ChatListCursor? before, int limit, CancellationToken ct = default, bool archived = false,
         bool unpinnedOnly = false);
 
+    /// <summary>
+    /// The chats of a folder by activity: the listed ones, and by its filters all private chats or all
+    /// groups outside the archive; with <c>OnlyUnread</c> — those with something unread (the pinned
+    /// ones always). <paramref name="pinned"/> — only the chats pinned in the folder, in their order;
+    /// otherwise the others, a page at a time.
+    /// </summary>
+    Task<IReadOnlyList<ChatListResult>> GetFolderChatsAsync(
+        Guid userId, Folder folder, bool pinned, ChatListCursor? before, int limit, CancellationToken ct = default);
+
     /// <summary>The user's pinned chats of the main list, top first.</summary>
     Task<IReadOnlyList<ChatListResult>> GetPinnedChatsAsync(Guid userId, CancellationToken ct = default);
 
