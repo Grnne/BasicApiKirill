@@ -53,6 +53,19 @@ public interface IChatPolicy
     Task<PolicyDecision> CanManageAsync(
         Guid userId, Guid chatId, GroupAction action, ChatMember? target = null, CancellationToken ct = default);
 
+    /// <summary>
+    /// Start a private chat with <paramref name="otherId"/> (D11): by their <c>messages</c> setting, and
+    /// not when they blocked the user. An existing chat is not asked about.
+    /// </summary>
+    Task<PolicyDecision> CanStartPrivateChatAsync(Guid userId, Guid otherId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Of <paramref name="candidateIds"/>, whom <paramref name="userId"/> may not add to a group: by their
+    /// <c>groupAdd</c> setting or a block.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> GetGroupAddRefusalsAsync(
+        Guid userId, IReadOnlyCollection<Guid> candidateIds, CancellationToken ct = default);
+
     /// <summary>Who sees a user's online status — their changes are broadcast to them.</summary>
     Task<IReadOnlyCollection<Guid>> GetPresenceAudienceAsync(Guid userId, CancellationToken ct = default);
 
@@ -75,6 +88,7 @@ public sealed class ChatPolicy(
     public const string DeleteWindowExpiredCode = "DELETE_WINDOW_EXPIRED";
     public const string MessageNotEditableCode = "MESSAGE_NOT_EDITABLE";
     public const string PermissionDeniedCode = "PERMISSION_DENIED";
+    public const string PrivacyRestrictedCode = "PRIVACY_RESTRICTED";
 
     private readonly MessageOptions _messages = options?.Value ?? new MessageOptions();
     private readonly TimeProvider _time = time ?? TimeProvider.System;
@@ -173,6 +187,27 @@ public sealed class ChatPolicy(
         GroupAction.ViewAudit => "Only admins can see the group's actions",
         _ => "Access denied"
     };
+
+    public async Task<PolicyDecision> CanStartPrivateChatAsync(Guid userId, Guid otherId, CancellationToken ct = default)
+    {
+        if (privacy is null)
+            return PolicyDecision.Allow;
+
+        // Which of the two it is — a setting or a block — is not told: a block stays unnoticed.
+        var denied = PolicyDecision.Deny(PrivacyRestrictedCode, "This user does not accept messages from you");
+        if (await privacy.IsBlockedAsync(otherId, userId, ct))
+            return denied;
+        return (await privacy.GetAsync(otherId, ct)).Messages switch
+        {
+            PrivacyLevels.Nobody => denied,
+            PrivacyLevels.Contacts when !await privacy.ShareChatAsync(userId, otherId, ct) => denied,
+            _ => PolicyDecision.Allow
+        };
+    }
+
+    public async Task<IReadOnlyList<Guid>> GetGroupAddRefusalsAsync(
+        Guid userId, IReadOnlyCollection<Guid> candidateIds, CancellationToken ct = default) =>
+        privacy is null || candidateIds.Count == 0 ? [] : await privacy.GetGroupAddRefusalsAsync(userId, candidateIds, ct);
 
     /// <remarks>
     /// Presence is mutual: contacts who neither hide it (D11) nor blocked one another. Without the

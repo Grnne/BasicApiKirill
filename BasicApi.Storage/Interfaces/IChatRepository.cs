@@ -30,6 +30,9 @@ public interface IChatRepository
     /// Atomic: concurrent calls for the same pair (in any order) end up with one chat,
     /// and exactly one of them reports <c>Created = true</c>.
     /// </summary>
+    /// <summary>The private chat of the two, if there is one.</summary>
+    Task<Guid?> GetPrivateChatIdAsync(Guid userId, Guid otherUserId, CancellationToken ct = default);
+
     Task<(Guid ChatId, bool Created)> GetOrCreatePrivateChatAsync(
         Guid userId, Guid otherUserId, CancellationToken ct = default);
 

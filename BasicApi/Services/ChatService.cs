@@ -104,6 +104,10 @@ public sealed class ChatService(
         if (other is null || !other.IsActive)
             throw new NotFoundException("User not found", "USER_NOT_FOUND");
 
+        // Privacy decides only whether a new chat may start: an existing one keeps working (D11).
+        if (await chatRepository.GetPrivateChatIdAsync(userId, otherUserId, ct) is null)
+            (await policy.CanStartPrivateChatAsync(userId, otherUserId, ct)).Demand();
+
         // The chat and its events are one transaction.
         var result = await db.InTransactionAsync(async ct =>
         {

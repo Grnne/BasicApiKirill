@@ -1409,6 +1409,23 @@ MessagesRead:      { "chatId": "…", "userId": "<кто прочитал>", "se
 `GET /api/users/status` (кто из собеседников в сети) и `UserOnlineChanged` учитывают те же
 правила.
 
+### 16.2. Кто пишет в личку и кто добавляет в группы
+
+- **`POST /api/chats/private/{userId}`** создаёт новый чат, только если это разрешает настройка
+  `messages` собеседника: `everybody`; `contacts` — если у двоих уже есть общий чат (группа);
+  `nobody` — никому. Иначе `403 PRIVACY_RESTRICTED`. Уже существующий личный чат открывается и
+  работает при любой настройке.
+- **Добавление в группу** — при создании (`POST /api/chats/groups`) и позже
+  (`POST /api/chats/{chatId}/members`) — по настройке `groupAdd` каждого добавляемого, с тем же
+  смыслом `contacts` (общий чат с добавляющим). Если кого-то добавить нельзя, не добавляется
+  никто: `403 PRIVACY_RESTRICTED`, в ответе — **`userIds`**, кого именно:
+
+  ```json
+  { "errorCode": "PRIVACY_RESTRICTED", "userIds": ["…"], "detail": "These users do not allow you to add them to groups" }
+  ```
+
+  Клиент может убрать их и повторить.
+
 ---
 
 ## Справочник кодов ошибок
@@ -1458,6 +1475,7 @@ MessagesRead:      { "chatId": "…", "userId": "<кто прочитал>", "se
 | `EDIT_WINDOW_EXPIRED` | 403 | Правка: прошло больше `Messages:EditWindowHours` (48 ч) |
 | `DELETE_WINDOW_EXPIRED` | 403 | Удаление у всех: прошло больше `Messages:DeleteWindowHours` (48 ч) |
 | `MESSAGE_NOT_EDITABLE` | 403 | Правка пересланного или системного сообщения |
+| `PRIVACY_RESTRICTED` | 403 | Новый личный чат или добавление в группу запрещены настройками приватности (или блокировкой) — в `userIds` кого касается, если их несколько |
 | `PERMISSION_DENIED` | 403 | Группа: у пользователя нет нужного права или роли (в `detail` — какого) |
 | `ACCESS_DENIED` | 403 | Прочие отказы в доступе |
 | `USER_NOT_FOUND` | 404 | Пользователь не найден (или вне общих чатов — для статуса) |

@@ -34,6 +34,10 @@ public class ChatRepository(IDbSession db) : IChatRepository
     private const string PrivateKeySql =
         "LEAST(@userId, @otherUserId)::text || ':' || GREATEST(@userId, @otherUserId)::text";
 
+    public Task<Guid?> GetPrivateChatIdAsync(Guid userId, Guid otherUserId, CancellationToken ct = default) =>
+        db.QueryFirstOrDefaultAsync<Guid?>(
+            $"SELECT id FROM chats WHERE private_key = {PrivateKeySql}", new { userId, otherUserId }, ct);
+
     public Task<(Guid ChatId, bool Created)> GetOrCreatePrivateChatAsync(
         Guid userId, Guid otherUserId, CancellationToken ct = default) =>
         db.InTransactionAsync(async ct =>

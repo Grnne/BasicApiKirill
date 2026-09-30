@@ -129,6 +129,7 @@ public sealed class GroupService(
         if (invited.Count + 1 > _options.MaxMembers)
             throw TooManyMembers();
         await DemandActiveUsersAsync(invited, ct);
+        await DemandMayAddAsync(creatorId, invited, ct);
 
         var chatId = Guid.NewGuid();
         var now = Now();
@@ -259,6 +260,7 @@ public sealed class GroupService(
             var fresh = invited.Except(before).ToList();
             if (fresh.Count == 0)
                 return ((IReadOnlyList<GroupMemberDto>)[], before);
+            await DemandMayAddAsync(userId, fresh, ct);
             if (count + fresh.Count > _options.MaxMembers)
                 throw TooManyMembers();
 
@@ -506,6 +508,17 @@ public sealed class GroupService(
             ? trimmed
             : throw new BadRequestException(
                 $"Group title must be 1 to {GroupOptions.MaxTitleLength} characters", "INVALID_TITLE");
+    }
+
+    /// <summary>
+    /// Everyone may be added by this user (their <c>groupAdd</c> setting, blocks); otherwise nobody is
+    /// added and the refusal names whom (D11).
+    /// </summary>
+    private async Task DemandMayAddAsync(Guid adderId, IReadOnlyCollection<Guid> userIds, CancellationToken ct)
+    {
+        var refused = await policy.GetGroupAddRefusalsAsync(adderId, userIds, ct);
+        if (refused.Count > 0)
+            throw new PrivacyRestrictedException("These users do not allow you to add them to groups", refused);
     }
 
     /// <summary>Everyone to be added exists and is active; otherwise 404, as for a private chat.</summary>

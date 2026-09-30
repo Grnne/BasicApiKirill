@@ -79,7 +79,8 @@ public class ExceptionHandlingMiddleware
             if (ex is UnauthorizedException)
                 SetWwwAuthenticateHeader(context);
 
-            await WriteProblemDetailsAsync(context, status, title, ex.Message, errorCode: ex.ErrorCode);
+            await WriteProblemDetailsAsync(context, status, title, ex.Message, errorCode: ex.ErrorCode,
+                userIds: (ex as PrivacyRestrictedException)?.UserIds);
         }
         catch (Exception ex)
         {
@@ -100,7 +101,8 @@ public class ExceptionHandlingMiddleware
         string title,
         string detail,
         string? errorCode = null,
-        string? stackTrace = null)
+        string? stackTrace = null,
+        IReadOnlyList<Guid>? userIds = null)
     {
         context.Response.ContentType = "application/problem+json";
         context.Response.StatusCode = statusCode;
@@ -126,6 +128,12 @@ public class ExceptionHandlingMiddleware
         if (stackTrace is not null)
         {
             problemDetails.Extensions["stackTrace"] = stackTrace;
+        }
+
+        // Whom the refusal is about, when there are several (adding to a group).
+        if (userIds is not null)
+        {
+            problemDetails.Extensions["userIds"] = userIds;
         }
 
         var json = JsonSerializer.Serialize(problemDetails, JsonOptions);
