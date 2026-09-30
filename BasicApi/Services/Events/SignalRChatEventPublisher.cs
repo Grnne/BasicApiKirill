@@ -73,6 +73,9 @@ public sealed class SignalRChatEventPublisher(IHubContext<ChatHub> hub, HubConne
     public Task ChatUpdatedAsync(ChatUpdatedDto update, IReadOnlyCollection<Guid> memberIds, CancellationToken ct = default) =>
         ToUsers(memberIds, "ChatUpdated", update, ct);
 
+    public Task PrivacyUpdatedAsync(PrivacySettingsDto settings, Guid userId, CancellationToken ct = default) =>
+        hub.Clients.User(userId.ToString()).SendAsync("PrivacyUpdated", settings, ct);
+
     public Task UserUpdatedAsync(UserUpdatedDto update, IReadOnlyCollection<Guid> recipientIds, CancellationToken ct = default) =>
         ToUsers(recipientIds, "UserUpdated", update, ct);
 

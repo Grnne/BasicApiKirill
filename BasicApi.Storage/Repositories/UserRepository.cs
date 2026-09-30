@@ -68,6 +68,7 @@ public class UserRepository(IDbSession db) : IUserRepository
     public Task<IReadOnlyList<User>> GetByIdsAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default) =>
         db.QueryAsync<User>(@"
             SELECT id AS Id, username AS Username, email AS Email, display_name AS DisplayName, avatar_attachment_id AS AvatarAttachmentId,
+                   last_seen_at AS LastSeenAt,
                    created_at AS CreatedAt, last_login_at AS LastLoginAt, is_active AS IsActive
             FROM users
             WHERE id = ANY(@ids)",
@@ -92,6 +93,9 @@ public class UserRepository(IDbSession db) : IUserRepository
 
         return await db.QueryFirstOrDefaultAsync<User>(sql, new { Id = id }, ct);
     }
+
+    public Task SetLastSeenAsync(Guid userId, DateTime at, CancellationToken ct = default) =>
+        db.ExecuteAsync("UPDATE users SET last_seen_at = @at WHERE id = @userId", new { userId, at }, ct);
 
     public async Task<bool> SetAvatarAsync(Guid userId, Guid? attachmentId, CancellationToken ct = default) =>
         await db.ExecuteAsync(@"

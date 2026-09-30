@@ -1,6 +1,7 @@
 using BasicApi.Middleware.Exceptions;
 using BasicApi.Models.Dto.Users;
 using BasicApi.Services.Events;
+using BasicApi.Storage.Interfaces;
 
 namespace BasicApi.Services;
 
@@ -51,6 +52,14 @@ public interface IPresenceService
 
     /// <summary>Who is typing in the user's chats.</summary>
     Task<TypingStatusResponseDto> GetTypingAsync(Guid userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// The user and <paramref name="lost"/> stopped seeing each other's presence (a privacy setting,
+    /// a block), <paramref name="gained"/> started: whoever of them is online appears offline to the
+    /// other, or online.
+    /// </summary>
+    Task PeersChangedAsync(
+        Guid userId, IReadOnlyCollection<Guid> lost, IReadOnlyCollection<Guid> gained, CancellationToken ct = default);
 }
 
 public sealed record ConnectionInfo(int ConnectionCount, bool IsCurrentActive);
@@ -60,8 +69,12 @@ public sealed class PresenceService(
     IMembershipService membership,
     IChatPolicy policy,
     IChatEventPublisher events,
-    ILogger<PresenceService> logger) : IPresenceService
+    ILogger<PresenceService> logger,
+    IUserRepository? users = null,
+    TimeProvider? time = null) : IPresenceService
 {
+    private readonly TimeProvider _time = time ?? TimeProvider.System;
+
     public async Task ConnectedAsync(Guid userId, string connectionId, CancellationToken ct = default)
     {
         var isFirstConnection = await status.SetUserOnlineStatusAsync(userId, connectionId, true);
@@ -74,8 +87,15 @@ public sealed class PresenceService(
                 userId, connectionId, await status.GetConnectionCountAsync(userId));
         }
 
-        if (isFirstConnection)
-            await events.UserOnlineChangedAsync(userId, true, await policy.GetPresenceAudienceAsync(userId, ct), ct);
+        if (!isFirstConnection)
+            return;
+        // Also when coming online: after a crash no disconnect records it, and last seen should not
+        // be older than the last time the user was around.
+        await RecordLastSeenAsync(userId);
+        // The user is online already: the contacts are told even if the connection drops meanwhile
+        // (then they are told "offline" right after).
+        await events.UserOnlineChangedAsync(userId, true, await policy.GetPresenceAudienceAsync(userId, CancellationToken.None),
+            CancellationToken.None);
     }
 
     public async Task DisconnectedAsync(Guid userId, string connectionId)
@@ -91,6 +111,7 @@ public sealed class PresenceService(
         if (!wentOffline)
             return;
 
+        await RecordLastSeenAsync(userId);
         await events.UserOnlineChangedAsync(userId, false, await policy.GetPresenceAudienceAsync(userId));
 
         // Left with the last connection in the middle of typing - clear "typing" right away, without waiting for the TTL.
@@ -155,11 +176,11 @@ public sealed class PresenceService(
 
     public async Task<UserStatusDto> GetUserStatusAsync(Guid viewerId, Guid targetId, CancellationToken ct = default)
     {
-        if ((await policy.FilterPresenceVisibleAsync(viewerId, [targetId], ct)).Count == 0)
+        var known = await KnownAsync(viewerId, [targetId], ct);
+        if (known.Count == 0)
             throw new NotFoundException("User not found", "USER_NOT_FOUND");
 
-        var onlineIds = await status.GetOnlineUserIdsAsync(new HashSet<Guid> { targetId });
-        return new UserStatusDto { UserId = targetId, IsOnline = onlineIds.Contains(targetId) };
+        return (await StatusesAsync(viewerId, known, ct))[0];
     }
 
     public async Task<UserStatusResponseDto> GetUsersStatusAsync(
@@ -172,16 +193,31 @@ public sealed class PresenceService(
             throw new BadRequestException(
                 $"At most {UserStatusBatchRequestDto.MaxUserIds} userIds per request", "TOO_MANY_IDS");
 
-        var requested = await policy.FilterPresenceVisibleAsync(viewerId, userIds, ct);
-        if (requested.Count == 0)
-            return new UserStatusResponseDto();
+        var requested = await KnownAsync(viewerId, userIds, ct);
+        return requested.Count == 0
+            ? new UserStatusResponseDto()
+            : new UserStatusResponseDto { Items = await StatusesAsync(viewerId, requested, ct) };
+    }
 
-        var onlineIds = await status.GetOnlineUserIdsAsync(requested);
+    /// <summary>Whom the viewer may ask about at all: themselves and those who share a chat with them.</summary>
+    private async Task<List<Guid>> KnownAsync(Guid viewerId, IReadOnlyCollection<Guid> userIds, CancellationToken ct)
+    {
+        var contacts = (await membership.GetContactIdsAsync(viewerId, ct)).ToHashSet();
+        contacts.Add(viewerId);
+        return [.. userIds.Distinct().Where(contacts.Contains)];
+    }
 
-        return new UserStatusResponseDto
-        {
-            Items = [.. requested.Select(id => new UserStatusDto { UserId = id, IsOnline = onlineIds.Contains(id) })]
-        };
+    /// <summary>
+    /// Statuses of known users: a contact who hides their presence from the viewer (or whose the
+    /// viewer cannot see — privacy, block) is simply offline, with no last seen.
+    /// </summary>
+    private async Task<List<UserStatusDto>> StatusesAsync(Guid viewerId, List<Guid> known, CancellationToken ct)
+    {
+        var visible = await policy.FilterPresenceVisibleAsync(viewerId, known, ct);
+        var onlineIds = await status.GetOnlineUserIdsAsync(visible);
+        var items = known.Select(id => new UserStatusDto { UserId = id, IsOnline = onlineIds.Contains(id) }).ToList();
+        await WithLastSeenAsync([.. items.Where(i => visible.Contains(i.UserId))], ct);
+        return items;
     }
 
     public async Task<TypingStatusResponseDto> GetTypingAsync(Guid userId, CancellationToken ct = default)
@@ -198,6 +234,53 @@ public sealed class PresenceService(
                 IsTyping = true
             }))]
         };
+    }
+
+    public async Task PeersChangedAsync(
+        Guid userId, IReadOnlyCollection<Guid> lost, IReadOnlyCollection<Guid> gained, CancellationToken ct = default)
+    {
+        if (lost.Count + gained.Count == 0)
+            return;
+        var online = await status.GetOnlineUserIdsAsync(new HashSet<Guid>([userId, .. lost, .. gained]));
+
+        if (online.Contains(userId))
+        {
+            if (lost.Count > 0)
+                await events.UserOnlineChangedAsync(userId, false, lost, ct);
+            if (gained.Count > 0)
+                await events.UserOnlineChangedAsync(userId, true, gained, ct);
+        }
+        foreach (var peer in lost.Where(online.Contains))
+            await events.UserOnlineChangedAsync(peer, false, [userId], ct);
+        foreach (var peer in gained.Where(online.Contains))
+            await events.UserOnlineChangedAsync(peer, true, [userId], ct);
+    }
+
+    private async Task RecordLastSeenAsync(Guid userId)
+    {
+        if (users is null)
+            return;
+        try
+        {
+            await users.SetLastSeenAsync(userId, _time.GetUtcNow().UtcDateTime);
+        }
+        catch (Exception ex)
+        {
+            // Presence must not fail because of it: last seen is a nicety.
+            logger.LogWarning(ex, "Could not record last seen for {UserId}", userId);
+        }
+    }
+
+    /// <summary>Last seen for the offline ones — the caller already sees their presence.</summary>
+    private async Task<List<UserStatusDto>> WithLastSeenAsync(List<UserStatusDto> items, CancellationToken ct)
+    {
+        var offline = items.Where(i => !i.IsOnline).Select(i => i.UserId).ToList();
+        if (users is null || offline.Count == 0)
+            return items;
+        var seen = (await users.GetByIdsAsync(offline, ct)).ToDictionary(u => u.Id, u => u.LastSeenAt);
+        foreach (var item in items.Where(i => !i.IsOnline))
+            item.LastSeenAt = seen.GetValueOrDefault(item.UserId);
+        return items;
     }
 
     private static Guid[] Others(IReadOnlyList<Guid> memberIds, Guid userId) =>

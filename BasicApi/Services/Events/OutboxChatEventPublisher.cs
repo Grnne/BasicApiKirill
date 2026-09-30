@@ -77,6 +77,9 @@ public sealed class OutboxChatEventPublisher(
     public Task ChatUpdatedAsync(ChatUpdatedDto update, IReadOnlyCollection<Guid> memberIds, CancellationToken ct = default) =>
         ToAllAsync(UpdateTypes.ChatUpdated, update, memberIds, ct);
 
+    public Task PrivacyUpdatedAsync(PrivacySettingsDto settings, Guid userId, CancellationToken ct = default) =>
+        ToAllAsync(UpdateTypes.PrivacyUpdated, settings, [userId], ct);
+
     public Task UserUpdatedAsync(UserUpdatedDto update, IReadOnlyCollection<Guid> recipientIds, CancellationToken ct = default) =>
         ToAllAsync(UpdateTypes.UserUpdated, update, recipientIds, ct);
 
@@ -150,4 +153,5 @@ public static class UpdateTypes
     public const string ChatDeleted = "ChatDeleted";
     public const string ChatCreated = "ChatCreated";
     public const string UserUpdated = "UserUpdated";
+    public const string PrivacyUpdated = "PrivacyUpdated";
 }

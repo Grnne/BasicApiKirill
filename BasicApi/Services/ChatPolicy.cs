@@ -1,6 +1,7 @@
 using BasicApi.Middleware.Exceptions;
 using BasicApi.Storage.Dto;
 using BasicApi.Storage.Entities;
+using BasicApi.Storage.Interfaces;
 using Microsoft.Extensions.Options;
 
 namespace BasicApi.Services;
@@ -63,7 +64,8 @@ public interface IChatPolicy
 public sealed class ChatPolicy(
     IMembershipService membership,
     IOptions<MessageOptions>? options = null,
-    TimeProvider? time = null) : IChatPolicy
+    TimeProvider? time = null,
+    IPrivacyRepository? privacy = null) : IChatPolicy
 {
     public const string NotAMemberCode = "NOT_A_MEMBER";
     private const string NotAMemberReason = "User is not a member of this chat";
@@ -172,14 +174,22 @@ public sealed class ChatPolicy(
         _ => "Access denied"
     };
 
+    /// <remarks>
+    /// Presence is mutual: contacts who neither hide it (D11) nor blocked one another. Without the
+    /// privacy store (unit tests) — all contacts.
+    /// </remarks>
     public async Task<IReadOnlyCollection<Guid>> GetPresenceAudienceAsync(Guid userId, CancellationToken ct = default) =>
-        await membership.GetContactIdsAsync(userId, ct);
+        privacy is null
+            ? await membership.GetContactIdsAsync(userId, ct)
+            : await privacy.GetPresencePeersAsync(userId, ct: ct);
 
     public async Task<IReadOnlySet<Guid>> FilterPresenceVisibleAsync(
         Guid viewerId, IReadOnlyCollection<Guid> userIds, CancellationToken ct = default)
     {
-        // Your own status is always visible; someone else's — if there is a shared chat.
-        var visible = (await membership.GetContactIdsAsync(viewerId, ct)).ToHashSet();
+        // Your own status is always visible; someone else's — by the same mutual rule.
+        var visible = (privacy is null
+            ? await membership.GetContactIdsAsync(viewerId, ct)
+            : await privacy.GetPresencePeersAsync(viewerId, userIds, ct)).ToHashSet();
         visible.Add(viewerId);
         return userIds.Where(visible.Contains).ToHashSet();
     }

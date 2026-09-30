@@ -12,7 +12,8 @@ namespace BasicApi.Features.Users;
 [Produces("application/json")]
 [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
 [Tags("Users")]
-public class UsersController(IUserService users, IPresenceService presence, IProfileService profile) : ControllerBase
+public class UsersController(
+    IUserService users, IPresenceService presence, IProfileService profile, IPrivacyService privacy) : ControllerBase
 {
     /// <summary>
     /// Get a user's ID by username.
@@ -96,6 +97,41 @@ public class UsersController(IUserService users, IPresenceService presence, IPro
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetOwnProfile(CancellationToken ct)
         => Ok(await users.GetOwnProfileAsync(User.GetUserId(), ct));
+
+    /// <summary>
+    /// The caller's privacy settings.
+    /// </summary>
+    /// <remarks>
+    /// <c>lastSeen</c>, <c>messages</c>, <c>groupAdd</c> — each <c>everybody</c>, <c>contacts</c> (those who
+    /// share a chat with the caller) or <c>nobody</c>; never changed — everybody.
+    /// </remarks>
+    [Authorize]
+    [HttpGet("me/privacy")]
+    [ProducesResponseType(typeof(PrivacySettingsDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetPrivacy(CancellationToken ct)
+        => Ok(await privacy.GetAsync(User.GetUserId(), ct));
+
+    /// <summary>
+    /// Change the caller's privacy settings.
+    /// </summary>
+    /// <remarks>
+    /// Only the fields given change. Answers with all settings; the caller's other devices get
+    /// <c>PrivacyUpdated</c>.
+    ///
+    /// - <c>lastSeen</c> — who sees online and last seen. It works both ways: whoever hides theirs
+    ///   (<c>nobody</c>) does not see the others' either. Takes effect at once.
+    /// - <c>messages</c> — who may start a private chat; an existing chat keeps working.
+    /// - <c>groupAdd</c> — who may add the caller to groups.
+    ///
+    /// Errors: <c>400 INVALID_PRIVACY</c>.
+    /// </remarks>
+    [Authorize]
+    [HttpPut("me/privacy")]
+    [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
+    [ProducesResponseType(typeof(PrivacySettingsDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> UpdatePrivacy([FromBody] PrivacySettingsDto dto, CancellationToken ct)
+        => Ok(await privacy.UpdateAsync(User.GetUserId(), dto, ct));
 
     /// <summary>
     /// Set the caller's avatar.

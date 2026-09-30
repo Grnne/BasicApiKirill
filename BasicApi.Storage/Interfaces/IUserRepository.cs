@@ -26,6 +26,9 @@ public interface IUserRepository
     /// </summary>
     Task<User?> GetByIdAsync(Guid id, CancellationToken ct = default);
 
+    /// <summary>Records when the user was last seen online.</summary>
+    Task SetLastSeenAsync(Guid userId, DateTime at, CancellationToken ct = default);
+
     /// <summary>Sets or clears the avatar; false when it was already so.</summary>
     Task<bool> SetAvatarAsync(Guid userId, Guid? attachmentId, CancellationToken ct = default);
 
