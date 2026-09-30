@@ -22,6 +22,15 @@ public interface IDeviceRepository
 
     Task ClearPushAsync(Guid userId, Guid deviceId, CancellationToken ct = default);
 
+    /// <summary>Removes a subscription the push service no longer knows.</summary>
+    Task ClearPushByEndpointAsync(string endpoint, CancellationToken ct = default);
+
+    /// <summary>
+    /// Where to push a new message of the chat: the subscribed devices, with an open sign-in, of the
+    /// members other than the sender who have not muted the chat and have not blocked the sender.
+    /// </summary>
+    Task<IReadOnlyList<PushTarget>> GetPushTargetsAsync(Guid chatId, Guid senderId, CancellationToken ct = default);
+
     /// <summary>
     /// Deletes up to <paramref name="batchSize"/> devices whose sign-in has ended in any way
     /// (logout, expiry, revocation on token theft); returns how many.
@@ -47,3 +56,16 @@ public sealed class Device
 
 /// <summary>A WebPush subscription: where to deliver and the keys to encrypt for (base64url).</summary>
 public sealed record DevicePush(string Endpoint, string P256dh, string Auth);
+
+public sealed class PushTarget
+{
+    public Guid DeviceId { get; set; }
+    public Guid UserId { get; set; }
+    public string Endpoint { get; set; } = string.Empty;
+    public string P256dh { get; set; } = string.Empty;
+    public string Auth { get; set; } = string.Empty;
+    public string ChatType { get; set; } = string.Empty;
+    public string? ChatTitle { get; set; }
+
+    public DevicePush Push => new(Endpoint, P256dh, Auth);
+}

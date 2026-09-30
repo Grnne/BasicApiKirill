@@ -69,6 +69,8 @@ public class OutboxTests
             .AddScoped<IOutboxRepository>(_ => _outbox)
             .BuildServiceProvider();
         _dispatcher = new OutboxDispatcher(services.GetRequiredService<IServiceScopeFactory>(), _hub, new HubConnectionRegistry(), _signal,
+            new BasicApi.Services.Push.PushQueue(Microsoft.Extensions.Options.Options.Create(new BasicApi.Services.Push.PushOptions()),
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<BasicApi.Services.Push.PushQueue>.Instance),
             new ConfigurationBuilder().Build(), _logger);
     }
 
@@ -125,6 +127,38 @@ public class OutboxTests
             Assert.Equal(expected.Ids, actual.Ids);
             Assert.Equal(expected.Args.Select(Json), actual.Args.Select(Json));
         }
+    }
+
+    [Fact]
+    public async Task NewMessage_GoesToThePushQueue_NotToTheHub()
+    {
+        var (publicKey, privateKey) = BasicApi.Services.Push.VapidKeys.Generate();
+        var queue = new BasicApi.Services.Push.PushQueue(
+            Microsoft.Extensions.Options.Options.Create(new BasicApi.Services.Push.PushOptions
+            {
+                VapidPublicKey = publicKey,
+                VapidPrivateKey = privateKey
+            }),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<BasicApi.Services.Push.PushQueue>.Instance);
+        var services = new ServiceCollection()
+            .AddScoped<IDbSession>(_ => _db)
+            .AddScoped<IOutboxRepository>(_ => _outbox)
+            .BuildServiceProvider();
+        var dispatcher = new OutboxDispatcher(services.GetRequiredService<IServiceScopeFactory>(), _hub,
+            new HubConnectionRegistry(), _signal, queue, new ConfigurationBuilder().Build(), _logger);
+        var message = Message();
+        message.Type = "media";
+        message.Attachments = [new() { Kind = "photo" }, new() { Kind = "photo" }];
+
+        await _publisher.MessageCreatedAsync(message, [message.SenderId, Guid.NewGuid()]);
+        await dispatcher.DispatchPendingAsync();
+
+        Assert.Equal(["MessageCreated", "ChatListUpdated"], _hub.Recorder.Sent.Select(s => s.Method));
+        Assert.True(queue.Reader.TryRead(out var job));
+        Assert.Equal((message.ChatId, message.SenderId), (job.ChatId, job.SenderId));
+        Assert.Equal((message.Id, message.Seq, "Alice", "media"),
+            (job.Notification.MessageId, job.Notification.Seq, job.Notification.SenderName, job.Notification.MessageType));
+        Assert.Equal(("photo", 2), (job.Notification.AttachmentKind, job.Notification.AttachmentCount));
     }
 
     [Fact]

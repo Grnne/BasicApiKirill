@@ -26,7 +26,8 @@ public sealed class OutboxChatEventPublisher(
             await journal.AppendAsync(memberIds, UpdateTypes.MessageCreated, Json(message), ct);
             await EnqueueAsync(UpdateTypes.MessageCreated, ct,
                 HubSend.Group(message.ChatId, "MessageCreated", message),
-                HubSend.Users(memberIds, "ChatListUpdated", message.ChatId, SignalRChatEventPublisher.Preview(message)));
+                HubSend.Users(memberIds, "ChatListUpdated", message.ChatId, SignalRChatEventPublisher.Preview(message)),
+                HubSend.Push(message.ChatId, message.SenderId, Push.PushNotifications.Of(message)));
             return true;
         }, ct: ct);
 

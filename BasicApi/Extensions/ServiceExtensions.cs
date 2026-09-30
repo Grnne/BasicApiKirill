@@ -147,6 +147,10 @@ public static class ServiceExtensions
         // Push: WebPush with the VAPID keys from Push:*; without them push is off.
         services.Configure<PushOptions>(configuration.GetSection(PushOptions.Section));
         services.AddScoped<IPushService, PushService>();
+        services.AddSingleton<PushQueue>();
+        services.AddHttpClient<IPushTransport, WebPushTransport>(client => client.Timeout = TimeSpan.FromSeconds(10));
+        services.AddSingleton<PushSender>();
+        services.AddHostedService(sp => sp.GetRequiredService<PushSender>());
         // Events: messages and new chats go through the outbox in the transaction of the change,
         // "typing" and online go out immediately (ephemeral).
         services.AddScoped<SignalRChatEventPublisher>();

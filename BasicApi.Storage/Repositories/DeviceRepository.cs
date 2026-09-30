@@ -55,6 +55,26 @@ public sealed class DeviceRepository(IDbSession db) : IDeviceRepository
             WHERE id = @deviceId AND user_id = @userId AND push_endpoint IS NOT NULL",
             new { userId, deviceId }, ct);
 
+    public Task ClearPushByEndpointAsync(string endpoint, CancellationToken ct = default) =>
+        db.ExecuteAsync(@"
+            UPDATE devices SET push_endpoint = NULL, push_p256dh = NULL, push_auth = NULL, push_updated_at = now()
+            WHERE push_endpoint = @endpoint",
+            new { endpoint }, ct);
+
+    public Task<IReadOnlyList<PushTarget>> GetPushTargetsAsync(Guid chatId, Guid senderId, CancellationToken ct = default) =>
+        db.QueryAsync<PushTarget>($@"
+            SELECT d.id AS DeviceId, d.user_id AS UserId, d.push_endpoint AS Endpoint,
+                   d.push_p256dh AS P256dh, d.push_auth AS Auth, c.type AS ChatType, c.title AS ChatTitle
+            FROM chat_members cm
+            JOIN chats c ON c.id = cm.chat_id
+            JOIN devices d ON d.user_id = cm.user_id AND d.push_endpoint IS NOT NULL
+            WHERE cm.chat_id = @chatId AND cm.user_id <> @senderId
+              AND (cm.muted_until IS NULL OR cm.muted_until <= now())
+              AND NOT EXISTS (
+                  SELECT 1 FROM user_blocks b WHERE b.blocker_id = cm.user_id AND b.blocked_id = @senderId)
+              AND EXISTS ({LiveHead})",
+            new { chatId, senderId }, ct);
+
     public Task<int> DeleteDeadAsync(int batchSize, CancellationToken ct = default) =>
         db.ExecuteAsync($@"
             DELETE FROM devices WHERE id IN (
