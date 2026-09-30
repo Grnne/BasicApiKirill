@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using BasicApi.Features.Auth;
+using BasicApi.Features.Messages;
 using BasicApi.Hubs;
 using BasicApi.Middleware.Exceptions;
 using BasicApi.Services;

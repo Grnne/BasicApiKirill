@@ -1,0 +1,75 @@
+using BasicApi.Features.Chats;
+using BasicApi.Middleware.Exceptions;
+using BasicApi.Services;
+using BasicApi.Services.Events;
+using BasicApi.Storage.Entities;
+using BasicApi.Storage.Interfaces;
+using BasicApi.Tests.TestDoubles;
+using Moq;
+
+namespace BasicApi.Tests.Features.Chats;
+
+public class ChatServiceChatDetailsTests
+{
+    private readonly Mock<IChatRepository> _chatRepoMock;
+    private readonly ChatService _service;
+
+    public ChatServiceChatDetailsTests()
+    {
+        _chatRepoMock = new Mock<IChatRepository>();
+        _service = new ChatService(new FakeDbSession(), _chatRepoMock.Object, Mock.Of<IUserRepository>(), new ChatPolicy(new MembershipService(_chatRepoMock.Object)),
+            Mock.Of<IPresenceService>(), Mock.Of<IChatEventPublisher>());
+    }
+
+    [Fact]
+    public async Task GetChatDetailsAsync_Success_ReturnsChatDetailWithParticipants()
+    {
+        // Arrange
+        var chatId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+
+        var chat = new Chat
+        {
+            Id = chatId,
+            Type = "group",
+            Title = "Team Chat",
+            CreatedAt = now
+        };
+
+        var participants = new List<BasicApi.Storage.Dto.ChatParticipantDto>
+        {
+            new(Guid.NewGuid(), "Alice", "alice", "member", null),
+            new(Guid.NewGuid(), "Bob", "bob", "member", null),
+        };
+
+        _chatRepoMock.Setup(r => r.GetByIdAsync(chatId, It.IsAny<CancellationToken>())).ReturnsAsync(chat);
+        _chatRepoMock.Setup(r => r.IsMemberAsync(chatId, userId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        _chatRepoMock.Setup(r => r.GetChatParticipantsAsync(chatId, It.IsAny<CancellationToken>())).ReturnsAsync(participants);
+
+        // Act
+        var result = await _service.GetChatDetailsAsync(chatId, userId);
+
+        // Assert
+        Assert.Equal(chatId, result.ChatId);
+        Assert.Equal("group", result.Type);
+        Assert.Equal("Team Chat", result.Title);
+        Assert.Equal(2, result.Participants.Count);
+        Assert.Equal("Alice", result.Participants[0].DisplayName);
+        Assert.Equal("Bob", result.Participants[1].DisplayName);
+    }
+
+    [Fact]
+    public async Task GetChatDetailsAsync_ChatNotFound_ThrowsNotFoundException()
+    {
+        // Arrange
+        var chatId = Guid.NewGuid();
+
+        _chatRepoMock.Setup(r => r.GetByIdAsync(chatId, It.IsAny<CancellationToken>())).ReturnsAsync((Chat?)null);
+
+        // Act & Assert
+        await Assert.ThrowsAsync<NotFoundException>(() =>
+            _service.GetChatDetailsAsync(chatId, Guid.NewGuid()));
+    }
+}
+

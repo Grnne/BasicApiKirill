@@ -1,4 +1,5 @@
 using BasicApi.Extensions;
+using BasicApi.Features.Messages;
 using BasicApi.Models.Dto.Chat;
 using BasicApi.Models.Dto.Message;
 using BasicApi.Services;

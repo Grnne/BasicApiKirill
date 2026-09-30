@@ -1,10 +1,12 @@
+using BasicApi.Features.Chats;
+using BasicApi.Features.Messages;
 using BasicApi.Middleware.Exceptions;
 using BasicApi.Services;
 using BasicApi.Services.Events;
 using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
-using Microsoft.Extensions.Logging.Abstractions;
 using BasicApi.Tests.TestDoubles;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 
 namespace BasicApi.Tests.Services;

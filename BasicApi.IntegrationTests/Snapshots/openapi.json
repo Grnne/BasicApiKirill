@@ -1414,7 +1414,7 @@
         "additionalProperties": false,
         "properties": {
           "entities": {
-            "description": "Formatting over BasicApi.Models.Dto.Chat.SaveDraftDto.Text; the same rules as when sending.",
+            "description": "Formatting over BasicApi.Features.Messages.SaveDraftDto.Text; the same rules as when sending.",
             "items": {
               "$ref": "#/components/schemas/MessageEntityDto"
             },
@@ -1610,7 +1610,7 @@
             "type": "string"
           },
           "entities": {
-            "description": "Formatting and mentions; offsets are over BasicApi.Models.Dto.Message.SendMessageDto.Text as sent, before trimming.",
+            "description": "Formatting and mentions; offsets are over BasicApi.Features.Messages.SendMessageDto.Text as sent, before trimming.",
             "items": {
               "$ref": "#/components/schemas/MessageEntityDto"
             },
@@ -1659,7 +1659,7 @@
             "type": "boolean"
           },
           "until": {
-            "description": "Until when; null with BasicApi.Models.Dto.Chat.SetMutedDto.Muted — for good.",
+            "description": "Until when; null with BasicApi.Features.Chats.SetMutedDto.Muted — for good.",
             "format": "date-time",
             "nullable": true,
             "type": "string"

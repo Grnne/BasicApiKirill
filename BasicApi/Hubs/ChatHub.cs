@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Threading.RateLimiting;
 using BasicApi.Extensions;
 using BasicApi.Features.Auth;
+using BasicApi.Features.Messages;
 using BasicApi.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
