@@ -17,6 +17,12 @@ public interface IChatEventPublisher
     /// </summary>
     Task MessageCreatedAsync(MessageDto message, IReadOnlyCollection<Guid> memberIds, CancellationToken ct = default);
 
+    /// <summary>
+    /// A message the recipients already see on a new chat's card: <c>MessageCreated</c> only into
+    /// their journal, so that other devices get it whole on <c>/sync</c>; nothing goes out live.
+    /// </summary>
+    Task MessageJournaledAsync(MessageDto message, IReadOnlyCollection<Guid> recipientIds, CancellationToken ct = default);
+
     /// <summary><c>MessageUpdated</c> with the whole message to all participants.</summary>
     Task MessageUpdatedAsync(MessageDto message, IReadOnlyCollection<Guid> memberIds, CancellationToken ct = default);
 

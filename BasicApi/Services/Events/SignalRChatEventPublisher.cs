@@ -25,6 +25,10 @@ public sealed class SignalRChatEventPublisher(IHubContext<ChatHub> hub, HubConne
             await hub.Clients.Users(ToStrings(memberIds)).SendAsync("ChatListUpdated", message.ChatId, Preview(message), ct);
     }
 
+    public Task MessageJournaledAsync(
+        MessageDto message, IReadOnlyCollection<Guid> recipientIds, CancellationToken ct = default) =>
+        Task.CompletedTask; // there is no journal here
+
     public Task MessageUpdatedAsync(
         MessageDto message, IReadOnlyCollection<Guid> memberIds, CancellationToken ct = default) =>
         memberIds.Count == 0

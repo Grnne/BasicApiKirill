@@ -1,16 +1,35 @@
 using System.Text.Json;
 using BasicApi.Models.Dto.Chat;
+using BasicApi.Models.Dto.Users;
 
 namespace BasicApi.Models.Dto.Sync;
 
-/// <summary>Snapshot: everything the client needs to start from a clean slate.</summary>
+/// <summary>
+/// Snapshot: everything the client needs to start from a clean slate — the state of the user, the
+/// same on every device. The history of each chat comes page by page.
+/// </summary>
 public class SyncStateDto
 {
     /// <summary>Number of the last change included in the snapshot. From it — <c>GET /api/sync?since=</c>.</summary>
     public long Pts { get; set; }
 
-    /// <summary>Chat list — like <c>GET /api/chats</c>, with unread counters.</summary>
+    /// <summary>
+    /// All the user's chats, archived included — like <c>GET /api/chats</c>: counters, pins,
+    /// archive, mute, drafts.
+    /// </summary>
     public List<ChatListItemDto> Chats { get; set; } = [];
+
+    /// <summary>The user's folders, in order — like <c>GET /api/folders</c>.</summary>
+    public List<FolderDto> Folders { get; set; } = [];
+
+    /// <summary>Privacy settings — like <c>GET /api/users/me/privacy</c>.</summary>
+    public PrivacySettingsDto Privacy { get; set; } = new();
+
+    /// <summary>Whom the user has blocked; profiles — <c>GET /api/users/me/blocked</c>.</summary>
+    public List<Guid> BlockedUserIds { get; set; } = [];
+
+    /// <summary>The user's own profile — like <c>GET /api/users/me</c>.</summary>
+    public OwnProfileResponseDto Me { get; set; } = new();
 }
 
 /// <summary>Changes after the pts known to the client.</summary>

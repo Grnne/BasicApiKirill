@@ -31,6 +31,10 @@ public sealed class OutboxChatEventPublisher(
             return true;
         }, ct: ct);
 
+    public Task MessageJournaledAsync(
+        MessageDto message, IReadOnlyCollection<Guid> recipientIds, CancellationToken ct = default) =>
+        journal.AppendAsync(recipientIds, UpdateTypes.MessageCreated, Json(message), ct);
+
     public Task MessageUpdatedAsync(
         MessageDto message, IReadOnlyCollection<Guid> memberIds, CancellationToken ct = default) =>
         ToAllAsync(UpdateTypes.MessageUpdated, message, memberIds, ct);

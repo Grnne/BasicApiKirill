@@ -140,13 +140,15 @@ public sealed class GroupService(
 
             // Not announced as a new message: the card of the new chat already shows it, and the
             // current client would count it as one more unread on top of the card.
-            await PostSystemMessageAsync(chatId, creatorId, SystemMessages.Created(name), now, recipients: [], ct);
+            var system = await PostSystemMessageAsync(chatId, creatorId, SystemMessages.Created(name), now, recipients: [], ct);
             await AuditAsync(chatId, creatorId, "group_created", null, new { title = name, memberIds = invited }, now, ct);
 
             var own = await CardAsync(chatId, creatorId, ct);
             if (invited.Count > 0)
                 await events.ChatCreatedAsync(invited, await CardAsync(chatId, invited[0], ct), ct);
             await events.ChatCreatedAsync(creatorId, own, live: false, ct);
+            // The card holds only a preview of it: the journal gets it whole, after the card.
+            await events.MessageJournaledAsync(system, [creatorId, .. invited], ct);
             return own;
         }, ct: ct);
 
@@ -546,7 +548,7 @@ public sealed class GroupService(
     /// A system message by <paramref name="actorId"/>; <paramref name="recipients"/> get it as a new
     /// message (those who already see it on a new chat card are left out).
     /// </summary>
-    private async Task PostSystemMessageAsync(
+    private async Task<MessageDto> PostSystemMessageAsync(
         Guid chatId, Guid actorId, (MessageActionDto Action, string Text) system, DateTime now,
         IReadOnlyCollection<Guid> recipients, CancellationToken ct)
     {
@@ -563,6 +565,7 @@ public sealed class GroupService(
 
         if (recipients.Count > 0)
             await events.MessageCreatedAsync(created, recipients, ct);
+        return created;
     }
 
     private Task AuditAsync(
