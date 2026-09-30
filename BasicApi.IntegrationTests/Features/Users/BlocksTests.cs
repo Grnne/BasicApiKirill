@@ -8,7 +8,7 @@ using static BasicApi.IntegrationTests.Features.Media.MediaUploadTests;
 
 namespace BasicApi.IntegrationTests.Features.Users;
 
-/// <summary>Blocks (plan 2, F5.3, D11).</summary>
+/// <summary>Blocks.</summary>
 public class BlocksTests(PostgresFixture db, StorageFixture storage) : DbTest(db)
 {
     private ApiFactory Factory() => new(Db.ConnectionString, storage.Settings());

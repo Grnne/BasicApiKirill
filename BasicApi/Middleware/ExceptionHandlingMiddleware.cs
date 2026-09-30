@@ -6,14 +6,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace BasicApi.Middleware;
 
 /// <summary>
-/// Global exception handling middleware.
-/// Catches all unhandled exceptions and returns structured ProblemDetails responses.
-/// Maps known exception types to appropriate HTTP status codes.
-/// Strips internal details in production (non-development) environments.
-///
-/// Logging: 5xx — Error with the exception and traceId (the same traceId the client
-/// sees in the response, so a user report can be matched to the log line);
-/// domain 4xx — Information without a stack trace; client aborts — Debug.
+/// Turns exceptions into ProblemDetails: domain errors keep their code, anything else is a 500 without details
+/// outside Development. 5xx are logged with the traceId the client sees in the response.
 /// </summary>
 public class ExceptionHandlingMiddleware
 {

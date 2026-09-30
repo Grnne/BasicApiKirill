@@ -28,8 +28,8 @@ public class MessagesApiTests(PostgresFixture db) : DbTest(db)
     [Fact]
     public async Task JumpToDate_ReturnsHistoryUpToThatMoment_IncludingThePivotMessage()
     {
-        // Previously "jump to date" returned an empty page: the anchor message was read
-        // without column mapping, and the cursor was built from 0001-01-01.
+        // Regression: an empty page when the anchor message was read without column mapping
+        // and the cursor was built from 0001-01-01.
         var (factory, client, chat, alice, bob) = await ArrangeAsync();
         await using var _ = factory;
         using var __ = client;
@@ -112,7 +112,7 @@ public class MessagesApiTests(PostgresFixture db) : DbTest(db)
     [Fact]
     public async Task Search_TotalCount_IsTheSameOnEveryPage()
     {
-        // Previously totalCount was 0 on the second and following pages.
+        // Regression: totalCount was 0 on the second and following pages.
         var (factory, client, chat, alice, _) = await ArrangeAsync();
         await using var _f = factory;
         using var _c = client;

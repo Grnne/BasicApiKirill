@@ -62,8 +62,6 @@ public class MessageServiceTests
         SenderName = "Alice"
     };
 
-    // ========== Send ==========
-
     [Fact]
     public async Task Send_ByMember_StoresMessage_AndAnnouncesItToAllMembers()
     {
@@ -124,8 +122,6 @@ public class MessageServiceTests
         Assert.Equal(text, result.Message.Text);
     }
 
-    // ========== Idempotency ==========
-
     [Fact]
     public async Task Send_Retry_ReturnsTheFirstMessage_WithoutStoringOrAnnouncingAgain()
     {
@@ -178,8 +174,6 @@ public class MessageServiceTests
 
         Assert.Equal("CLIENT_MESSAGE_ID_CONFLICT", ex.ErrorCode);
     }
-
-    // ========== Jump to date ==========
 
     [Fact]
     public async Task PageAt_PagesStrictlyBeforeTheFirstMessageAfterDate()

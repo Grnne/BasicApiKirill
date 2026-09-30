@@ -107,13 +107,13 @@ public sealed class ChatService(
         if (userId == otherUserId)
             throw new BadRequestException("Cannot create chat with yourself", "SELF_CHAT");
 
-        // Without this check a nonexistent counterpart broke the insert on the foreign key (500).
+        // Without this check a nonexistent counterpart would break the insert on the foreign key (500).
         // A deactivated one is also 404: there is nobody to write to.
         var other = await userRepository.GetByIdAsync(otherUserId, ct);
         if (other is null || !other.IsActive)
             throw new NotFoundException("User not found", "USER_NOT_FOUND");
 
-        // Privacy decides only whether a new chat may start: an existing one keeps working (D11).
+        // Privacy decides only whether a new chat may start: an existing one keeps working.
         if (await chatRepository.GetPrivateChatIdAsync(userId, otherUserId, ct) is null)
             (await policy.CanStartPrivateChatAsync(userId, otherUserId, ct)).Demand();
 

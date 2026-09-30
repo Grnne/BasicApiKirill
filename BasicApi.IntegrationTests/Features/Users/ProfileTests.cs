@@ -6,7 +6,7 @@ using Npgsql;
 
 namespace BasicApi.IntegrationTests.Features.Users;
 
-/// <summary>The name shown to others and the password (plan 2, F5.4).</summary>
+/// <summary>The name shown to others and the password.</summary>
 public class ProfileTests(PostgresFixture db) : DbTest(db)
 {
     private static Dictionary<string, string?> Settings => new() { ["RateLimiting:CommandsPer10Seconds"] = "1000" };

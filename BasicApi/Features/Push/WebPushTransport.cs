@@ -24,9 +24,8 @@ public interface IPushTransport
 }
 
 /// <summary>
-/// WebPush: the payload is encrypted for the browser (RFC 8291, <c>aes128gcm</c>), the request is
-/// signed with the server's VAPID key (RFC 8292). The push service sees neither the text nor who
-/// it is for beyond the endpoint.
+/// WebPush: the payload is encrypted for the browser (RFC 8291), the request signed with the VAPID
+/// key (RFC 8292); the push service cannot read the text.
 /// </summary>
 public sealed class WebPushTransport : IPushTransport, IDisposable
 {

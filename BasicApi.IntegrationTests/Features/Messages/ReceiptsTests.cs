@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.SignalR.Client;
 
 namespace BasicApi.IntegrationTests.Features.Messages;
 
-/// <summary>"Sent / delivered / read" (plan 2, F2.1, D1).</summary>
+/// <summary>"Sent / delivered / read".</summary>
 public class ReceiptsTests(PostgresFixture db) : DbTest(db)
 {
     private static readonly TimeSpan Wait = TimeSpan.FromSeconds(10);

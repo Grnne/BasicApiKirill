@@ -4,9 +4,8 @@ using BasicApi.Storage;
 namespace BasicApi.Tests.TestDoubles;
 
 /// <summary>
-/// A session without a database: a transaction simply runs the work, and "commit" is its
-/// successful completion. Direct queries are not supported: in unit tests they are made by
-/// repository mocks.
+/// A session without a database: a transaction just runs the work, and "commit" is its successful
+/// completion. Direct queries are not supported; unit tests mock the repositories instead.
 /// </summary>
 public sealed class FakeDbSession : IDbSession
 {

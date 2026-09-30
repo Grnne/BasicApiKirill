@@ -3,9 +3,8 @@ using FluentMigrator;
 namespace BasicApi.Storage.Migrations;
 
 /// <summary>
-/// Folders (plan 2, F6.2, D9): up to 20 per user, in the user's order. A folder shows the chats
-/// listed in it and, by filters, all private chats or all groups — optionally only unread ones.
-/// A listed chat may be pinned inside the folder.
+/// Folders, up to 20 per user: the chats listed in one (possibly pinned inside it) and, by filters,
+/// all private chats or all groups, optionally only unread ones.
 /// </summary>
 [Migration(28)]
 public class AddFolders : Migration

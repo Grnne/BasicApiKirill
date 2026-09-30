@@ -28,7 +28,6 @@ public class ReadStateTests(PostgresFixture db) : DbTest(db)
     [Fact]
     public async Task OwnMessages_AreNotCountedAsUnread()
     {
-        // Previously the sender saw their own messages as "unread".
         var alice = await Data.UserAsync("alice");
         var bob = await Data.UserAsync("bob");
         var chat = await Data.PrivateChatAsync(alice, bob);

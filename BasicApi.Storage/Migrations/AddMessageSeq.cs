@@ -3,20 +3,8 @@ using FluentMigrator;
 namespace BasicApi.Storage.Migrations;
 
 /// <summary>
-/// Sequence number of a message in a chat, and idempotent sending.
-///
-/// messages.seq is the number within a chat (1, 2, 3, ...), unique together with chat_id.
-/// It is issued from chats.last_seq in the insert transaction: the chat row is locked, so
-/// sends to one chat get numbers strictly in commit order. Ordering by seq is unambiguous,
-/// unlike created_at, which can have ties. Existing messages are numbered by (created_at, id),
-/// the same order in which pagination returned them.
-///
-/// messages.client_message_id is an id the client picks itself before sending.
-/// Unique together with sender_id: a resend (retry after a network drop) finds the message
-/// already created instead of creating a second one.
-///
-/// chat_members.last_read_seq instead of last_read_message_id: "read up to number N".
-/// Unread is a simple number comparison, with no subquery to the anchor message.
+/// Per-chat message seq, issued from chats.last_seq under the chat row lock, so in commit order and without ties;
+/// client_message_id, unique per sender, lets a retried send find the message already created.
 /// </summary>
 [Migration(9)]
 public class AddMessageSeq : Migration
@@ -27,6 +15,7 @@ public class AddMessageSeq : Migration
         Execute.Sql("ALTER TABLE messages ADD COLUMN seq bigint NULL");
         Execute.Sql("ALTER TABLE messages ADD COLUMN client_message_id uuid NULL");
 
+        // Existing messages are numbered by (created_at, id), the order pagination returned them in.
         Execute.Sql(@"
             UPDATE messages m SET seq = n.seq
             FROM (

@@ -13,9 +13,8 @@ using BasicApi.Storage.Interfaces;
 namespace BasicApi.Features.Sync;
 
 /// <summary>
-/// Sync after a connection drop. The client keeps pts — the number of the last change
-/// it knows of from its journal. After reconnecting it asks "what is after pts"
-/// and catches up on what it missed; if the journal no longer remembers that far — takes a snapshot.
+/// Catch-up after a connection drop: the client keeps pts, the number of the last journal change it
+/// knows, and asks for what came after it; if the journal no longer reaches back, it takes a snapshot.
 /// </summary>
 public interface ISyncService
 {

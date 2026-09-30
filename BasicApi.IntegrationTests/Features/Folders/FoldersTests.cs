@@ -4,7 +4,7 @@ using BasicApi.IntegrationTests.Infrastructure;
 
 namespace BasicApi.IntegrationTests.Features.Folders;
 
-/// <summary>Folders of chats (plan 2, F6.2, D9).</summary>
+/// <summary>Folders of chats.</summary>
 public class FoldersTests(PostgresFixture db) : DbTest(db)
 {
     private static Dictionary<string, string?> Settings => new() { ["RateLimiting:CommandsPer10Seconds"] = "1000" };

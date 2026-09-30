@@ -3,12 +3,8 @@ using System.Buffers.Binary;
 namespace BasicApi.Storage.Dto;
 
 /// <summary>
-/// Message pagination cursor — a string opaque to the client (base64url).
-///
-/// v2 (current): version byte 2 and the seq of the page's last message (int64 LE).
-/// v1 (before seq, no version byte): 32 bytes — created_at ticks, 8 zero bytes, the message
-/// id. Clients may have received such cursors before the update; they keep
-/// working — the seq of the same message is found by id.
+/// Opaque (base64url) message pagination cursor: v2 is version byte 2 and the page's last seq (int64 LE).
+/// A v1 cursor (32 bytes: created_at ticks, 8 zero bytes, message id) is still accepted; its seq is found by id.
 /// </summary>
 public readonly record struct MessageCursor
 {
@@ -35,7 +31,7 @@ public readonly record struct MessageCursor
         return ToBase64Url(bytes);
     }
 
-    /// <summary>A v1 cursor as it was issued before seq. Only for compatibility checks.</summary>
+    /// <summary>A v1 cursor. Only for compatibility checks.</summary>
     public static string EncodeLegacy(DateTime createdAt, Guid messageId)
     {
         Span<byte> bytes = stackalloc byte[Version1Length];

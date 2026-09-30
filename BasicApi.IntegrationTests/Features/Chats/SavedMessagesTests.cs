@@ -6,7 +6,7 @@ using BasicApi.Storage.Repositories;
 
 namespace BasicApi.IntegrationTests.Features.Chats;
 
-/// <summary>"Saved Messages" — a chat with oneself (plan 2, F1.5).</summary>
+/// <summary>"Saved Messages" — a chat with oneself.</summary>
 public class SavedMessagesTests(PostgresFixture db) : DbTest(db)
 {
     private static async Task<JsonElement> ReadJsonAsync(HttpResponseMessage response) =>

@@ -8,7 +8,7 @@ using BasicApi.Storage.Interfaces;
 
 namespace BasicApi.Features.Users;
 
-/// <summary>The user's privacy settings (D11).</summary>
+/// <summary>The user's privacy settings.</summary>
 public interface IPrivacyService
 {
     Task<PrivacySettingsDto> GetAsync(Guid userId, CancellationToken ct = default);

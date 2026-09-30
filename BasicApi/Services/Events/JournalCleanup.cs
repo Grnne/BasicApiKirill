@@ -3,9 +3,7 @@ using BasicApi.Storage.Interfaces;
 namespace BasicApi.Services.Events;
 
 /// <summary>
-/// Cleanup every <c>Sync:CleanupIntervalMinutes</c>: the change journal is kept for
-/// <c>Sync:RetentionDays</c> (30 days), dispatched outbox events for a week; devices whose
-/// sign-in has ended are removed.
+/// Periodically deletes old journal records, dispatched outbox events and devices whose sign-in has ended.
 /// Deletes in batches to avoid holding long locks.
 /// </summary>
 public sealed class JournalCleanup(

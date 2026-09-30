@@ -9,7 +9,6 @@ using Moq;
 
 namespace BasicApi.Tests.Features.Chats;
 
-/// <summary>"Saved Messages" (plan 2, F1.5).</summary>
 public class ChatServiceSavedChatTests
 {
     private readonly Mock<IChatRepository> _chatRepoMock = new();

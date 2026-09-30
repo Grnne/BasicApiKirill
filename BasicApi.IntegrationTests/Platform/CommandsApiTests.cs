@@ -6,10 +6,7 @@ using Microsoft.AspNetCore.SignalR.Client;
 
 namespace BasicApi.IntegrationTests.Platform;
 
-/// <summary>
-/// Commands over REST (A8): the same services and events as the hub methods.
-/// The hub remains the events channel.
-/// </summary>
+/// <summary>Commands over REST: the same services and events as the hub methods; the hub remains the events channel.</summary>
 public class CommandsApiTests(PostgresFixture db) : DbTest(db)
 {
     private static readonly TimeSpan Wait = TimeSpan.FromSeconds(10);

@@ -43,7 +43,6 @@ public class AuthServiceTests
     [Fact]
     public async Task LoginAsync_ValidCredentials_ReturnsOkWithAuthResponse()
     {
-        // Arrange
         var password = "correct-password";
         var user = new User
         {
@@ -64,14 +63,12 @@ public class AuthServiceTests
         _jwtServiceMock.Setup(s => s.GenerateToken(user.Id, user.Username, user.Email)).Returns(token);
         _jwtServiceMock.Setup(s => s.GetExpiryDate()).Returns(expiresAt);
 
-        // Act
         var result = await _service.LoginAsync(new LoginRequestDto
         {
             UsernameOrEmail = "testuser",
             Password = password
         });
 
-        // Assert
         var response = result;
         Assert.Equal(user.Id, response.UserId);
         Assert.Equal(user.Username, response.Username);
@@ -84,7 +81,6 @@ public class AuthServiceTests
     [Fact]
     public async Task LoginAsync_InvalidPassword_ThrowsUnauthorizedAccess()
     {
-        // Arrange
         var user = new User
         {
             Id = Guid.NewGuid(),
@@ -96,7 +92,6 @@ public class AuthServiceTests
             .Setup(r => r.GetByUsernameOrEmailAsync("testuser", It.IsAny<CancellationToken>()))
             .ReturnsAsync(user);
 
-        // Act & Assert
         var ex = await Assert.ThrowsAsync<UnauthorizedException>(() =>
             _service.LoginAsync(new LoginRequestDto
             {
@@ -110,12 +105,10 @@ public class AuthServiceTests
     [Fact]
     public async Task LoginAsync_UserNotFound_ThrowsUnauthorized()
     {
-        // Arrange
         _userRepoMock
             .Setup(r => r.GetByUsernameOrEmailAsync("unknown", It.IsAny<CancellationToken>()))
             .ReturnsAsync((User?)null);
 
-        // Act & Assert
         await Assert.ThrowsAsync<UnauthorizedException>(() =>
             _service.LoginAsync(new LoginRequestDto
             {
@@ -127,7 +120,6 @@ public class AuthServiceTests
     [Fact]
     public async Task RegisterAsync_Success_ReturnsCreatedWithAuthResponse()
     {
-        // Arrange
         var token = "jwt-token";
         var expiresAt = DateTime.UtcNow.AddHours(1);
         var userId = Guid.NewGuid();
@@ -147,7 +139,6 @@ public class AuthServiceTests
         _jwtServiceMock.Setup(s => s.GenerateToken(userId, "newuser", "new@example.com")).Returns(token);
         _jwtServiceMock.Setup(s => s.GetExpiryDate()).Returns(expiresAt);
 
-        // Act
         var result = await _service.RegisterAsync(new RegisterRequestDto
         {
             Username = "newuser",
@@ -156,7 +147,6 @@ public class AuthServiceTests
             DisplayName = "New User"
         });
 
-        // Assert
         var response = result;
         Assert.Equal(userId, response.UserId);
         Assert.Equal("newuser", response.Username);
@@ -169,12 +159,10 @@ public class AuthServiceTests
     [Fact]
     public async Task RegisterAsync_DuplicateUsername_ThrowsConflictException()
     {
-        // Arrange
         _userRepoMock
             .Setup(r => r.GetByUsernameOrEmailAsync("existing", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new User { Username = "existing" });
 
-        // Act & Assert
         var ex = await Assert.ThrowsAsync<ConflictException>(() =>
             _service.RegisterAsync(new RegisterRequestDto
             {
@@ -189,7 +177,6 @@ public class AuthServiceTests
     [Fact]
     public async Task RegisterAsync_DuplicateEmail_ThrowsConflictException()
     {
-        // Arrange
         _userRepoMock
             .Setup(r => r.GetByUsernameOrEmailAsync("newuser", It.IsAny<CancellationToken>()))
             .ReturnsAsync((User?)null);
@@ -198,7 +185,6 @@ public class AuthServiceTests
             .Setup(r => r.GetByUsernameOrEmailAsync("existing@example.com", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new User { Email = "existing@example.com" });
 
-        // Act & Assert
         var ex = await Assert.ThrowsAsync<ConflictException>(() =>
             _service.RegisterAsync(new RegisterRequestDto
             {
@@ -213,7 +199,6 @@ public class AuthServiceTests
     [Fact]
     public async Task RegisterAsync_EmptyDisplayName_UsesUsername()
     {
-        // Arrange
         _userRepoMock
             .Setup(r => r.GetByUsernameOrEmailAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((User?)null);
@@ -226,7 +211,6 @@ public class AuthServiceTests
             .Returns("token");
         _jwtServiceMock.Setup(s => s.GetExpiryDate()).Returns(DateTime.UtcNow.AddHours(1));
 
-        // Act
         var result = await _service.RegisterAsync(new RegisterRequestDto
         {
             Username = "user_no_display",
@@ -234,17 +218,13 @@ public class AuthServiceTests
             Password = "StrongPass1!"
         });
 
-        // Assert
         var response = result;
         Assert.Equal("user_no_display", response.DisplayName);
     }
 
-    // ========== Sessions / refresh tokens ==========
-
     [Fact]
     public async Task LoginAsync_ValidCredentials_ReturnsRefreshTokenToo()
     {
-        // Arrange
         var password = "correct-password";
         var user = new User
         {
@@ -260,14 +240,12 @@ public class AuthServiceTests
             .Setup(r => r.GetByUsernameOrEmailAsync("testuser", It.IsAny<CancellationToken>()))
             .ReturnsAsync(user);
 
-        // Act
         var result = await _service.LoginAsync(new LoginRequestDto
         {
             UsernameOrEmail = "testuser",
             Password = password
         }, "android", "1.2.3.4");
 
-        // Assert
         var response = result;
         Assert.Equal("refresh-token", response.RefreshToken);
         Assert.True(response.RefreshTokenExpiresAt > DateTime.UtcNow);
@@ -279,7 +257,7 @@ public class AuthServiceTests
     [Fact]
     public async Task LoginAsync_InactiveUser_ThrowsUnauthorized()
     {
-        // Arrange — the correct password must not let a blocked account in
+        // The correct password must not let a blocked account in
         var password = "correct-password";
         var user = new User
         {
@@ -294,7 +272,6 @@ public class AuthServiceTests
             .Setup(r => r.GetByUsernameOrEmailAsync("banned", It.IsAny<CancellationToken>()))
             .ReturnsAsync(user);
 
-        // Act & Assert
         var ex = await Assert.ThrowsAsync<UnauthorizedException>(() =>
             _service.LoginAsync(new LoginRequestDto { UsernameOrEmail = "banned", Password = password }));
 
@@ -307,7 +284,6 @@ public class AuthServiceTests
     [Fact]
     public async Task LoginAsync_ValidCredentials_RecordsLastLogin()
     {
-        // Arrange
         var password = "correct-password";
         var user = new User
         {
@@ -322,10 +298,8 @@ public class AuthServiceTests
             .Setup(r => r.GetByUsernameOrEmailAsync("testuser", It.IsAny<CancellationToken>()))
             .ReturnsAsync(user);
 
-        // Act
         await _service.LoginAsync(new LoginRequestDto { UsernameOrEmail = "testuser", Password = password });
 
-        // Assert
         _userRepoMock.Verify(
             r => r.UpdateLastLoginAsync(user.Id, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -333,7 +307,7 @@ public class AuthServiceTests
     [Fact]
     public async Task RegisterAsync_DuplicateKeyFromDatabase_ThrowsConflictNotServerError()
     {
-        // Arrange — a race of two registrations: the checks passed, the unique index caught it
+        // A race of two registrations: the checks passed, the unique index caught it
         _userRepoMock
             .Setup(r => r.GetByUsernameOrEmailAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((User?)null);
@@ -342,7 +316,6 @@ public class AuthServiceTests
             .Setup(r => r.CreateAsync(It.IsAny<User>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new BasicApi.Storage.Exceptions.DuplicateKeyException("duplicate"));
 
-        // Act & Assert
         var ex = await Assert.ThrowsAsync<ConflictException>(() =>
             _service.RegisterAsync(new RegisterRequestDto
             {

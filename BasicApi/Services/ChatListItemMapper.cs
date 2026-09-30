@@ -5,11 +5,7 @@ using BasicApi.Storage.Dto;
 
 namespace BasicApi.Services;
 
-/// <summary>
-/// The only place where a chat list row from the DB is turned into a DTO.
-/// The mapping used to be duplicated in the chat list and in search, which is why
-/// search lost CompanionId/CompanionUsername.
-/// </summary>
+/// <summary>The only place where a chat list row from the DB is turned into a DTO: the chat list and search share it.</summary>
 public static class ChatListItemMapper
 {
     public static ChatListItemDto Map(ChatListResult r) => new()

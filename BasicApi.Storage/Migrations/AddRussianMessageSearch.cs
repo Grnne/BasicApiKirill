@@ -3,18 +3,8 @@ using FluentMigrator;
 namespace BasicApi.Storage.Migrations;
 
 /// <summary>
-/// Message search with the Russian dictionary.
-///
-/// Previously both the index and the queries used 'english': Russian words were not reduced to
-/// a stem, so "запуск" did not find "запускаем". The 'russian'
-/// configuration parses Russian words with the Russian stemmer and Latin words with the English
-/// one, so mixed messages are searchable in both languages.
-///
-/// search_vector is a generated column: it need not be filled in code, and a query
-/// does not recompute to_tsvector for every row. Queries must use the same
-/// configuration ('russian'), otherwise word stems will not match.
-///
-/// Adding a STORED column rewrites the messages table (see docs/deploy.md).
+/// Message search with the 'russian' config (Latin words still get the English stemmer). Queries must use
+/// the same config, otherwise stems will not match. Adding the STORED column rewrites the messages table.
 /// </summary>
 [Migration(12)]
 public class AddRussianMessageSearch : Migration

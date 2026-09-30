@@ -5,7 +5,7 @@ using BasicApi.IntegrationTests.Infrastructure;
 
 namespace BasicApi.IntegrationTests.Features.Chats;
 
-/// <summary>Pinned, archived and muted chats (plan 2, F6.1, D9).</summary>
+/// <summary>Pinned, archived and muted chats.</summary>
 public class ChatOrganizationTests(PostgresFixture db) : DbTest(db)
 {
     private static Dictionary<string, string?> Settings => new() { ["RateLimiting:CommandsPer10Seconds"] = "1000" };

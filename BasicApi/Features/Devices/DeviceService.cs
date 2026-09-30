@@ -5,7 +5,7 @@ using BasicApi.Storage.Interfaces;
 
 namespace BasicApi.Features.Devices;
 
-/// <summary>The user's devices (A4): each sign-in is one, until it ends.</summary>
+/// <summary>The user's devices: each sign-in is one, until it ends.</summary>
 public interface IDeviceService
 {
     Task<DeviceListDto> GetAllAsync(Guid userId, Guid? currentDeviceId, CancellationToken ct = default);

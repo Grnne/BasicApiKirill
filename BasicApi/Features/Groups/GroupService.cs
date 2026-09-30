@@ -14,9 +14,8 @@ using Microsoft.Extensions.Options;
 namespace BasicApi.Features.Groups;
 
 /// <summary>
-/// Groups (D8): creating them and managing members, roles and settings. What a member may do is
-/// decided by <see cref="IChatPolicy"/>; every change is written to the group's action log and
-/// recorded in the chat by a system message where members should see it.
+/// Creating groups and managing members, roles and settings; rights come from <see cref="IChatPolicy"/>,
+/// every change goes to the group's action log.
 /// </summary>
 public interface IGroupService
 {
@@ -525,7 +524,7 @@ public sealed class GroupService(
 
     /// <summary>
     /// Everyone may be added by this user (their <c>groupAdd</c> setting, blocks); otherwise nobody is
-    /// added and the refusal names whom (D11).
+    /// added and the refusal names whom.
     /// </summary>
     private async Task DemandMayAddAsync(Guid adderId, IReadOnlyCollection<Guid> userIds, CancellationToken ct)
     {

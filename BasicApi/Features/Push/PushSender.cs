@@ -7,9 +7,8 @@ using BasicApi.Storage.Interfaces;
 namespace BasicApi.Features.Push;
 
 /// <summary>
-/// Sends push notifications of new messages: to the members' subscribed devices, except the
-/// sender, those who muted the chat or blocked the sender, and those who have the app open (they
-/// get the message over the hub). A subscription the push service no longer knows is removed.
+/// Sends push notifications of new messages to members who are offline, except the sender and
+/// those who muted the chat or blocked the sender; online members get the message over the hub.
 /// </summary>
 public sealed class PushSender(
     PushQueue queue,

@@ -104,7 +104,7 @@ public class OutboxTests
     [Fact]
     public async Task Dispatched_Events_AreTheSameOnTheWire_AsDirectSends()
     {
-        // The client must not notice that events now go through the outbox.
+        // The client must not notice that events go through the outbox.
         var message = Message(new string('x', 150));
         Guid[] members = [message.SenderId, Guid.NewGuid()];
         var recipient = Guid.NewGuid();

@@ -85,16 +85,13 @@ public static class ServiceExtensions
         services.AddApiRateLimiting(configuration);
         services.AddSignalR(options =>
         {
-            // Domain errors → HubException with a code; anything else goes to the log.
             options.AddFilter<HubErrorFilter>();
-            // Allow parallel handling of calls
             options.MaximumParallelInvocationsPerClient = 2;
             // Exception text goes to the client only in development: in production it
             // reveals internals (SQL, paths, class names).
             options.EnableDetailedErrors = environment.IsDevelopment();
-            // Maximum size of an incoming message. Commands are moving to REST
-            // (POST /api/chats/{id}/messages, /typing); once the front end moves over, the hub
-            // will only need a few KB — then lower this.
+            // Sized for SendMessage over the hub; once clients send commands only over REST,
+            // a few KB will do — lower it then.
             options.MaximumReceiveMessageSize = 128 * 1024;
             // Limit the buffer for commands to avoid piling up hung calls
             options.StreamBufferCapacity = 10;
@@ -122,7 +119,6 @@ public static class ServiceExtensions
         services.AddScoped<IFolderRepository, FolderRepository>();
         services.AddScoped<IDeviceRepository, DeviceRepository>();
 
-        // Domain services: controllers and the hub are only adapters over them.
         services.AddScoped<IMembershipService, MembershipService>();
         services.Configure<MessageOptions>(configuration.GetSection(MessageOptions.Section));
         services.AddScoped<IChatPolicy, ChatPolicy>();
@@ -172,7 +168,6 @@ public static class ServiceExtensions
         services.AddHealthChecks()
             .AddCheck<PostgresHealthCheck>("postgres", tags: [ReadyTag], timeout: TimeSpan.FromSeconds(3));
 
-        // FluentMigrator
         services.AddFluentMigratorCore()
             .ConfigureRunner(rb => rb
                 .AddPostgres()
@@ -245,8 +240,6 @@ public static class ServiceExtensions
                     },
                     OnForbidden = context =>
                     {
-                        // Suppress the default empty 403 from .NET and throw instead,
-                        // so ExceptionHandlingMiddleware answers with ProblemDetails
                         throw new ForbiddenException("Access denied", "ACCESS_DENIED");
                     }
                 };
@@ -357,10 +350,7 @@ public static class ServiceExtensions
         QueueLimit = 0
     };
 
-    /// <summary>
-    /// Maps ASP.NET default validation error messages to machine-readable codes.
-    /// This allows clients to handle validation errors programmatically without parsing human text.
-    /// </summary>
+    /// <summary>Maps ASP.NET validation messages to machine-readable codes, so clients do not parse human text.</summary>
     private static string GetValidationErrorCode(string errorMessage)
     {
         if (errorMessage.Contains("required", StringComparison.OrdinalIgnoreCase) ||

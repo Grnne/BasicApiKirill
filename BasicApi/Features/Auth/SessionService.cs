@@ -7,14 +7,8 @@ using BasicApi.Storage.Interfaces;
 namespace BasicApi.Features.Auth;
 
 /// <summary>
-/// Custom (non-Identity) session handling built on rotating refresh tokens.
-///
-/// Rules that matter:
-/// - only the SHA-256 hash of a refresh token is persisted;
-/// - every refresh rotates the token — the old one stops working;
-/// - a token replayed within the grace window is treated as a client race
-///   (two parallel requests both hitting 401), not as theft;
-/// - a token replayed after the grace window revokes the entire rotation chain.
+/// Sessions on rotating refresh tokens; only their SHA-256 hash is stored. A replay within the
+/// grace window is a client race, after it theft that revokes the whole chain.
 /// </summary>
 public class SessionService(
     ISessionRepository sessionRepository,

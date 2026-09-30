@@ -8,9 +8,8 @@ using Microsoft.Extensions.Logging;
 namespace BasicApi.IntegrationTests.Platform;
 
 /// <summary>
-/// A client error in the hub (someone else's chat, empty message) is not a server error: like a 4xx
-/// in REST, it must not be logged at Error level. Found by an E2E run: SignalR itself
-/// writes Error for every HubException.
+/// A client error in the hub is not a server error: like a 4xx in REST, it must not be logged at Error
+/// level, although SignalR itself writes Error for every HubException.
 /// </summary>
 public class HubErrorLoggingTests(PostgresFixture db) : DbTest(db)
 {

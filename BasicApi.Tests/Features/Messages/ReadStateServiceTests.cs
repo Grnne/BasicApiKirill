@@ -11,7 +11,7 @@ using Moq;
 
 namespace BasicApi.Tests.Features.Messages;
 
-/// <summary>Read pointer and "marked as unread" (plan 2, F2.1–F2.2).</summary>
+/// <summary>Read pointer and "marked as unread".</summary>
 public class ReadStateServiceTests
 {
     private readonly Mock<IChatRepository> _chatRepoMock = new();

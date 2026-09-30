@@ -3,8 +3,7 @@ using FluentMigrator;
 namespace BasicApi.Storage.Migrations;
 
 /// <summary>
-/// The journal pts each user device has reached. A device is a sign-in
-/// (a session chain, sid in the token). Plan 2 builds the "delivered" status on this.
+/// The journal pts each user device has reached. A device is a sign-in (a session chain, sid in the token).
 /// </summary>
 [Migration(11)]
 public class AddUserSyncState : Migration

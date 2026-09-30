@@ -8,7 +8,7 @@ using Npgsql;
 
 namespace BasicApi.IntegrationTests.Features.Groups;
 
-/// <summary>Adding, removing and leaving (plan 2, F3.3).</summary>
+/// <summary>Adding, removing and leaving.</summary>
 public class GroupMembersTests(PostgresFixture db) : DbTest(db)
 {
     private static readonly TimeSpan Wait = TimeSpan.FromSeconds(10);

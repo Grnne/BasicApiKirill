@@ -3,11 +3,8 @@ using FluentMigrator;
 namespace BasicApi.Storage.Migrations;
 
 /// <summary>
-/// Reactions (plan 2, F1.4, D7).
-///
-/// message_reactions — one reaction per user per message, as in WhatsApp: a new one replaces
-/// the old. messages.reactions_summary — [{emoji, count}], recomputed on every change, so pages
-/// of history do not count reactions row by row.
+/// Reactions: one per user per message, a new one replaces the old. messages.reactions_summary is recomputed
+/// on every change so pages of history do not count reactions row by row.
 /// </summary>
 [Migration(16)]
 public class AddMessageReactions : Migration

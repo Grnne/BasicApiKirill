@@ -2,10 +2,7 @@ using BasicApi.Storage.Entities;
 
 namespace BasicApi.Features.Auth;
 
-/// <summary>
-/// Refresh-token sessions: issuing on login/register, rotation on refresh,
-/// and revocation on logout or detected token theft.
-/// </summary>
+/// <summary>Refresh-token sessions: issued on sign-in, rotated on refresh, revoked on logout or detected theft.</summary>
 public interface ISessionService
 {
     /// <summary>
@@ -28,7 +25,6 @@ public interface ISessionService
     /// <returns>Session family of the revoked session, or null when nothing was revoked.</returns>
     Task<Guid?> RevokeAsync(string? refreshToken, CancellationToken ct = default);
 
-    /// <summary>Ends every live session of a user ("log out everywhere").</summary>
     Task RevokeAllForUserAsync(Guid userId, CancellationToken ct = default);
 
     /// <summary>Ends every sign-in of the user but <paramref name="keepFamilyId"/> (null — all of them).</summary>

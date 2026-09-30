@@ -7,7 +7,7 @@ using Npgsql;
 
 namespace BasicApi.IntegrationTests.Features.Groups;
 
-/// <summary>Roles and permissions in a group (plan 2, F3.2, D8).</summary>
+/// <summary>Roles and permissions in a group.</summary>
 public class GroupRolesTests(PostgresFixture db) : DbTest(db)
 {
     private static Dictionary<string, string?> Settings => new() { ["RateLimiting:CommandsPer10Seconds"] = "1000" };

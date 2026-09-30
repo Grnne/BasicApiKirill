@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.RateLimiting;
 
 namespace BasicApi.Features.Groups;
 
-/// <summary>Groups: creating them, members, roles and settings (plan 2, F3).</summary>
+/// <summary>Groups: creating them, members, roles and settings.</summary>
 [Authorize]
 [ApiController]
 [Route("api/chats")]

@@ -12,7 +12,7 @@ using Npgsql;
 
 namespace BasicApi.IntegrationTests.Platform;
 
-/// <summary>Outbox: the event is saved together with the change and is not lost (plan 1, 2.6).</summary>
+/// <summary>Outbox: the event is saved together with the change and is not lost.</summary>
 public class OutboxTests(PostgresFixture db) : DbTest(db)
 {
     private static readonly Dictionary<string, string?> NoDispatcher = new() { ["Outbox:DispatcherEnabled"] = "false" };

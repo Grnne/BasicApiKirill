@@ -10,10 +10,7 @@ using Moq;
 
 namespace BasicApi.Tests.Features.Chats;
 
-/// <summary>
-/// Tests for fetching a single chat list item (GET /api/chats/{chatId}/item)
-/// and for companion fields not being lost in chat search.
-/// </summary>
+/// <summary>A single chat list item (GET /api/chats/{chatId}/item) and companion fields in chat search.</summary>
 public class ChatServiceChatItemTests
 {
     private readonly Mock<IChatRepository> _chatRepoMock;
@@ -26,12 +23,9 @@ public class ChatServiceChatItemTests
             Mock.Of<IPresenceService>(), Mock.Of<IChatEventPublisher>());
     }
 
-    // ========== GetChatListItemAsync ==========
-
     [Fact]
     public async Task GetChatListItemAsync_WhenMember_ReturnsMappedItem()
     {
-        // Arrange
         var chatId = Guid.NewGuid();
         var userId = Guid.NewGuid();
         var companionId = Guid.NewGuid();
@@ -60,10 +54,8 @@ public class ChatServiceChatItemTests
                 LastMessageSenderName = "Alice"
             });
 
-        // Act
         var item = await _service.GetChatListItemAsync(chatId, userId);
 
-        // Assert
         Assert.Equal(chatId, item.ChatId);
         Assert.Equal("private", item.Type);
         Assert.Equal(companionId, item.CompanionId);
@@ -80,11 +72,9 @@ public class ChatServiceChatItemTests
     [Fact]
     public async Task GetChatListItemAsync_WhenChatMissing_ThrowsNotFound()
     {
-        // Arrange
         var chatId = Guid.NewGuid();
         _chatRepoMock.Setup(r => r.GetByIdAsync(chatId, It.IsAny<CancellationToken>())).ReturnsAsync((Chat?)null);
 
-        // Act & Assert
         var ex = await Assert.ThrowsAsync<NotFoundException>(() =>
             _service.GetChatListItemAsync(chatId, Guid.NewGuid(), It.IsAny<CancellationToken>()));
 
@@ -94,7 +84,6 @@ public class ChatServiceChatItemTests
     [Fact]
     public async Task GetChatListItemAsync_WhenNotMember_ThrowsForbidden()
     {
-        // Arrange
         var chatId = Guid.NewGuid();
         var userId = Guid.NewGuid();
 
@@ -102,7 +91,6 @@ public class ChatServiceChatItemTests
             .ReturnsAsync(new Chat { Id = chatId, Type = "private" });
         _chatRepoMock.Setup(r => r.IsMemberAsync(chatId, userId, It.IsAny<CancellationToken>())).ReturnsAsync(false);
 
-        // Act & Assert
         var ex = await Assert.ThrowsAsync<ForbiddenException>(() =>
             _service.GetChatListItemAsync(chatId, userId, It.IsAny<CancellationToken>()));
 
@@ -110,12 +98,9 @@ public class ChatServiceChatItemTests
         _chatRepoMock.Verify(r => r.GetChatListItemAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    // ========== SearchChatsAsync: companion fields must not be lost ==========
-
     [Fact]
     public async Task SearchChatsAsync_PrivateChat_KeepsCompanionIdAndUsername()
     {
-        // Arrange
         var userId = Guid.NewGuid();
         var chatId = Guid.NewGuid();
         var companionId = Guid.NewGuid();
@@ -138,10 +123,9 @@ public class ChatServiceChatItemTests
             .Setup(r => r.CountChatsByQueryAsync(userId, "ali", "private", It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
-        // Act
         var result = await _service.SearchChatsAsync(userId, "ali", "private", 20);
 
-        // Assert - regression: the search mapper used to lose CompanionId/CompanionUsername
+        // Regression: the search mapper used to lose CompanionId/CompanionUsername
         var item = Assert.Single(result.Items);
         Assert.Equal(companionId, item.CompanionId);
         Assert.Equal("alice", item.CompanionUsername);
@@ -151,7 +135,6 @@ public class ChatServiceChatItemTests
     [Fact]
     public async Task GetUserChatsAsync_PrivateChat_ExposesCompanionUsername()
     {
-        // Arrange
         var userId = Guid.NewGuid();
         var companionId = Guid.NewGuid();
 
@@ -169,10 +152,8 @@ public class ChatServiceChatItemTests
                 }
             ]);
 
-        // Act
         var chats = await _service.GetUserChatsAsync(userId);
 
-        // Assert
         var item = Assert.Single(chats);
         Assert.Equal(companionId, item.CompanionId);
         Assert.Equal("alice", item.CompanionUsername);

@@ -30,10 +30,7 @@ public class ChatServicePrivateChatTests
             new ChatPolicy(new MembershipService(_chatRepoMock.Object)), _presenceMock.Object, _eventsMock.Object);
     }
 
-    /// <summary>
-    /// A private chat list-item row as the repository would return it
-    /// for a specific viewer (companion is always "the other" participant).
-    /// </summary>
+    /// <summary>A private chat row as the repository returns it to one viewer: the companion is always the other participant.</summary>
     private static ChatListResult PrivateRow(Guid chatId, Guid companionId, string companionName, string companionUsername) => new()
     {
         ChatId = chatId,

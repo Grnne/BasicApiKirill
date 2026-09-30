@@ -615,7 +615,7 @@
       },
       "FolderDto": {
         "additionalProperties": false,
-        "description": "A folder of chats (D9).",
+        "description": "A folder of chats.",
         "properties": {
           "chatIds": {
             "description": "Chats listed explicitly (the pinned ones among them), archived ones too.",
@@ -786,7 +786,7 @@
       },
       "GroupPermissionsDto": {
         "additionalProperties": false,
-        "description": "What a member of a group may do (D8). In answers — all fields are set.",
+        "description": "What a member of a group may do. In answers — all fields are set.",
         "properties": {
           "addAdmins": {
             "description": "Admin permission: make members admins.",
@@ -1181,7 +1181,7 @@
       },
       "OwnProfileResponseDto": {
         "additionalProperties": false,
-        "description": "The caller's own profile — `AuthResponseDto` minus the token fields,\nso a client restoring a session from a stored token recovers exactly the user data\nlogin/register would have given it.\nUnlike `UserProfileResponseDto` this includes the email, which is\nprivate to the account owner.",
+        "description": "The caller's own profile: `AuthResponseDto` minus the tokens. Unlike `UserProfileResponseDto`\nit includes the email, which is private to the account owner.",
         "properties": {
           "avatarId": {
             "description": "The photo; null — none. Fetched by `POST /api/media/links`.",
@@ -1260,7 +1260,7 @@
       },
       "PrivacySettingsDto": {
         "additionalProperties": false,
-        "description": "Privacy settings (D11): `everybody`, `contacts` (those who share a chat with the user) or\n`nobody`. In a request a null field is left as it is.",
+        "description": "Privacy settings: `everybody`, `contacts` (those who share a chat with the user) or\n`nobody`. In a request a null field is left as it is.",
         "properties": {
           "groupAdd": {
             "description": "Who may add the user to groups.",
@@ -1509,7 +1509,7 @@
       },
       "SearchChatsResponseDto": {
         "additionalProperties": false,
-        "description": "Response for chat search (by title for group chats or by companion name/username for private chats).",
+        "description": "Response for chat search.",
         "properties": {
           "items": {
             "description": "Matching chat items.",
@@ -1534,7 +1534,7 @@
       },
       "SearchMessagesResponseDto": {
         "additionalProperties": false,
-        "description": "Response for full-text search in chat messages.\nExtends BasicApi.Models.Dto.Message.CursorPaginatedResponse`1 with search-specific metadata.",
+        "description": "A page of full-text search results in one chat.",
         "properties": {
           "hasMore": {
             "description": "Whether there are more items beyond this page.",
@@ -1739,7 +1739,7 @@
       },
       "SyncStateDto": {
         "additionalProperties": false,
-        "description": "Snapshot: everything the client needs to start from a clean slate — the state of the user, the\nsame on every device. The history of each chat comes page by page.",
+        "description": "Snapshot: the user's state to start from, the same on every device; chat history comes page by page.",
         "properties": {
           "blockedUserIds": {
             "description": "Whom the user has blocked; profiles — `GET /api/users/me/blocked`.",
@@ -1915,7 +1915,7 @@
       },
       "UserProfileResponseDto": {
         "additionalProperties": false,
-        "description": "Public profile of a user, safe to show to any authenticated user.\nCarries the same fields as BasicApi.Features.Users.UserSearchResultDto, so a client can\nstore search results and profile lookups as one record.\nEmail is deliberately absent — see BasicApi.Models.Dto.Users.OwnProfileResponseDto for your own.",
+        "description": "Public profile of a user, safe to show to any authenticated user. Email is deliberately absent —\nsee BasicApi.Models.Dto.Users.OwnProfileResponseDto for your own.",
         "properties": {
           "avatarId": {
             "description": "The photo; null — none. Fetched by `POST /api/media/links`.",

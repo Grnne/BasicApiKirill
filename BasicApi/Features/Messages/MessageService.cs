@@ -34,7 +34,7 @@ public interface IMessageService
         Guid chatId, Guid userId, string? filter, string? cursor, int limit, CancellationToken ct = default);
 
     /// <summary>
-    /// Search across all the user's chats (D10), newest first, with filters. Errors: 400
+    /// Search across all the user's chats, newest first, with filters. Errors: 400
     /// <c>INVALID_QUERY</c>/<c>INVALID_CURSOR</c>/<c>INVALID_FILTER</c>, 403 <c>NOT_A_MEMBER</c> (the chat filter).
     /// </summary>
     Task<GlobalSearchResponseDto> SearchAllAsync(
@@ -527,7 +527,7 @@ public sealed class MessageService(
         }
     }
 
-    /// <summary>Messages as the viewer sees them: with the read status (D1).</summary>
+    /// <summary>Messages as the viewer sees them: with the read status.</summary>
     private async Task<List<MessageDto>> MapForViewerAsync(
         IEnumerable<MessageWithSender> rows, Guid chatId, Guid viewerId, CancellationToken ct)
     {

@@ -7,10 +7,7 @@ using Moq;
 
 namespace BasicApi.Tests.Features.Auth;
 
-/// <summary>
-/// Refresh-token session mechanics: issuing, rotation, the grace window that keeps
-/// a racing Android client from being logged out, and reuse detection.
-/// </summary>
+/// <summary>Refresh-token sessions: issuing, rotation, the grace window for racing clients, and reuse detection.</summary>
 public class SessionServiceTests
 {
     private const int GraceSeconds = 30;
@@ -62,7 +59,6 @@ public class SessionServiceTests
             _sessionRepoMock.Object, _userRepoMock.Object, _jwtMock.Object, config);
     }
 
-    /// <summary>An active session holding the given refresh token.</summary>
     private Session ActiveSession(string refreshToken, Guid? familyId = null) => new()
     {
         Id = Guid.NewGuid(),
@@ -73,15 +69,11 @@ public class SessionServiceTests
         ExpiresAt = DateTime.UtcNow.AddDays(30)
     };
 
-    // ========== Issue ==========
-
     [Fact]
     public async Task IssueForUserAsync_ReturnsBothTokens()
     {
-        // Act
         var result = await _service.IssueForUserAsync(_user, "android", "1.2.3.4");
 
-        // Assert
         Assert.Equal("access-token", result.Token);
         Assert.False(string.IsNullOrWhiteSpace(result.RefreshToken));
         Assert.True(result.RefreshTokenExpiresAt > DateTime.UtcNow.AddDays(29));
@@ -92,17 +84,15 @@ public class SessionServiceTests
     [Fact]
     public async Task IssueForUserAsync_StoresOnlyTheHashOfTheRefreshToken()
     {
-        // Arrange
         Session? stored = null;
         _sessionRepoMock
             .Setup(r => r.CreateAsync(It.IsAny<Session>(), It.IsAny<CancellationToken>()))
             .Callback<Session, CancellationToken>((s, _) => stored = s)
             .Returns(Task.CompletedTask);
 
-        // Act
         var result = await _service.IssueForUserAsync(_user, "android", "1.2.3.4");
 
-        // Assert - the plaintext token must not end up in the DB
+        // The plaintext token must not end up in the DB
         Assert.NotNull(stored);
         Assert.NotEqual(result.RefreshToken, stored!.RefreshTokenHash);
         Assert.Equal(SessionService.HashRefreshToken(result.RefreshToken), stored.RefreshTokenHash);
@@ -112,38 +102,30 @@ public class SessionServiceTests
     [Fact]
     public async Task IssueForUserAsync_TwoLoginsProduceDifferentTokensAndFamilies()
     {
-        // Arrange
         var stored = new List<Session>();
         _sessionRepoMock
             .Setup(r => r.CreateAsync(It.IsAny<Session>(), It.IsAny<CancellationToken>()))
             .Callback<Session, CancellationToken>((s, _) => stored.Add(s))
             .Returns(Task.CompletedTask);
 
-        // Act
         var first = await _service.IssueForUserAsync(_user, "android", null);
         var second = await _service.IssueForUserAsync(_user, "ios", null);
 
-        // Assert
         Assert.NotEqual(first.RefreshToken, second.RefreshToken);
         Assert.NotEqual(stored[0].FamilyId, stored[1].FamilyId);
     }
 
-    // ========== Refresh: happy path ==========
-
     [Fact]
     public async Task RefreshAsync_ValidToken_IssuesNewPair()
     {
-        // Arrange
         const string token = "refresh-token-1";
         var session = ActiveSession(token);
         _sessionRepoMock
             .Setup(r => r.GetByRefreshTokenHashAsync(SessionService.HashRefreshToken(token), It.IsAny<CancellationToken>()))
             .ReturnsAsync(session);
 
-        // Act
         var result = await _service.RefreshAsync(token, "android", "1.2.3.4");
 
-        // Assert
         Assert.Equal("access-token", result.Token);
         Assert.NotEqual(token, result.RefreshToken); // rotation is mandatory
         Assert.Equal(_user.Id, result.UserId);
@@ -152,7 +134,6 @@ public class SessionServiceTests
     [Fact]
     public async Task RefreshAsync_ValidToken_KeepsTheFamilyAndMarksRotation()
     {
-        // Arrange
         const string token = "refresh-token-2";
         var familyId = Guid.NewGuid();
         var session = ActiveSession(token, familyId);
@@ -166,27 +147,22 @@ public class SessionServiceTests
             .Callback<Guid, Session, DateTime, CancellationToken>((_, s, _, _) => replacement = s)
             .ReturnsAsync(true);
 
-        // Act
         var result = await _service.RefreshAsync(token, "android", null);
 
-        // Assert - the successor is in the same family, with the new token hash
+        // The successor is in the same family, with the new token hash
         Assert.NotNull(replacement);
         Assert.Equal(familyId, replacement!.FamilyId);
         Assert.Equal(_user.Id, replacement.UserId);
         Assert.Equal(SessionService.HashRefreshToken(result.RefreshToken), replacement.RefreshTokenHash);
     }
 
-    // ========== Refresh: rejections ==========
-
     [Fact]
     public async Task RefreshAsync_UnknownToken_ThrowsUnauthorized()
     {
-        // Arrange
         _sessionRepoMock
             .Setup(r => r.GetByRefreshTokenHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Session?)null);
 
-        // Act & Assert
         var ex = await Assert.ThrowsAsync<UnauthorizedException>(() =>
             _service.RefreshAsync("nope", null, null));
 
@@ -196,7 +172,6 @@ public class SessionServiceTests
     [Fact]
     public async Task RefreshAsync_ExpiredSession_ThrowsUnauthorized()
     {
-        // Arrange
         const string token = "old";
         var session = ActiveSession(token);
         session.ExpiresAt = DateTime.UtcNow.AddMinutes(-1);
@@ -204,7 +179,6 @@ public class SessionServiceTests
             .Setup(r => r.GetByRefreshTokenHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(session);
 
-        // Act & Assert
         var ex = await Assert.ThrowsAsync<UnauthorizedException>(() =>
             _service.RefreshAsync(token, null, null));
 
@@ -214,7 +188,7 @@ public class SessionServiceTests
     [Fact]
     public async Task RefreshAsync_SessionRevokedByLogout_ThrowsUnauthorized()
     {
-        // Arrange - revoked without ReplacedBySessionId = deliberate logout, not rotation
+        // Revoked without ReplacedBySessionId = deliberate logout, not rotation
         const string token = "logged-out";
         var session = ActiveSession(token);
         session.RevokedAt = DateTime.UtcNow.AddMinutes(-1);
@@ -222,7 +196,6 @@ public class SessionServiceTests
             .Setup(r => r.GetByRefreshTokenHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(session);
 
-        // Act & Assert
         var ex = await Assert.ThrowsAsync<UnauthorizedException>(() =>
             _service.RefreshAsync(token, null, null));
 
@@ -232,12 +205,10 @@ public class SessionServiceTests
             Times.Never);
     }
 
-    // ========== Grace window ==========
-
     [Fact]
     public async Task RefreshAsync_RotatedWithinGraceWindow_SucceedsWithoutRevokingFamily()
     {
-        // Arrange - the token was already rotated 5 seconds ago: this is a race of two parallel
+        // The token was already rotated 5 seconds ago: this is a race of two parallel
         // client requests, not theft. The losing request must get a working pair.
         const string token = "raced";
         var session = ActiveSession(token);
@@ -247,10 +218,8 @@ public class SessionServiceTests
             .Setup(r => r.GetByRefreshTokenHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(session);
 
-        // Act
         var result = await _service.RefreshAsync(token, "android", null);
 
-        // Assert
         Assert.Equal("access-token", result.Token);
         Assert.False(string.IsNullOrWhiteSpace(result.RefreshToken));
         _sessionRepoMock.Verify(
@@ -261,7 +230,7 @@ public class SessionServiceTests
     [Fact]
     public async Task RefreshAsync_RotatedAfterGraceWindow_RevokesFamilyAndThrows()
     {
-        // Arrange - the same scenario, but a minute later: this is reuse of a stolen
+        // The same scenario, but a minute later: this is reuse of a stolen
         // token, so the whole chain is revoked.
         const string token = "stolen";
         var familyId = Guid.NewGuid();
@@ -272,7 +241,6 @@ public class SessionServiceTests
             .Setup(r => r.GetByRefreshTokenHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(session);
 
-        // Act & Assert
         var ex = await Assert.ThrowsAsync<UnauthorizedException>(() =>
             _service.RefreshAsync(token, null, null));
 
@@ -285,7 +253,7 @@ public class SessionServiceTests
     [Fact]
     public async Task RefreshAsync_LostTheRotationRace_StillReturnsWorkingPair()
     {
-        // Arrange - the session looked active, but a parallel request managed to rotate
+        // The session looked active, but a parallel request managed to rotate
         // it between SELECT and UPDATE. The client must not be kicked out.
         const string token = "raced-2";
         var session = ActiveSession(token);
@@ -296,10 +264,8 @@ public class SessionServiceTests
             .Setup(r => r.TryRotateAsync(session.Id, It.IsAny<Session>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
 
-        // Act
         var result = await _service.RefreshAsync(token, "android", null);
 
-        // Assert
         Assert.False(string.IsNullOrWhiteSpace(result.RefreshToken));
         _sessionRepoMock.Verify(
             r => r.RevokeFamilyAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()),
@@ -310,7 +276,7 @@ public class SessionServiceTests
     [Fact]
     public async Task RefreshAsync_GraceWindowButFamilyLoggedOut_ThrowsRevoked()
     {
-        // Arrange - the token was rotated a second ago, but then the user logged out
+        // The token was rotated a second ago, but then the user logged out
         // (logout / logout-all) and the whole chain was revoked. The grace window must not
         // become a loophole around signing out of the account.
         const string token = "raced-but-logged-out";
@@ -325,7 +291,6 @@ public class SessionServiceTests
             .Setup(r => r.HasLiveSessionInFamilyAsync(session.FamilyId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
 
-        // Act & Assert
         var ex = await Assert.ThrowsAsync<UnauthorizedException>(() =>
             _service.RefreshAsync(token, null, null));
 
@@ -334,12 +299,9 @@ public class SessionServiceTests
             r => r.CreateAsync(It.IsAny<Session>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    // ========== Deactivated user ==========
-
     [Fact]
     public async Task RefreshAsync_InactiveUser_RevokesEverythingAndThrows()
     {
-        // Arrange
         const string token = "deactivated";
         _user.IsActive = false;
         var session = ActiveSession(token);
@@ -347,7 +309,6 @@ public class SessionServiceTests
             .Setup(r => r.GetByRefreshTokenHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(session);
 
-        // Act & Assert
         var ex = await Assert.ThrowsAsync<UnauthorizedException>(() =>
             _service.RefreshAsync(token, null, null));
 
@@ -360,7 +321,6 @@ public class SessionServiceTests
     [Fact]
     public async Task RefreshAsync_DeletedUser_ThrowsUnauthorized()
     {
-        // Arrange
         const string token = "ghost";
         var session = ActiveSession(token);
         _sessionRepoMock
@@ -370,29 +330,23 @@ public class SessionServiceTests
             .Setup(r => r.GetByIdAsync(_user.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync((User?)null);
 
-        // Act & Assert
         var ex = await Assert.ThrowsAsync<UnauthorizedException>(() =>
             _service.RefreshAsync(token, null, null));
 
         Assert.Equal("USER_NOT_FOUND", ex.ErrorCode);
     }
 
-    // ========== Revocation ==========
-
     [Fact]
     public async Task RevokeAsync_KnownToken_RevokesThatSession()
     {
-        // Arrange
         const string token = "bye";
         var session = ActiveSession(token);
         _sessionRepoMock
             .Setup(r => r.GetByRefreshTokenHashAsync(SessionService.HashRefreshToken(token), It.IsAny<CancellationToken>()))
             .ReturnsAsync(session);
 
-        // Act
         await _service.RevokeAsync(token);
 
-        // Assert
         _sessionRepoMock.Verify(
             r => r.RevokeAsync(session.Id, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -400,12 +354,11 @@ public class SessionServiceTests
     [Fact]
     public async Task RevokeAsync_UnknownToken_DoesNotThrow()
     {
-        // Arrange - logout must be idempotent and must not reveal whether the token exists
+        // Logout must be idempotent and must not reveal whether the token exists
         _sessionRepoMock
             .Setup(r => r.GetByRefreshTokenHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Session?)null);
 
-        // Act & Assert
         await _service.RevokeAsync("whatever");
         _sessionRepoMock.Verify(
             r => r.RevokeAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -414,7 +367,6 @@ public class SessionServiceTests
     [Fact]
     public async Task RevokeAsync_NullOrEmptyToken_DoesNothing()
     {
-        // Act & Assert
         await _service.RevokeAsync(null);
         await _service.RevokeAsync("");
 
@@ -425,10 +377,8 @@ public class SessionServiceTests
     [Fact]
     public async Task RevokeAllForUserAsync_DelegatesToRepository()
     {
-        // Act
         await _service.RevokeAllForUserAsync(_user.Id);
 
-        // Assert
         _sessionRepoMock.Verify(
             r => r.RevokeAllForUserAsync(_user.Id, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
     }

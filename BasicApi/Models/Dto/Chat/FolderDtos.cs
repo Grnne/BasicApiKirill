@@ -1,6 +1,6 @@
 namespace BasicApi.Models.Dto.Chat;
 
-/// <summary>A folder of chats (D9).</summary>
+/// <summary>A folder of chats.</summary>
 public class FolderDto
 {
     public Guid Id { get; set; }

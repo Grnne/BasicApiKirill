@@ -6,7 +6,7 @@ using static BasicApi.IntegrationTests.Features.Media.MediaUploadTests;
 
 namespace BasicApi.IntegrationTests.Features.Media;
 
-/// <summary>Avatars of users and groups (plan 2, F4.4).</summary>
+/// <summary>Avatars of users and groups.</summary>
 public class AvatarsTests(PostgresFixture db, StorageFixture storage) : DbTest(db)
 {
     private static Guid? AvatarOf(JsonElement e) =>

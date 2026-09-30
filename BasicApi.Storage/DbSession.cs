@@ -6,12 +6,8 @@ using Dapper;
 namespace BasicApi.Storage;
 
 /// <summary>
-/// Database access for the repositories of a single request (or hub call).
-/// Outside a transaction each query takes a connection from the pool and returns it immediately —
-/// so independent queries can run in parallel. Inside
-/// <see cref="InTransactionAsync{T}"/> all queries of all repositories go in a single
-/// transaction on a single connection: this way a domain change and its event (outbox)
-/// are committed together. There must be no parallel queries inside a transaction.
+/// Database access for one request's repositories: each query uses its own pooled connection, except inside
+/// <see cref="InTransactionAsync{T}"/>, where all share one transaction. No parallel queries inside it.
 /// </summary>
 public interface IDbSession
 {

@@ -3,16 +3,8 @@ using FluentMigrator;
 namespace BasicApi.Storage.Migrations;
 
 /// <summary>
-/// One private chat per pair of users, enforced by the database.
-///
-/// Before: "does a chat exist?" and "create it" were two separate queries, so a
-/// double click or two devices could create two private chats for the same pair.
-/// Now every private chat carries private_key = "{smaller uuid}:{larger uuid}"
-/// under a unique index, and creation is INSERT ... ON CONFLICT DO NOTHING.
-///
-/// Duplicates that already exist are merged first: the oldest chat of a pair is
-/// kept, messages of the others move into it, each member's read pointer becomes
-/// the latest of their pointers, and the duplicate chats are deleted.
+/// One private chat per pair: private_key = "{smaller uuid}:{larger uuid}" under a unique index.
+/// Existing duplicates are merged into the oldest chat of the pair first.
 /// </summary>
 [Migration(6)]
 public class AddPrivateChatKey : Migration

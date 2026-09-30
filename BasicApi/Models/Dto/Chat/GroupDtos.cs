@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace BasicApi.Models.Dto.Chat;
 
-/// <summary>What a member of a group may do (D8). In answers — all fields are set.</summary>
+/// <summary>What a member of a group may do. In answers — all fields are set.</summary>
 public class GroupPermissionsDto
 {
     public bool SendMessages { get; set; }

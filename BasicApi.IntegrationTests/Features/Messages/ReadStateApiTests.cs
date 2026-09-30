@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.SignalR.Client;
 
 namespace BasicApi.IntegrationTests.Features.Messages;
 
-/// <summary>Reading on all devices and "mark as unread" (plan 2, F2.2, D9).</summary>
+/// <summary>Reading on all devices and "mark as unread".</summary>
 public class ReadStateApiTests(PostgresFixture db) : DbTest(db)
 {
     private static readonly TimeSpan Wait = TimeSpan.FromSeconds(10);

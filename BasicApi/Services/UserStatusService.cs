@@ -3,10 +3,8 @@ using System.Collections.Concurrent;
 namespace BasicApi.Services;
 
 /// <summary>
-/// In-memory tracker for user online/offline and typing status.
-/// Presence changes take a per-user lock, so connect/disconnect races cannot
-/// lose a connection or report online/offline twice.
-/// NOTE: For horizontal scaling, replace with Redis or SignalR Redis backplane.
+/// In-memory tracker of online and typing status; a per-user lock keeps connect/disconnect races from
+/// losing a connection. NOTE: for horizontal scaling, replace with Redis.
 /// </summary>
 public class UserStatusService(TimeProvider? timeProvider = null) : IUserStatusService
 {
@@ -52,8 +50,7 @@ public class UserStatusService(TimeProvider? timeProvider = null) : IUserStatusS
 
     public Task<Dictionary<Guid, HashSet<Guid>>> GetTypingStatusAsync(IReadOnlyCollection<Guid> chatIds)
     {
-        // Only the requested chats: the caller passes the user's chats, and others'
-        // are not read at all (previously the whole map was iterated and the filter was outside).
+        // Only the requested chats: the caller passes the user's chats, and others' are not read at all.
         var now = _time.GetUtcNow();
         var result = new Dictionary<Guid, HashSet<Guid>>();
         foreach (var chatId in chatIds)

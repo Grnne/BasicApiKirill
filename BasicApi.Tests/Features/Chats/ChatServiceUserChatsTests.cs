@@ -44,7 +44,6 @@ public class ChatServiceUserChatsTests
     [Fact]
     public async Task GetUserChatsAsync_ReturnsMappedChats()
     {
-        // Arrange
         var userId = Guid.NewGuid();
         var now = DateTime.UtcNow;
         var chatId = Guid.NewGuid();
@@ -62,10 +61,8 @@ public class ChatServiceUserChatsTests
             .Setup(r => r.GetUserChatsBatchedAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(rows);
 
-        // Act
         var result = await _service.GetUserChatsAsync(userId);
 
-        // Assert
         var dto = Assert.Single(result);
         Assert.Equal(chatId, dto.ChatId);
         Assert.Equal("private", dto.Type);
@@ -86,7 +83,6 @@ public class ChatServiceUserChatsTests
     [Fact]
     public async Task GetUserChatsAsync_WhenNoLastMessage_LastMessageIsNull()
     {
-        // Arrange
         var userId = Guid.NewGuid();
         var chatId = Guid.NewGuid();
 
@@ -101,10 +97,8 @@ public class ChatServiceUserChatsTests
             .Setup(r => r.GetUserChatsBatchedAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(rows);
 
-        // Act
         var result = await _service.GetUserChatsAsync(userId);
 
-        // Assert
         var dto = Assert.Single(result);
         Assert.Equal("General Chat", dto.Title);
         Assert.Equal("group", dto.Type);
@@ -112,15 +106,12 @@ public class ChatServiceUserChatsTests
         Assert.Equal(0, dto.UnreadCount);
     }
 
-    // ========== SearchChatsAsync Tests ==========
-
     [Theory]
     [InlineData("group", "Team Alpha", null, 5)]
     [InlineData("private", null, "Alice Johnson", 3)]
     public async Task SearchChatsAsync_ByType_ReturnsMappedResults(
         string typeFilter, string? expectedTitle, string? expectedCompanion, int totalCount)
     {
-        // Arrange
         var userId = Guid.NewGuid();
         var query = expectedCompanion is not null ? "alice" : "team";
         var chatId = Guid.NewGuid();
@@ -141,10 +132,8 @@ public class ChatServiceUserChatsTests
             .Setup(r => r.CountChatsByQueryAsync(userId, query, typeFilter, It.IsAny<CancellationToken>()))
             .ReturnsAsync(totalCount);
 
-        // Act
         var result = await _service.SearchChatsAsync(userId, query, typeFilter, 20);
 
-        // Assert
         Assert.Single(result.Items);
         Assert.Equal(typeFilter, result.Items[0].Type);
         Assert.Equal(expectedTitle, result.Items[0].Title);
@@ -157,7 +146,6 @@ public class ChatServiceUserChatsTests
     [Fact]
     public async Task SearchChatsAsync_NoType_SearchesBothAndMergesResults()
     {
-        // Arrange
         var userId = Guid.NewGuid();
         var query = "test";
         var now = DateTime.UtcNow;
@@ -180,10 +168,8 @@ public class ChatServiceUserChatsTests
             .Setup(r => r.CountChatsByQueryAsync(userId, query, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(2);
 
-        // Act
         var result = await _service.SearchChatsAsync(userId, query, null, 20);
 
-        // Assert
         Assert.Equal(2, result.Items.Count);
         // Should be sorted: private (now-1d) first, then group (now-2d)
         Assert.Equal("private", result.Items[0].Type);
@@ -198,10 +184,8 @@ public class ChatServiceUserChatsTests
     [Fact]
     public async Task SearchChatsAsync_EmptyQuery_ThrowsBadRequest()
     {
-        // Arrange
         var userId = Guid.NewGuid();
 
-        // Act & Assert
         var ex = await Assert.ThrowsAsync<BasicApi.Middleware.Exceptions.BadRequestException>(() =>
             _service.SearchChatsAsync(userId, "", null, 20));
 
@@ -211,7 +195,6 @@ public class ChatServiceUserChatsTests
     [Fact]
     public async Task SearchChatsAsync_NoResults_ReturnsEmptyList()
     {
-        // Arrange
         var userId = Guid.NewGuid();
         var query = "nonexistent";
 
@@ -223,10 +206,8 @@ public class ChatServiceUserChatsTests
             .Setup(r => r.CountChatsByQueryAsync(userId, query, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(0);
 
-        // Act
         var result = await _service.SearchChatsAsync(userId, query, null, 20);
 
-        // Assert
         Assert.Empty(result.Items);
         Assert.Equal(query, result.Query);
         Assert.Equal(0, result.TotalCount);

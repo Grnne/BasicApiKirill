@@ -6,10 +6,8 @@ using static BasicApi.IntegrationTests.Features.Media.MediaUploadTests;
 namespace BasicApi.IntegrationTests.Features.Sync;
 
 /// <summary>
-/// Full history on any new device (plan 2, F8, D3). Device A is there from the start and keeps its
-/// view the way a client does — from the snapshot and then the journal. Device B signs in after
-/// everything the plan's functions can do has happened, and starts from scratch: the snapshot and
-/// the history page by page. Both must see the same; so must B after catching up on what follows.
+/// Full history on a new device: B, signing in late from the snapshot and history, sees the same as A,
+/// which followed the journal from the start — and still does after catching up.
 /// </summary>
 public class NewDeviceTests(PostgresFixture db, StorageFixture storage) : DbTest(db)
 {

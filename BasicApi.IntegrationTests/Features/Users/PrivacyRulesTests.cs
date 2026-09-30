@@ -4,7 +4,7 @@ using BasicApi.IntegrationTests.Infrastructure;
 
 namespace BasicApi.IntegrationTests.Features.Users;
 
-/// <summary>Who may start a private chat and who may add to groups (plan 2, F5.2, D11).</summary>
+/// <summary>Who may start a private chat and who may add to groups.</summary>
 public class PrivacyRulesTests(PostgresFixture db) : DbTest(db)
 {
     private static Dictionary<string, string?> Settings => new() { ["RateLimiting:CommandsPer10Seconds"] = "1000" };

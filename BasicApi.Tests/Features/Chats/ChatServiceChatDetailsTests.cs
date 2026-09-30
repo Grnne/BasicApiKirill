@@ -24,7 +24,6 @@ public class ChatServiceChatDetailsTests
     [Fact]
     public async Task GetChatDetailsAsync_Success_ReturnsChatDetailWithParticipants()
     {
-        // Arrange
         var chatId = Guid.NewGuid();
         var userId = Guid.NewGuid();
         var now = DateTime.UtcNow;
@@ -47,10 +46,8 @@ public class ChatServiceChatDetailsTests
         _chatRepoMock.Setup(r => r.IsMemberAsync(chatId, userId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
         _chatRepoMock.Setup(r => r.GetChatParticipantsAsync(chatId, It.IsAny<CancellationToken>())).ReturnsAsync(participants);
 
-        // Act
         var result = await _service.GetChatDetailsAsync(chatId, userId);
 
-        // Assert
         Assert.Equal(chatId, result.ChatId);
         Assert.Equal("group", result.Type);
         Assert.Equal("Team Chat", result.Title);
@@ -62,12 +59,10 @@ public class ChatServiceChatDetailsTests
     [Fact]
     public async Task GetChatDetailsAsync_ChatNotFound_ThrowsNotFoundException()
     {
-        // Arrange
         var chatId = Guid.NewGuid();
 
         _chatRepoMock.Setup(r => r.GetByIdAsync(chatId, It.IsAny<CancellationToken>())).ReturnsAsync((Chat?)null);
 
-        // Act & Assert
         await Assert.ThrowsAsync<NotFoundException>(() =>
             _service.GetChatDetailsAsync(chatId, Guid.NewGuid()));
     }

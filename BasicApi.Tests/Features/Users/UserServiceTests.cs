@@ -20,17 +20,14 @@ public class UserServiceTests
     [Fact]
     public async Task GetUserIdAsync_Found_ReturnsOkWithUserId()
     {
-        // Arrange
         var userId = Guid.NewGuid();
 
         _userRepoMock
             .Setup(r => r.GetIdByUsernameAsync("testuser", It.IsAny<CancellationToken>()))
             .ReturnsAsync(userId);
 
-        // Act
         var result = await _service.GetUserIdAsync("testuser");
 
-        // Assert
         var dto = result;
         Assert.Equal(userId, dto.UserId);
     }
@@ -38,24 +35,19 @@ public class UserServiceTests
     [Fact]
     public async Task GetUserIdAsync_UserNotFound_ThrowsNotFoundException()
     {
-        // Arrange
         _userRepoMock
             .Setup(r => r.GetIdByUsernameAsync("unknown", It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid?)null);
 
-        // Act & Assert
         var ex = await Assert.ThrowsAsync<NotFoundException>(() =>
             _service.GetUserIdAsync("unknown"));
 
         Assert.Contains("User not found", ex.Message);
     }
 
-    // ========== SearchUsersAsync Tests ==========
-
     [Fact]
     public async Task SearchUsersAsync_ReturnsMappedResults()
     {
-        // Arrange
         var userId = Guid.NewGuid();
         var query = "alice";
         var users = new List<User>
@@ -82,10 +74,8 @@ public class UserServiceTests
             .Setup(r => r.CountBySearchQueryAsync(query, userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(2);
 
-        // Act
         var result = await _service.SearchUsersAsync(userId, query, 20);
 
-        // Assert
         var dto = result;
         Assert.Equal(2, dto.Items.Count);
         Assert.Equal(users[0].Id, dto.Items[0].UserId);
@@ -101,7 +91,6 @@ public class UserServiceTests
     [Fact]
     public async Task SearchUsersAsync_EmptyResults_ReturnsEmptyList()
     {
-        // Arrange
         var userId = Guid.NewGuid();
         var query = "nonexistent";
 
@@ -113,10 +102,8 @@ public class UserServiceTests
             .Setup(r => r.CountBySearchQueryAsync(query, userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(0);
 
-        // Act
         var result = await _service.SearchUsersAsync(userId, query, 20);
 
-        // Assert
         var dto = result;
         Assert.Empty(dto.Items);
         Assert.Equal(query, dto.Query);
@@ -126,10 +113,8 @@ public class UserServiceTests
     [Fact]
     public async Task SearchUsersAsync_EmptyQuery_ThrowsBadRequest()
     {
-        // Arrange
         var userId = Guid.NewGuid();
 
-        // Act & Assert
         var ex = await Assert.ThrowsAsync<BadRequestException>(() =>
             _service.SearchUsersAsync(userId, "", 20));
 
@@ -139,10 +124,8 @@ public class UserServiceTests
     [Fact]
     public async Task SearchUsersAsync_WhitespaceQuery_ThrowsBadRequest()
     {
-        // Arrange
         var userId = Guid.NewGuid();
 
-        // Act & Assert
         var ex = await Assert.ThrowsAsync<BadRequestException>(() =>
             _service.SearchUsersAsync(userId, "   ", 20));
 
@@ -152,7 +135,6 @@ public class UserServiceTests
     [Fact]
     public async Task SearchUsersAsync_WithLimit_RespectsLimit()
     {
-        // Arrange
         var userId = Guid.NewGuid();
         var query = "test";
         var users = new List<User>
@@ -168,10 +150,8 @@ public class UserServiceTests
             .Setup(r => r.CountBySearchQueryAsync(query, userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
-        // Act
         var result = await _service.SearchUsersAsync(userId, query, 5);
 
-        // Assert
         var dto = result;
         Assert.Single(dto.Items);
         Assert.Equal(1, dto.TotalCount);

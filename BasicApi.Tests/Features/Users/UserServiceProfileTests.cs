@@ -28,12 +28,9 @@ public class UserServiceProfileTests
         IsActive = true
     };
 
-    // ===== Own profile (/api/users/me) =====
-
     [Fact]
     public async Task GetOwnProfileAsync_Found_ReturnsOkWithProfile()
     {
-        // Arrange
         var userId = Guid.NewGuid();
         var user = MakeUser(userId);
 
@@ -41,10 +38,8 @@ public class UserServiceProfileTests
             .Setup(r => r.GetByIdAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(user);
 
-        // Act
         var result = await _service.GetOwnProfileAsync(userId);
 
-        // Assert
         var dto = result;
         Assert.Equal(userId, dto.UserId);
         Assert.Equal("alice", dto.Username);
@@ -54,7 +49,7 @@ public class UserServiceProfileTests
     [Fact]
     public async Task GetOwnProfileAsync_IncludesEmail_SoSessionRestoreMatchesLogin()
     {
-        // Arrange — a client restoring from a stored token must recover the same
+        // A client restoring from a stored token must recover the same
         // user data login/register returned, email included.
         var userId = Guid.NewGuid();
 
@@ -62,10 +57,8 @@ public class UserServiceProfileTests
             .Setup(r => r.GetByIdAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(MakeUser(userId));
 
-        // Act
         var result = await _service.GetOwnProfileAsync(userId);
 
-        // Assert
         var dto = result;
         Assert.Equal("alice@example.com", dto.Email);
     }
@@ -73,26 +66,22 @@ public class UserServiceProfileTests
     [Fact]
     public async Task GetOwnProfileAsync_AccountDeleted_ThrowsNotFoundException()
     {
-        // Arrange — token still valid, but the user row is gone
+        // Token still valid, but the user row is gone
         var userId = Guid.NewGuid();
 
         _userRepoMock
             .Setup(r => r.GetByIdAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync((User?)null);
 
-        // Act & Assert
         var ex = await Assert.ThrowsAsync<NotFoundException>(() =>
             _service.GetOwnProfileAsync(userId));
 
         Assert.Equal("USER_NOT_FOUND", ex.ErrorCode);
     }
 
-    // ===== Public profile (/api/users/{userId}) =====
-
     [Fact]
     public async Task GetUserProfileAsync_Found_ReturnsOkWithProfile()
     {
-        // Arrange
         var userId = Guid.NewGuid();
         var user = MakeUser(userId);
 
@@ -100,10 +89,8 @@ public class UserServiceProfileTests
             .Setup(r => r.GetByIdAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(user);
 
-        // Act
         var result = await _service.GetUserProfileAsync(userId);
 
-        // Assert
         var dto = result;
         Assert.Equal(userId, dto.UserId);
         Assert.Equal("alice", dto.Username);
@@ -113,7 +100,7 @@ public class UserServiceProfileTests
     [Fact]
     public async Task GetUserProfileAsync_DoesNotExposeEmailOrPresence()
     {
-        // Arrange — another user's email is private, and presence must go through
+        // Another user's email is private, and presence must go through
         // /api/users/status, which is scoped to the caller's own chats.
         var userId = Guid.NewGuid();
 
@@ -121,10 +108,8 @@ public class UserServiceProfileTests
             .Setup(r => r.GetByIdAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(MakeUser(userId));
 
-        // Act
         var result = await _service.GetUserProfileAsync(userId);
 
-        // Assert
         var dto = result;
 
         Assert.DoesNotContain(
@@ -135,14 +120,12 @@ public class UserServiceProfileTests
     [Fact]
     public async Task GetUserProfileAsync_UserNotFound_ThrowsNotFoundException()
     {
-        // Arrange
         var userId = Guid.NewGuid();
 
         _userRepoMock
             .Setup(r => r.GetByIdAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync((User?)null);
 
-        // Act & Assert
         var ex = await Assert.ThrowsAsync<NotFoundException>(() =>
             _service.GetUserProfileAsync(userId));
 

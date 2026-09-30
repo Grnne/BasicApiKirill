@@ -71,7 +71,7 @@ public sealed class MediaOptions
     public int UnusedFileHours { get; set; } = 24;
 
     /// <summary>
-    /// Retention policy (D2): originals older than this many days are removed, previews are kept
+    /// Retention policy: originals older than this many days are removed, previews are kept
     /// (the file becomes <c>expired</c>). 0 — keep forever, the default. Avatars are kept whole.
     /// </summary>
     public int RetentionDays { get; set; }

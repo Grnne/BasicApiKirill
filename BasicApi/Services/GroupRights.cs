@@ -6,9 +6,8 @@ using BasicApi.Storage.Entities;
 namespace BasicApi.Services;
 
 /// <summary>
-/// What a member of a group may do (D8, A6): a set per role, the group's defaults for members and
-/// the member's own overrides. The owner may do everything. A member never gets an admin permission
-/// (removing members, deleting others' messages, making admins) — that is what making them an admin is for.
+/// What a group member may do: a set per role, the group's defaults and the member's own overrides.
+/// A member never gets an admin permission — that is what making them an admin is for.
 /// </summary>
 public static class GroupRights
 {
@@ -38,7 +37,6 @@ public static class GroupRights
     public static GroupPermissionsDto MemberPermissions(string? settingsJson) =>
         MembersOnly(Apply(MemberDefaults(), ReadSettings(settingsJson).MemberPermissions));
 
-    /// <summary>What the member may do now.</summary>
     public static GroupPermissionsDto Effective(ChatMember member) =>
         Effective(member.Role, member.SettingsJson, member.PermissionsJson);
 

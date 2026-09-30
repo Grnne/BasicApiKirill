@@ -1,8 +1,5 @@
 namespace BasicApi.Middleware.Exceptions;
 
-/// <summary>
-/// Thrown when the user is authenticated but lacks permission. Maps to 403 Forbidden.
-/// Use for "not a member", "no access" scenarios.
-/// </summary>
+/// <summary>The user is authenticated but may not do this, e.g. not a member (403).</summary>
 public class ForbiddenException(string message, string errorCode = "FORBIDDEN")
     : DomainException(message, errorCode);

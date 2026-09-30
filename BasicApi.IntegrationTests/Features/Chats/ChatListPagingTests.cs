@@ -6,7 +6,7 @@ using Npgsql;
 
 namespace BasicApi.IntegrationTests.Features.Chats;
 
-/// <summary>The chat list in pages, by chats.last_activity_at (plan 2, F3.6).</summary>
+/// <summary>The chat list in pages, by chats.last_activity_at.</summary>
 public class ChatListPagingTests(PostgresFixture db) : DbTest(db)
 {
     private static Dictionary<string, string?> Settings => new() { ["RateLimiting:CommandsPer10Seconds"] = "1000" };

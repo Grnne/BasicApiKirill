@@ -12,10 +12,7 @@ public static class ClaimsPrincipalExtensions
         return Guid.Parse(userIdClaim!);
     }
 
-    /// <summary>
-    /// Session chain the access token was issued for (claim <c>sid</c>).
-    /// Null for tokens issued before the claim existed.
-    /// </summary>
+    /// <summary>Session chain the access token was issued for (claim <c>sid</c>); null if the claim is missing.</summary>
     public static Guid? GetSessionFamilyId(this ClaimsPrincipal user)
     {
         var value = user.FindFirstValue(JwtRegisteredClaimNames.Sid) ??

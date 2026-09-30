@@ -4,9 +4,8 @@ using BasicApi.Models.Dto.Message;
 namespace BasicApi.Services.Events;
 
 /// <summary>
-/// What to dispatch for a single outbox event: one or more SignalR sends.
-/// The arguments are stored as ready-made JSON — the dispatcher hands them to the hub as is, and the client
-/// receives the same as it would with a direct send.
+/// What to dispatch for one outbox event: SignalR sends whose arguments are stored as ready-made JSON,
+/// so the client receives the same as with a direct send.
 /// </summary>
 public sealed record OutboxEnvelope(IReadOnlyList<HubSend> Sends)
 {

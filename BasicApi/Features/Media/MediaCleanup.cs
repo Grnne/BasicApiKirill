@@ -8,9 +8,8 @@ namespace BasicApi.Features.Media;
 public sealed record MediaCleanupResult(int StaleUploads, int UnusedFiles, int ExpiredOriginals);
 
 /// <summary>
-/// Sweep every <c>Media:CleanupIntervalMinutes</c>: uploads not completed within
-/// <c>Media:PendingUploadHours</c>, files nothing points to for <c>Media:UnusedFileHours</c>, and —
-/// when <c>Media:RetentionDays</c> is set — originals older than that (previews stay).
+/// Periodically removes unfinished uploads, files nothing points to and, with <c>Media:RetentionDays</c>,
+/// originals past retention (previews stay).
 /// </summary>
 public sealed class MediaCleanup(
     IServiceScopeFactory scopes,
@@ -45,7 +44,6 @@ public sealed class MediaCleanup(
         while (await WaitAsync(timer, stoppingToken));
     }
 
-    /// <summary>One pass.</summary>
     public async Task<MediaCleanupResult> CleanupAsync(CancellationToken ct = default)
     {
         await using var scope = scopes.CreateAsyncScope();

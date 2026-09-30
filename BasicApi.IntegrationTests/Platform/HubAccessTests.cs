@@ -9,9 +9,8 @@ using Npgsql;
 namespace BasicApi.IntegrationTests.Platform;
 
 /// <summary>
-/// A hub connection lives for hours, an access token for minutes. The connection lives as long as
-/// the sign-in (session) it was opened from is alive: a revoked or expired sign-in drops
-/// already open connections too, while the expiry of a single access token does not.
+/// A hub connection lives as long as the sign-in it was opened from: a revoked or expired sign-in
+/// drops open connections, the expiry of a single access token does not.
 /// </summary>
 public class HubAccessTests(PostgresFixture db) : DbTest(db)
 {
@@ -54,7 +53,7 @@ public class HubAccessTests(PostgresFixture db) : DbTest(db)
     {
         // On reconnect the current web client sends the same token until it gets
         // 401 on a REST request. Closing the connection on token expiry left it
-        // without events until the page was reloaded (found by manual client testing).
+        // without events until the page was reloaded.
         await using var factory = new ApiFactory(Db.ConnectionString, FastSessionCheck);
         var user = await factory.RegisterAsync("alice");
         await using var hub = factory.CreateHubConnection(ApiClient.ShortLivedToken(

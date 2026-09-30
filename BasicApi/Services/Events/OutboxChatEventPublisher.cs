@@ -7,10 +7,8 @@ using BasicApi.Storage.Interfaces;
 namespace BasicApi.Services.Events;
 
 /// <summary>
-/// Events via the outbox: written into the current transaction together with the change that
-/// caused them, and into the recipients' change journal (for /sync). They are dispatched by
-/// <see cref="OutboxDispatcher"/> in the previous format. "Typing" and online are ephemeral:
-/// they go out immediately and are not written to the journal.
+/// Events via the outbox: written in the same transaction as the change that caused them, and into the
+/// recipients' journal (for /sync). "Typing" and online are ephemeral: sent at once, not journaled.
 /// </summary>
 public sealed class OutboxChatEventPublisher(
     IDbSession db,

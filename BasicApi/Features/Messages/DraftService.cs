@@ -11,8 +11,7 @@ using BasicApi.Storage.Interfaces;
 namespace BasicApi.Features.Messages;
 
 /// <summary>
-/// Drafts (D4): one per user and chat, the same on all the user's devices. The client saves with
-/// a delay while typing; the other devices get <c>DraftUpdated</c>. Sending a message clears it.
+/// Drafts: one per user and chat, shared by all the user's devices (<c>DraftUpdated</c>). Sending a message clears it.
 /// </summary>
 public interface IDraftService
 {

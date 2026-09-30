@@ -7,7 +7,6 @@ public class InitialCreate : Migration
 {
     public override void Up()
     {
-        // Users table
         Create.Table("users")
             .WithColumn("id").AsGuid().PrimaryKey()
             .WithColumn("username").AsString(100).NotNullable().Unique()
@@ -18,14 +17,12 @@ public class InitialCreate : Migration
             .WithColumn("last_login_at").AsDateTime().Nullable()
             .WithColumn("is_active").AsBoolean().NotNullable().WithDefaultValue(true);
 
-        // Chats table
         Create.Table("chats")
             .WithColumn("id").AsGuid().PrimaryKey()
             .WithColumn("title").AsString(200).Nullable()
             .WithColumn("type").AsString(20).NotNullable().WithDefaultValue("private")
             .WithColumn("created_at").AsDateTime().NotNullable().WithDefault(SystemMethods.CurrentUTCDateTime);
 
-        // ChatMembers table
         Create.Table("chat_members")
             .WithColumn("chat_id").AsGuid().NotNullable()
             .WithColumn("user_id").AsGuid().NotNullable()
@@ -46,7 +43,6 @@ public class InitialCreate : Migration
             .ToTable("users").PrimaryColumn("id")
             .OnDelete(System.Data.Rule.Cascade);
 
-        // Messages table
         Create.Table("messages")
             .WithColumn("id").AsGuid().PrimaryKey()
             .WithColumn("chat_id").AsGuid().NotNullable()

@@ -11,7 +11,7 @@ using SkiaSharp;
 
 namespace BasicApi.IntegrationTests.Features.Media;
 
-/// <summary>Uploads straight to the storage by signed links, checks, previews, downloads (plan 2, F4.1).</summary>
+/// <summary>Uploads straight to the storage by signed links, checks, previews, downloads.</summary>
 public class MediaUploadTests(PostgresFixture db, StorageFixture storage) : DbTest(db)
 {
     /// <summary>What a browser does with an upload link: a plain request, no API token.</summary>

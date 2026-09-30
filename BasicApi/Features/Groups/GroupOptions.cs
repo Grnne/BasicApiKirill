@@ -5,7 +5,7 @@ public sealed class GroupOptions
 {
     public const string Section = "Groups";
 
-    /// <summary>How many members a group may have, the owner included (D8).</summary>
+    /// <summary>How many members a group may have, the owner included.</summary>
     public int MaxMembers { get; set; } = 500;
 
     public const int MaxTitleLength = 128;

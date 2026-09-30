@@ -9,7 +9,7 @@ namespace BasicApi.IntegrationTests.E2E;
 
 /// <summary>
 /// Files through the real stack: links signed for the site's own address, the storage behind
-/// Caddy at /media/, and the headers that keep uploaded content inert (plan 2, F4).
+/// Caddy at /media/, and the headers that keep uploaded content inert.
 /// </summary>
 [Trait("Category", "E2E")]
 [Collection(E2ECollection.Name)]

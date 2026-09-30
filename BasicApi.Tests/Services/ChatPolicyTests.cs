@@ -75,8 +75,7 @@ public class ChatPolicyTests
 
 /// <summary>
 /// Services do not decide on their own what is allowed: any policy denial, with its code,
-/// reaches the client and nothing is executed. This way the new rules of plan 2 (blocks,
-/// group permissions) will work without changes in the services.
+/// reaches the client and nothing is executed.
 /// </summary>
 public class ChatPolicyEnforcementTests
 {

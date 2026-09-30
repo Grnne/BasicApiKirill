@@ -9,9 +9,8 @@ using Npgsql;
 namespace BasicApi.IntegrationTests.Features.Push;
 
 /// <summary>
-/// Push notifications of new messages (plan 2, F7.3). The push service is replaced by a recorder.
-/// Notifications go out one message after another, so "not notified of the first" is checked by
-/// the next notification being of the second.
+/// Push notifications of new messages. They go out in message order, so "not notified of the first"
+/// is checked by the next notification being of the second.
 /// </summary>
 public class PushDeliveryTests(PostgresFixture db) : DbTest(db)
 {

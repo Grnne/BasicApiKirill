@@ -7,9 +7,8 @@ using Microsoft.AspNetCore.SignalR.Client;
 namespace BasicApi.IntegrationTests.E2E;
 
 /// <summary>
-/// End-to-end tests against a deployed stack (Caddy -> API -> Postgres) over real
-/// HTTPS and WebSocket. Run with: scripts/e2e.ps1 -BaseUrl https://host.
-/// Without E2E_BASE_URL the tests are skipped, so they are not part of a regular run.
+/// End-to-end tests against a deployed stack (Caddy -> API -> Postgres) over real HTTPS and WebSocket;
+/// skipped without E2E_BASE_URL. Run with: scripts/e2e.ps1 -BaseUrl https://host.
 /// </summary>
 public static class E2EEnvironment
 {
@@ -70,9 +69,8 @@ public sealed class E2EFactAttribute : FactAttribute
 public sealed record E2EUser(Guid UserId, string Username, string Token, string RefreshToken);
 
 /// <summary>
-/// Two users for the whole run. Names are unique, so the run does not depend on
-/// the data already in the database. Sign-ins/registrations stay within the auth policy limit
-/// (5/min per IP).
+/// Two users for the whole run, with unique names so existing data does not matter.
+/// Sign-ins/registrations stay within the auth policy limit (5/min per IP).
 /// </summary>
 public sealed class E2EUsers : IAsyncLifetime
 {

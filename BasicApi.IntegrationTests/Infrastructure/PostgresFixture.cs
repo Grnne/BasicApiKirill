@@ -11,9 +11,8 @@ using Testcontainers.PostgreSql;
 namespace BasicApi.IntegrationTests.Infrastructure;
 
 /// <summary>
-/// One Postgres container for the whole run. The schema is created by the same
-/// migrations as in production, so the tests also verify that migrations apply from scratch.
-/// Requires a running Docker.
+/// One Postgres container (Docker) for the whole run; the schema comes from the production
+/// migrations, so the tests also verify they apply from scratch.
 /// </summary>
 public sealed class PostgresFixture : IAsyncLifetime
 {
@@ -36,7 +35,6 @@ public sealed class PostgresFixture : IAsyncLifetime
 
     public Task DisposeAsync() => _container.DisposeAsync().AsTask();
 
-    /// <summary>Applies all migrations to the given database.</summary>
     public static void MigrateUp(string connectionString) =>
         WithRunner(connectionString, runner => runner.MigrateUp());
 

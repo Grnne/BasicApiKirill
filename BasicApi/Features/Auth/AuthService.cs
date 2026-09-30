@@ -29,15 +29,11 @@ public sealed class AuthService(
     {
         var user = await userRepository.GetByUsernameOrEmailAsync(request.UsernameOrEmail, ct);
 
-        // We always check the hash, even if the user does not exist: otherwise "no such user" would answer
-        // instantly, and "wrong password" only after ~100 ms of bcrypt, and response time
-        // could be used to enumerate existing logins.
         var passwordMatches = BCrypt.Net.BCrypt.Verify(request.Password, user?.PasswordHash ?? DummyPasswordHash);
 
         if (user == null || !passwordMatches)
             throw new UnauthorizedException("Invalid username/email or password", "INVALID_CREDENTIALS");
 
-        // A deactivated account must not sign in even with the correct password.
         if (!user.IsActive)
             throw new UnauthorizedException("Account is deactivated", "USER_INACTIVE");
 
@@ -66,7 +62,6 @@ public sealed class AuthService(
         if (existingUser != null)
             throw new ConflictException("Username already exists", "USERNAME_TAKEN");
 
-        // Email uniqueness check
         existingUser = await userRepository.GetByUsernameOrEmailAsync(request.Email, ct);
 
         if (existingUser != null)
@@ -97,9 +92,6 @@ public sealed class AuthService(
         return await sessionService.IssueForUserAsync(user, userAgent, ip, ct);
     }
 
-    /// <summary>
-    /// Exchanges a refresh token for a fresh access/refresh pair.
-    /// </summary>
     public Task<AuthResponseDto> RefreshAsync(
         string refreshToken, string? userAgent = null, string? ip = null, CancellationToken ct = default) =>
         sessionService.RefreshAsync(refreshToken, userAgent, ip, ct);
@@ -157,10 +149,6 @@ public sealed class AuthService(
         hubConnections.AbortUser(userId);
     }
 
-    /// <summary>
-    /// Validates whether the given JWT access token is still valid.
-    /// Returns userId, username and isValid flag.
-    /// </summary>
     public ValidateTokenResponseDto ValidateToken(string token)
     {
         var isValid = jwtService.TryValidateToken(token, out var userId, out var username);

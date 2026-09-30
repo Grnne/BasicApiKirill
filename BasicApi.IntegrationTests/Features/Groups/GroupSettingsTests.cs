@@ -8,7 +8,7 @@ using Npgsql;
 
 namespace BasicApi.IntegrationTests.Features.Groups;
 
-/// <summary>Renaming a group, its default permissions and deleting it (plan 2, F3.4).</summary>
+/// <summary>Renaming a group, its default permissions and deleting it.</summary>
 public class GroupSettingsTests(PostgresFixture db) : DbTest(db)
 {
     private static readonly TimeSpan Wait = TimeSpan.FromSeconds(10);

@@ -3,10 +3,8 @@ using BasicApi.Models.Dto.Users;
 namespace BasicApi.Features.Users;
 
 /// <summary>
-/// Public profile of a user, safe to show to any authenticated user.
-/// Carries the same fields as <see cref="UserSearchResultDto"/>, so a client can
-/// store search results and profile lookups as one record.
-/// Email is deliberately absent — see <see cref="OwnProfileResponseDto"/> for your own.
+/// Public profile of a user, safe to show to any authenticated user. Email is deliberately absent —
+/// see <see cref="OwnProfileResponseDto"/> for your own.
 /// </summary>
 public class UserProfileResponseDto
 {

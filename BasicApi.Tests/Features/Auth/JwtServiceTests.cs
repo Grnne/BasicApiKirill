@@ -23,28 +23,22 @@ public class JwtServiceTests
     [Fact]
     public void GenerateToken_ReturnsNonEmptyString()
     {
-        // Arrange
         var jwt = CreateJwtService();
 
-        // Act
         var token = jwt.GenerateToken(Guid.NewGuid(), "testuser", "test@example.com");
 
-        // Assert
         Assert.False(string.IsNullOrEmpty(token));
     }
 
     [Fact]
     public void ValidateToken_ValidToken_ReturnsClaimsPrincipal()
     {
-        // Arrange
         var jwt = CreateJwtService();
         var userId = Guid.NewGuid();
         var token = jwt.GenerateToken(userId, "testuser", "test@example.com");
 
-        // Act
         var principal = jwt.ValidateToken(token);
 
-        // Assert
         Assert.NotNull(principal);
 
         // JwtSecurityTokenHandler maps "sub" -> ClaimTypes.NameIdentifier by default
@@ -59,16 +53,13 @@ public class JwtServiceTests
     [Fact]
     public void TryValidateToken_ValidToken_ReturnsTrueWithUserIdAndUsername()
     {
-        // Arrange
         var jwt = CreateJwtService();
         var expectedUserId = Guid.NewGuid();
         const string expectedUsername = "testuser";
         var token = jwt.GenerateToken(expectedUserId, expectedUsername, "test@example.com");
 
-        // Act
         var result = jwt.TryValidateToken(token, out var actualUserId, out var actualUsername);
 
-        // Assert
         Assert.True(result);
         Assert.Equal(expectedUserId, actualUserId);
         Assert.Equal(expectedUsername, actualUsername);
@@ -77,13 +68,10 @@ public class JwtServiceTests
     [Fact]
     public void TryValidateToken_InvalidToken_ReturnsFalseWithEmptyOutValues()
     {
-        // Arrange
         var jwt = CreateJwtService();
 
-        // Act
         var result = jwt.TryValidateToken("invalid-token-that-is-definitely-not-valid", out var userId, out var username);
 
-        // Assert
         Assert.False(result);
         Assert.Equal(Guid.Empty, userId);
         Assert.Equal(string.Empty, username);
@@ -92,15 +80,13 @@ public class JwtServiceTests
     [Fact]
     public void GetExpiryDate_ReturnsFutureDate()
     {
-        // Arrange
         var jwt = CreateJwtService();
         var before = DateTime.UtcNow;
 
-        // Act
         var expiry = jwt.GetExpiryDate();
         var after = DateTime.UtcNow.AddMinutes(60);
 
-        // Assert — should be roughly now + 60 minutes
+        // Should be roughly now + 60 minutes
         Assert.True(expiry > before.AddMinutes(55));
         Assert.True(expiry <= after);
     }

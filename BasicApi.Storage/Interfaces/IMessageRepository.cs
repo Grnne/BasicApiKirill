@@ -38,7 +38,7 @@ public interface IMessageRepository
         Guid chatId, Guid viewerId, string query, long? beforeSeq, int limit, CancellationToken ct = default);
 
     /// <summary>
-    /// Full-text search across all chats the viewer is in now (D10), newest first by time and id,
+    /// Full-text search across all chats the viewer is in now, newest first by time and id,
     /// strictly after <paramref name="before"/> (the last hit of the previous page). Skips what the
     /// viewer does not see and system messages.
     /// </summary>

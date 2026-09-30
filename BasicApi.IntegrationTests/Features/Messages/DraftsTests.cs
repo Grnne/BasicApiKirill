@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.SignalR.Client;
 
 namespace BasicApi.IntegrationTests.Features.Messages;
 
-/// <summary>Drafts shared by the user's devices (plan 2, F2.3, D4).</summary>
+/// <summary>Drafts shared by the user's devices.</summary>
 public class DraftsTests(PostgresFixture db) : DbTest(db)
 {
     private static readonly TimeSpan Wait = TimeSpan.FromSeconds(10);

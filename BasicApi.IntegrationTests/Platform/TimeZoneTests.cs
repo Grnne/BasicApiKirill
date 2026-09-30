@@ -7,9 +7,8 @@ using Npgsql;
 namespace BasicApi.IntegrationTests.Platform;
 
 /// <summary>
-/// Time does not depend on the database session time zone. While the columns were timestamp without
-/// zone, UTC time from the application was converted to the session zone on write and read back
-/// as is — messages "drifted" by the zone offset.
+/// Time does not depend on the database session time zone: with timestamp-without-zone columns,
+/// messages "drifted" by the zone offset.
 /// </summary>
 public class TimeZoneTests(PostgresFixture db) : DbTest(db)
 {

@@ -61,8 +61,6 @@ public class Program
         builder.Logging.AddFilter("Microsoft.AspNetCore.SignalR.Internal.DefaultHubDispatcher", LogLevel.None);
 
         // Compression of frontend static files: the bundle shrinks threefold.
-        // While Kestrel serves them, this is its job; once nginx appears,
-        // compression will move there.
         builder.Services.AddResponseCompression(options =>
         {
             options.EnableForHttps = true;
@@ -82,10 +80,8 @@ public class Program
         // so that logs, limits and sessions see the client, not Caddy.
         app.UseForwardedHeaders();
 
-        // Global error handling — first after forwarded headers
         app.UseMiddleware<ExceptionHandlingMiddleware>();
 
-        // Run migrations
         using (var scope = app.Services.CreateScope())
         {
             scope.ServiceProvider
@@ -134,7 +130,6 @@ public class Program
             }
         });
 
-        // CORS
         app.UseCors("Default");
 
         // Swagger is on by default only in Development; in production, with the Swagger:Enabled flag.
@@ -151,8 +146,8 @@ public class Program
         app.UseAuthorization();
 
         // The connection lives as long as the sign-in it was opened from, not the access token:
-        // on reconnect the web client sends the same token, and after being closed on its
-        // expiry it was left without events. The end of a sign-in drops connections immediately
+        // on reconnect the web client sends the same token, so closing on its expiry would
+        // leave it without events. The end of a sign-in drops connections immediately
         // (logout, logout-all) or within a minute (HubSessionMonitor).
         app.MapHub<ChatHub>("/hubs/chat");
         app.MapControllers();

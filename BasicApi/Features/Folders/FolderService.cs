@@ -9,7 +9,7 @@ using BasicApi.Storage.Interfaces;
 
 namespace BasicApi.Features.Folders;
 
-/// <summary>The user's folders of chats (D9); the other devices follow by <c>FoldersChanged</c>.</summary>
+/// <summary>The user's folders of chats; the other devices follow by <c>FoldersChanged</c>.</summary>
 public interface IFolderService
 {
     Task<IReadOnlyList<FolderDto>> GetAllAsync(Guid userId, CancellationToken ct = default);

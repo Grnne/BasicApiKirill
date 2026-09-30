@@ -9,11 +9,7 @@ using BasicApi.Storage.Interfaces;
 
 namespace BasicApi.Features.Messages;
 
-/// <summary>
-/// How far a member has read a chat (D1, D9): the read pointer and "marked as unread". The user's
-/// devices stay in step through <c>ReadStateChanged</c>; authors learn their messages were read
-/// through <c>MessagesRead</c>.
-/// </summary>
+/// <summary>How far a member has read a chat: the read pointer and the "marked as unread" flag.</summary>
 public interface IReadStateService
 {
     /// <summary>

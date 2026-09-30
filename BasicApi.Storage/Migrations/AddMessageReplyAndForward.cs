@@ -3,12 +3,8 @@ using FluentMigrator;
 namespace BasicApi.Storage.Migrations;
 
 /// <summary>
-/// Replies and forwards (plan 2, F1.2).
-///
-/// reply_to_message_id — the message being answered, always in the same chat.
-/// forward_from_* — where a forwarded message originally came from: author, chat and message.
-/// A forward of a forward keeps the original, as in Telegram. All links are SET NULL: losing
-/// the original must not take the copy with it.
+/// Replies (always within the same chat) and forwards; a forward of a forward keeps the original.
+/// All links are SET NULL: losing the original must not take the copy with it.
 /// </summary>
 [Migration(14)]
 public class AddMessageReplyAndForward : Migration

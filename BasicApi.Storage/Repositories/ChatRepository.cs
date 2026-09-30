@@ -246,7 +246,7 @@ public class ChatRepository(IDbSession db) : IChatRepository
     private static string BuildSearchWhereClause(string? query, string? typeFilter, bool byChatId = false)
     {
         if (!byChatId && string.IsNullOrEmpty(typeFilter) && string.IsNullOrEmpty(query))
-            return ""; // No filter — all chats
+            return "";
 
         var conditions = new List<string>();
 
@@ -267,7 +267,6 @@ public class ChatRepository(IDbSession db) : IChatRepository
         }
         else
         {
-            // No type filter — include both types
             if (!string.IsNullOrEmpty(query))
                 conditions.Add("(c.type = 'group' AND c.title ILIKE '%' || @query || '%' OR c.type = 'private' AND (comp.display_name ILIKE '%' || @query || '%' OR comp.username ILIKE '%' || @query || '%'))");
         }
@@ -279,7 +278,7 @@ public class ChatRepository(IDbSession db) : IChatRepository
         Guid userId, string? query, string? typeFilter, int? limit, CancellationToken ct = default)
     {
         var whereClause = BuildSearchWhereClause(query, typeFilter);
-        // Pinned chats on top, in their order (D9); then by activity.
+        // Pinned chats on top, in their order; then by activity.
         var orderBy = "ORDER BY cm.pinned_position IS NULL, cm.pinned_position, c.last_activity_at DESC, c.id DESC";
         var limitClause = limit.HasValue ? $" LIMIT {limit.Value}" : "";
 

@@ -4,10 +4,7 @@ using BasicApi.Models.Dto.Users;
 
 namespace BasicApi.Features.Sync;
 
-/// <summary>
-/// Snapshot: everything the client needs to start from a clean slate — the state of the user, the
-/// same on every device. The history of each chat comes page by page.
-/// </summary>
+/// <summary>Snapshot: the user's state to start from, the same on every device; chat history comes page by page.</summary>
 public class SyncStateDto
 {
     /// <summary>Number of the last change included in the snapshot. From it — <c>GET /api/sync?since=</c>.</summary>

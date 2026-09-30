@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.SignalR.Client;
 
 namespace BasicApi.IntegrationTests.Features.Messages;
 
-/// <summary>Reactions over REST, with events, sync and concurrency (plan 2, F1.4).</summary>
+/// <summary>Reactions over REST, with events, sync and concurrency.</summary>
 public class ReactionsTests(PostgresFixture db) : DbTest(db)
 {
     private static readonly TimeSpan Wait = TimeSpan.FromSeconds(10);

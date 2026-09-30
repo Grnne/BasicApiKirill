@@ -3,14 +3,8 @@ using FluentMigrator;
 namespace BasicApi.Storage.Migrations;
 
 /// <summary>
-/// Groups (plan 2, F3, D8).
-///
-/// chats: who created the group, when it was last changed, and its settings — for now the
-/// default permissions of members. chat_members: the role (owner / admin / member) and per-member
-/// overrides of permissions; one owner per chat. messages.content: what a system message is about
-/// ("members added" and the like). chat_audit_log: the group's actions, for admins.
-///
-/// Groups made before this (directly in the database) get an owner: their earliest member.
+/// Groups: member roles (one owner per chat) and permission overrides, group settings, system message content
+/// and the audit log. Existing groups get their earliest member as the owner.
 /// </summary>
 [Migration(20)]
 public class AddGroups : Migration

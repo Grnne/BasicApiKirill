@@ -7,8 +7,8 @@ using Microsoft.Extensions.Options;
 namespace BasicApi.Features.Media;
 
 /// <summary>
-/// The file storage as the application needs it. Clients upload and download straight to and
-/// from the storage by short-lived signed links; the server reads an object only to check it.
+/// File storage; clients upload and download directly by short-lived signed links, the server reads
+/// an object only to check it.
 /// </summary>
 public interface IObjectStorage
 {
@@ -30,9 +30,8 @@ public interface IObjectStorage
 }
 
 /// <summary>
-/// Any S3-compatible storage (SeaweedFS in the compose files). Two clients: one talks to the
-/// storage over the internal network, the other only signs links for the address clients use —
-/// the signature covers the host, so a link must be signed for the host it will be opened at.
+/// Any S3-compatible storage. A second client signs links for the public address: the signature
+/// covers the host, so a link must be signed for the host it will be opened at.
 /// </summary>
 public sealed class S3ObjectStorage : IObjectStorage, IDisposable
 {

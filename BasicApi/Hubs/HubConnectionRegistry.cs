@@ -4,14 +4,8 @@ using Microsoft.AspNetCore.SignalR;
 namespace BasicApi.Hubs;
 
 /// <summary>
-/// Live hub connections tied to a user and a session. Needed so that
-/// revoking access (logout, logout-all) also drops connections that are already open:
-/// on their own they live for hours, regardless of the fate of the refresh token.
-/// The other ways a sign-in ends (chain revocation on token theft, session expiry)
-/// are caught by <see cref="HubSessionMonitor"/>.
-///
-/// Held in process memory, like presence. With horizontal scaling
-/// a "drop" command broadcast between nodes (backplane) will be needed.
+/// Open hub connections by user and sign-in, so that ending a sign-in also drops connections already open.
+/// Held in process memory: it sees only this node's connections.
 /// </summary>
 public sealed class HubConnectionRegistry
 {

@@ -23,12 +23,8 @@ public sealed class OutboxSignal
 }
 
 /// <summary>
-/// Dispatches events from the outbox in order. Woken after every commit that has an event,
-/// and in case of a missed signal (or an event from another instance) it also
-/// polls the outbox every <c>Outbox:PollIntervalMs</c>.
-///
-/// "At least once" delivery: if the process crashes between dispatch and marking, the event
-/// is sent again — clients recognize a repeat by the message or chat id.
+/// Dispatches outbox events in order; woken after each commit, and polls for missed signals or other instances' events.
+/// "At least once": a crash between dispatch and marking resends the event, clients recognize a repeat by id.
 /// </summary>
 public sealed class OutboxDispatcher(
     IServiceScopeFactory scopes,

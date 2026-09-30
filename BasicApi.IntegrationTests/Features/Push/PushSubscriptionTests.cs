@@ -7,7 +7,7 @@ using Npgsql;
 
 namespace BasicApi.IntegrationTests.Features.Push;
 
-/// <summary>WebPush subscriptions, one per device (plan 2, F7.2).</summary>
+/// <summary>WebPush subscriptions, one per device.</summary>
 public class PushSubscriptionTests(PostgresFixture db) : DbTest(db)
 {
     public static Dictionary<string, string?> PushOn()

@@ -9,7 +9,7 @@ using Npgsql;
 
 namespace BasicApi.IntegrationTests.Features.Messages;
 
-/// <summary>Per-chat message number and idempotent sending (plan 1, 2.5).</summary>
+/// <summary>Per-chat message number and idempotent sending.</summary>
 public class MessageSeqTests(PostgresFixture db) : DbTest(db)
 {
     private static async Task<JsonElement> ReadJsonAsync(HttpResponseMessage response) =>

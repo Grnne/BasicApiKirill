@@ -10,7 +10,7 @@ using Npgsql;
 
 namespace BasicApi.IntegrationTests.Features.Devices;
 
-/// <summary>Devices: every sign-in is one, until it ends (plan 2, F7.1, A4).</summary>
+/// <summary>Devices: every sign-in is one, until it ends.</summary>
 public class DevicesTests(PostgresFixture db) : DbTest(db)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);

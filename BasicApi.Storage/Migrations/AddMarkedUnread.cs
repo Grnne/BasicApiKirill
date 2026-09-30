@@ -3,7 +3,7 @@ using FluentMigrator;
 namespace BasicApi.Storage.Migrations;
 
 /// <summary>
-/// "Mark as unread" (plan 2, F2.2, D9): the user's own reminder on a chat, independent of the
+/// "Mark as unread": the user's own reminder on a chat, independent of the
 /// unread counter. Reading the chat clears it.
 /// </summary>
 [Migration(18)]

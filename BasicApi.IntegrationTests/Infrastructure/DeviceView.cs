@@ -5,9 +5,8 @@ using System.Text.Json.Nodes;
 namespace BasicApi.IntegrationTests.Infrastructure;
 
 /// <summary>
-/// What a client knows about its user, kept the way a client keeps it: a snapshot
-/// (<c>GET /api/sync/state</c> and the history) and then the updates of <c>GET /api/sync</c>,
-/// applied in order. Two devices of one user must end up with equal views (plan 2, F8, D3).
+/// A client's view of its user: a snapshot plus history, then <c>GET /api/sync</c> updates in order.
+/// Two devices of one user must end up with equal views.
 /// </summary>
 public sealed class DeviceView(Guid me)
 {

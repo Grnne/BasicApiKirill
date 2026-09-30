@@ -13,7 +13,6 @@ using Moq;
 
 namespace BasicApi.Tests.Features.Messages;
 
-/// <summary>Editing and deleting messages (plan 2, F1.1).</summary>
 public class MessageEditDeleteTests
 {
     private readonly Mock<IChatRepository> _chatRepoMock = new();
@@ -64,8 +63,6 @@ public class MessageEditDeleteTests
         _msgRepoMock
             .Setup(r => r.GetAsync(_chatId, _messageId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(message);
-
-    // ========== Edit ==========
 
     [Fact]
     public async Task Edit_ByAuthor_StoresText_AndAnnouncesTheWholeMessageToAllMembers()
@@ -189,8 +186,6 @@ public class MessageEditDeleteTests
         _msgRepoMock.VerifyNoOtherCalls();
     }
 
-    // ========== Delete for everyone ==========
-
     [Fact]
     public async Task DeleteForEveryone_ByAuthor_MakesATombstone_AndTellsAllMembers()
     {
@@ -254,8 +249,6 @@ public class MessageEditDeleteTests
 
         _eventsMock.VerifyNoOtherCalls();
     }
-
-    // ========== Delete for me ==========
 
     [Fact]
     public async Task DeleteForMe_AnyMessage_HidesItForThatUserOnly()

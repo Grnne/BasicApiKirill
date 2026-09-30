@@ -5,7 +5,7 @@ using BasicApi.IntegrationTests.Infrastructure;
 
 namespace BasicApi.IntegrationTests.Features.Messages;
 
-/// <summary>Formatting and mentions over REST (plan 2, F1.3).</summary>
+/// <summary>Formatting and mentions over REST.</summary>
 public class MessageFormattingTests(PostgresFixture db) : DbTest(db)
 {
     private static async Task<JsonElement> ReadJsonAsync(HttpResponseMessage response) =>

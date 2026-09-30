@@ -1,8 +1,5 @@
 namespace BasicApi.Models;
 
-/// <summary>
-/// Message text rules — the same for the hub and for the future REST send.
-/// </summary>
 public static class MessageText
 {
     /// <summary>Like the major messengers: anything longer is a document, not a message.</summary>

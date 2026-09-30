@@ -3,7 +3,7 @@ using BasicApi.Models.Dto.Message;
 
 namespace BasicApi.Tests.Features.Messages;
 
-/// <summary>What the server accepts as formatting (D6, R31).</summary>
+/// <summary>What the server accepts as formatting.</summary>
 public class MessageEntitiesTests
 {
     private static MessageEntityDto E(string type, int offset, int length, string? url = null, Guid? userId = null, string? language = null) =>

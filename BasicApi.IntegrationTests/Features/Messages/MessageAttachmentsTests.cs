@@ -6,7 +6,7 @@ using static BasicApi.IntegrationTests.Features.Media.MediaUploadTests;
 
 namespace BasicApi.IntegrationTests.Features.Messages;
 
-/// <summary>Messages with files: albums, forwarding without a new upload, access through chats (plan 2, F4.2).</summary>
+/// <summary>Messages with files: albums, forwarding without a new upload, access through chats.</summary>
 public class MessageAttachmentsTests(PostgresFixture db, StorageFixture storage) : DbTest(db)
 {
     private ApiFactory Factory() => new(Db.ConnectionString, storage.Settings());

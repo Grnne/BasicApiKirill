@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.SignalR.Client;
 
 namespace BasicApi.IntegrationTests.Features.Messages;
 
-/// <summary>Editing and deleting messages over REST, with events and sync (plan 2, F1.1).</summary>
+/// <summary>Editing and deleting messages over REST, with events and sync.</summary>
 public class MessageEditDeleteTests(PostgresFixture db) : DbTest(db)
 {
     private static readonly TimeSpan Wait = TimeSpan.FromSeconds(10);

@@ -1,9 +1,8 @@
 namespace BasicApi.Models.Dto.Message;
 
 /// <summary>
-/// What a push notification carries — the browser decrypts it and hands it to the service worker's
-/// <c>push</c> event (<c>event.data.json()</c>). Enough to show the notification without asking
-/// the API: the worker has no access token.
+/// What a push notification carries to the service worker's <c>push</c> event: enough to show it
+/// without asking the API, since the worker has no access token.
 /// </summary>
 public class PushNotificationDto
 {

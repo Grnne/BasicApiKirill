@@ -3,9 +3,8 @@ using FluentMigrator;
 namespace BasicApi.Storage.Migrations;
 
 /// <summary>
-/// Privacy (plan 2, F5, D11): who sees last seen and online, who may start a private chat, who may
-/// add to groups — <c>everybody</c>, <c>contacts</c> (those who share a chat) or <c>nobody</c>; no
-/// row — everybody. Blocks, one row per pair and direction. <c>last_seen_at</c> survives restarts.
+/// Privacy settings (<c>everybody</c>, <c>contacts</c> — those who share a chat, or <c>nobody</c>; no row means
+/// everybody), blocks per pair and direction, and <c>last_seen_at</c> that survives restarts.
 /// </summary>
 [Migration(26)]
 public class AddPrivacy : Migration

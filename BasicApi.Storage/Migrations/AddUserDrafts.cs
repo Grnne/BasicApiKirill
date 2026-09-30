@@ -3,9 +3,8 @@ using FluentMigrator;
 namespace BasicApi.Storage.Migrations;
 
 /// <summary>
-/// Drafts (plan 2, F2.3, D4): one per user and chat, shared by the user's devices. Tied to the
-/// membership row: leaving the chat drops the draft. A reply target deleted from the database
-/// only unlinks the draft from it.
+/// Drafts: one per user and chat, shared by the user's devices. Tied to the membership row: leaving the chat
+/// drops the draft.
 /// </summary>
 [Migration(19)]
 public class AddUserDrafts : Migration

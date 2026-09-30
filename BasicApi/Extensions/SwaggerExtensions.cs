@@ -1,7 +1,7 @@
 ﻿using System.Reflection;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.OpenApi;  // ← ONLY THIS! No .Models whatsoever
+using Microsoft.OpenApi;
 
 namespace BasicApi.Extensions;
 
@@ -14,7 +14,7 @@ public static class SwaggerExtensions
         services.AddEndpointsApiExplorer();
         services.AddSwaggerGen(c =>
         {
-            c.SwaggerDoc("v1", new OpenApiInfo  // ← OpenApiInfo is in Microsoft.OpenApi
+            c.SwaggerDoc("v1", new OpenApiInfo
             {
                 Title = swaggerConfig["Title"] ?? "Chat API",
                 Version = swaggerConfig["Version"] ?? "v1",

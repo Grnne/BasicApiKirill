@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.SignalR.Client;
 
 namespace BasicApi.IntegrationTests.Features.Users;
 
-/// <summary>Privacy settings, last seen and who sees whose presence (plan 2, F5.1, D11).</summary>
+/// <summary>Privacy settings, last seen and who sees whose presence.</summary>
 public class PrivacyTests(PostgresFixture db) : DbTest(db)
 {
     private static readonly TimeSpan Wait = TimeSpan.FromSeconds(10);

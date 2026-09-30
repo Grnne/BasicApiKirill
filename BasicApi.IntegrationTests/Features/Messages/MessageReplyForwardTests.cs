@@ -5,7 +5,7 @@ using BasicApi.IntegrationTests.Infrastructure;
 
 namespace BasicApi.IntegrationTests.Features.Messages;
 
-/// <summary>Replies and forwards over REST (plan 2, F1.2).</summary>
+/// <summary>Replies and forwards over REST.</summary>
 public class MessageReplyForwardTests(PostgresFixture db) : DbTest(db)
 {
     private static async Task<JsonElement> ReadJsonAsync(HttpResponseMessage response) =>

@@ -8,7 +8,7 @@ using Npgsql;
 
 namespace BasicApi.IntegrationTests.Features.Groups;
 
-/// <summary>Creating a group and its system messages (plan 2, F3.1).</summary>
+/// <summary>Creating a group and its system messages.</summary>
 public class GroupCreationTests(PostgresFixture db) : DbTest(db)
 {
     private static readonly TimeSpan Wait = TimeSpan.FromSeconds(10);
@@ -76,7 +76,7 @@ public class GroupCreationTests(PostgresFixture db) : DbTest(db)
         Assert.Single(await aliceApi.JournalAsync("ChatCreated"), c => c.Id("chatId") == chatId);
         Assert.Single(await carolApi.JournalAsync("ChatCreated"), c => c.Id("chatId") == chatId);
 
-        // After the card, the opening message comes whole: the card has only its preview (plan 2, F8).
+        // After the card, the opening message comes whole: the card has only its preview.
         var carolsUpdates = (await carolApi.GetJsonAsync("/api/sync?since=0")).GetProperty("updates").EnumerateArray().ToList();
         Assert.Equal(["ChatCreated", "MessageCreated", "MessageCreated"], carolsUpdates.Select(u => u.GetProperty("type").GetString()));
         var journaled = carolsUpdates[1].GetProperty("payload");

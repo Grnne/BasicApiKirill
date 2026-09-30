@@ -6,7 +6,7 @@ using Npgsql;
 
 namespace BasicApi.IntegrationTests.Features.Messages;
 
-/// <summary>Search across all the user's chats (plan 2, F6.3, D10).</summary>
+/// <summary>Search across all the user's chats.</summary>
 public class GlobalSearchTests(PostgresFixture db) : DbTest(db)
 {
     private static Dictionary<string, string?> Settings => new() { ["RateLimiting:CommandsPer10Seconds"] = "1000" };
@@ -48,7 +48,6 @@ public class GlobalSearchTests(PostgresFixture db) : DbTest(db)
         Assert.Equal("Bob", inPrivate.GetProperty("companionName").GetString());
         Assert.Equal("Запуск проекта в понедельник", result.GetProperty("items")[1].GetProperty("message").GetProperty("text").GetString());
 
-        // Page by page.
         var page = await SearchAsync(api, "q=запуск&limit=1");
         Assert.Equal([second], Ids(page));
         Assert.Equal([first], Ids(await SearchAsync(api, $"q=запуск&limit=1&cursor={page.GetProperty("nextCursor").GetString()}")));

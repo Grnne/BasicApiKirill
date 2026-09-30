@@ -164,7 +164,6 @@ public class AuthController(AuthService auth) : ControllerBase
     [ProducesResponseType(typeof(ValidateTokenResponseDto), StatusCodes.Status200OK)]
     public IActionResult ValidateToken()
     {
-        // Extract raw token from Authorization header
         var authHeader = Request.Headers.Authorization.ToString();
         var token = authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
             ? authHeader["Bearer ".Length..]

@@ -3,8 +3,7 @@ using FluentMigrator;
 namespace BasicApi.Storage.Migrations;
 
 /// <summary>
-/// How a member keeps a chat (plan 2, F6.1, D9): pinned to the top of the list (the position, 1 —
-/// the top), archived, muted until a moment (far future — for good). All per member.
+/// Per-member chat state: pinned position (1 — the top), archived, muted until a moment (far future — for good).
 /// </summary>
 [Migration(27)]
 public class AddChatOrganization : Migration

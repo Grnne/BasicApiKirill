@@ -26,12 +26,9 @@ public class PresenceServiceStatusTests
             NullLogger<PresenceService>.Instance);
     }
 
-    // ========== GetOnlineStatusAsync Tests ==========
-
     [Fact]
     public async Task GetOnlineStatusAsync_WithOnlineMembers_ReturnsOkWithOnlineIds()
     {
-        // Arrange
         var userId = Guid.NewGuid();
         var memberA = Guid.NewGuid();
         var memberB = Guid.NewGuid();
@@ -45,10 +42,8 @@ public class PresenceServiceStatusTests
             .Setup(s => s.GetOnlineUserIdsAsync(It.IsAny<IReadOnlySet<Guid>>()))
             .ReturnsAsync(new HashSet<Guid> { memberA, memberB });
 
-        // Act
         var result = await _service.GetContactsOnlineAsync(userId);
 
-        // Assert
         var dto = result;
         Assert.Equal(2, dto.Items.Count);
 
@@ -64,17 +59,14 @@ public class PresenceServiceStatusTests
     [Fact]
     public async Task GetOnlineStatusAsync_NoMembers_ReturnsEmptyList()
     {
-        // Arrange
         var userId = Guid.NewGuid();
 
         _chatRepoMock
             .Setup(r => r.GetAllChatMembersAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
-        // Act
         var result = await _service.GetContactsOnlineAsync(userId);
 
-        // Assert
         var dto = result;
         Assert.Empty(dto.Items);
         _statusServiceMock.Verify(s => s.GetOnlineUserIdsAsync(It.IsAny<IReadOnlySet<Guid>>()), Times.Never);
@@ -83,7 +75,6 @@ public class PresenceServiceStatusTests
     [Fact]
     public async Task GetOnlineStatusAsync_NoOnlineMembers_ReturnsEmptyList()
     {
-        // Arrange
         var userId = Guid.NewGuid();
         var memberA = Guid.NewGuid();
 
@@ -95,20 +86,15 @@ public class PresenceServiceStatusTests
             .Setup(s => s.GetOnlineUserIdsAsync(It.IsAny<IReadOnlySet<Guid>>()))
             .ReturnsAsync(new HashSet<Guid>());
 
-        // Act
         var result = await _service.GetContactsOnlineAsync(userId);
 
-        // Assert
         var dto = result;
         Assert.Empty(dto.Items);
     }
 
-    // ========== GetTypingStatusAsync Tests ==========
-
     [Fact]
     public async Task GetTypingStatusAsync_WithTypingUsers_ReturnsOkWithTypingStatus()
     {
-        // Arrange
         var userId = Guid.NewGuid();
         var chatA = Guid.NewGuid();
         var chatB = Guid.NewGuid();
@@ -128,10 +114,8 @@ public class PresenceServiceStatusTests
                 [chatB] = [typerB]
             });
 
-        // Act
         var result = await _service.GetTypingAsync(userId);
 
-        // Assert
         var dto = result;
         Assert.Equal(2, dto.Items.Count);
 
@@ -147,7 +131,6 @@ public class PresenceServiceStatusTests
     [Fact]
     public async Task GetTypingStatusAsync_FiltersToUserChatsOnly_IgnoresOtherChats()
     {
-        // Arrange
         var userId = Guid.NewGuid();
         var userChat = Guid.NewGuid();
         var otherChat = Guid.NewGuid();
@@ -163,10 +146,9 @@ public class PresenceServiceStatusTests
             .Callback((IReadOnlyCollection<Guid> ids) => requested = ids)
             .ReturnsAsync(new Dictionary<Guid, HashSet<Guid>> { [userChat] = [typer] });
 
-        // Act
         var result = await _service.GetTypingAsync(userId);
 
-        // Assert - the service is asked only about the user's chats, others' are not even read
+        // The service is asked only about the user's chats, others' are not even read
         Assert.Equal([userChat], requested);
         Assert.DoesNotContain(otherChat, requested!);
         var dto = result;
@@ -178,27 +160,21 @@ public class PresenceServiceStatusTests
     [Fact]
     public async Task GetTypingStatusAsync_NoTyping_ReturnsEmptyList()
     {
-        // Arrange
         var userId = Guid.NewGuid();
 
         _statusServiceMock
             .Setup(s => s.GetTypingStatusAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
             .ReturnsAsync(new Dictionary<Guid, HashSet<Guid>>());
 
-        // Act
         var result = await _service.GetTypingAsync(userId);
 
-        // Assert
         var dto = result;
         Assert.Empty(dto.Items);
     }
 
-    // ========== GetUserStatusAsync (point status of a single user) ==========
-
     [Fact]
     public async Task GetUserStatusAsync_SharedChatAndOnline_ReturnsOnlineTrue()
     {
-        // Arrange
         var userId = Guid.NewGuid();
         var target = Guid.NewGuid();
 
@@ -210,10 +186,8 @@ public class PresenceServiceStatusTests
             .Setup(s => s.GetOnlineUserIdsAsync(It.IsAny<IReadOnlySet<Guid>>()))
             .ReturnsAsync(new HashSet<Guid> { target });
 
-        // Act
         var result = await _service.GetUserStatusAsync(userId, target);
 
-        // Assert
         var dto = result;
         Assert.Equal(target, dto.UserId);
         Assert.True(dto.IsOnline);
@@ -222,7 +196,6 @@ public class PresenceServiceStatusTests
     [Fact]
     public async Task GetUserStatusAsync_SharedChatAndOffline_ReturnsOnlineFalse()
     {
-        // Arrange
         var userId = Guid.NewGuid();
         var target = Guid.NewGuid();
 
@@ -234,10 +207,9 @@ public class PresenceServiceStatusTests
             .Setup(s => s.GetOnlineUserIdsAsync(It.IsAny<IReadOnlySet<Guid>>()))
             .ReturnsAsync(new HashSet<Guid>());
 
-        // Act
         var result = await _service.GetUserStatusAsync(userId, target);
 
-        // Assert - offline is returned as an explicit false, not as a missing entry
+        // Offline is returned as an explicit false, not as a missing entry
         var dto = result;
         Assert.Equal(target, dto.UserId);
         Assert.False(dto.IsOnline);
@@ -246,7 +218,6 @@ public class PresenceServiceStatusTests
     [Fact]
     public async Task GetUserStatusAsync_Self_ReturnsOwnStatus()
     {
-        // Arrange
         var userId = Guid.NewGuid();
 
         _chatRepoMock
@@ -257,10 +228,8 @@ public class PresenceServiceStatusTests
             .Setup(s => s.GetOnlineUserIdsAsync(It.IsAny<IReadOnlySet<Guid>>()))
             .ReturnsAsync(new HashSet<Guid> { userId });
 
-        // Act
         var result = await _service.GetUserStatusAsync(userId, userId);
 
-        // Assert
         var dto = result;
         Assert.True(dto.IsOnline);
     }
@@ -268,7 +237,6 @@ public class PresenceServiceStatusTests
     [Fact]
     public async Task GetUserStatusAsync_NoSharedChat_ThrowsNotFound()
     {
-        // Arrange
         var userId = Guid.NewGuid();
         var stranger = Guid.NewGuid();
 
@@ -276,7 +244,7 @@ public class PresenceServiceStatusTests
             .Setup(r => r.GetAllChatMembersAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([Guid.NewGuid()]);
 
-        // Act & Assert - the status is visible only to members of shared chats
+        // The status is visible only to members of shared chats
         var ex = await Assert.ThrowsAsync<NotFoundException>(() =>
             _service.GetUserStatusAsync(userId, stranger));
 
@@ -284,12 +252,9 @@ public class PresenceServiceStatusTests
         _statusServiceMock.Verify(s => s.GetOnlineUserIdsAsync(It.IsAny<IReadOnlySet<Guid>>()), Times.Never);
     }
 
-    // ========== GetUsersStatusAsync (batch by id list) ==========
-
     [Fact]
     public async Task GetUsersStatusAsync_ReturnsBothOnlineAndOfflineForRequestedIds()
     {
-        // Arrange
         var userId = Guid.NewGuid();
         var onlineMember = Guid.NewGuid();
         var offlineMember = Guid.NewGuid();
@@ -302,10 +267,8 @@ public class PresenceServiceStatusTests
             .Setup(s => s.GetOnlineUserIdsAsync(It.IsAny<IReadOnlySet<Guid>>()))
             .ReturnsAsync(new HashSet<Guid> { onlineMember });
 
-        // Act
         var result = await _service.GetUsersStatusAsync(userId, [onlineMember, offlineMember]);
 
-        // Assert
         var dto = result;
         Assert.Equal(2, dto.Items.Count);
         Assert.True(dto.Items.Single(x => x.UserId == onlineMember).IsOnline);
@@ -315,7 +278,6 @@ public class PresenceServiceStatusTests
     [Fact]
     public async Task GetUsersStatusAsync_FiltersOutUsersWithoutSharedChat()
     {
-        // Arrange
         var userId = Guid.NewGuid();
         var member = Guid.NewGuid();
         var stranger = Guid.NewGuid();
@@ -328,10 +290,9 @@ public class PresenceServiceStatusTests
             .Setup(s => s.GetOnlineUserIdsAsync(It.IsAny<IReadOnlySet<Guid>>()))
             .ReturnsAsync(new HashSet<Guid> { member });
 
-        // Act
         var result = await _service.GetUsersStatusAsync(userId, [member, stranger]);
 
-        // Assert - ids of others silently drop out of the response
+        // Ids of others silently drop out of the response
         var dto = result;
         Assert.Equal(member, Assert.Single(dto.Items).UserId);
     }
@@ -339,7 +300,6 @@ public class PresenceServiceStatusTests
     [Fact]
     public async Task GetUsersStatusAsync_DeduplicatesRequestedIds()
     {
-        // Arrange
         var userId = Guid.NewGuid();
         var member = Guid.NewGuid();
 
@@ -351,10 +311,8 @@ public class PresenceServiceStatusTests
             .Setup(s => s.GetOnlineUserIdsAsync(It.IsAny<IReadOnlySet<Guid>>()))
             .ReturnsAsync(new HashSet<Guid> { member });
 
-        // Act
         var result = await _service.GetUsersStatusAsync(userId, [member, member, member]);
 
-        // Assert
         var dto = result;
         Assert.Single(dto.Items);
     }
@@ -362,7 +320,6 @@ public class PresenceServiceStatusTests
     [Fact]
     public async Task GetUsersStatusAsync_EmptyList_ThrowsBadRequest()
     {
-        // Act & Assert
         var ex = await Assert.ThrowsAsync<BadRequestException>(() =>
             _service.GetUsersStatusAsync(Guid.NewGuid(), []));
 
@@ -372,10 +329,9 @@ public class PresenceServiceStatusTests
     [Fact]
     public async Task GetUsersStatusAsync_TooManyIds_ThrowsBadRequest()
     {
-        // Arrange - the batch limit is 200 ids
+        // The batch limit is 200 ids
         var ids = Enumerable.Range(0, 201).Select(_ => Guid.NewGuid()).ToList();
 
-        // Act & Assert
         var ex = await Assert.ThrowsAsync<BadRequestException>(() =>
             _service.GetUsersStatusAsync(Guid.NewGuid(), ids));
 

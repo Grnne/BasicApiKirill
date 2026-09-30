@@ -7,9 +7,9 @@ public class UserStatusServicePresenceTests
     [Fact]
     public async Task ConcurrentLastDisconnectAndNewConnect_NeverLosesTheNewConnection()
     {
-        // The tab reloads: the old connection closes and the new one opens
-        // at the same time. Previously the new one could end up in a set that was just being removed
-        // from the dictionary — and the user "went offline" while still connected.
+        // The tab reloads: the old connection closes and the new one opens at the same time.
+        // The new one must not land in a set that is just being removed from the dictionary,
+        // or the user "goes offline" while still connected.
         var failures = new List<string>();
 
         for (var i = 0; i < 5_000; i++)

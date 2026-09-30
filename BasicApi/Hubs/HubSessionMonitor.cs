@@ -3,11 +3,8 @@ using BasicApi.Features.Auth;
 namespace BasicApi.Hubs;
 
 /// <summary>
-/// Every <c>Hub:SessionCheckIntervalSeconds</c> (60 s) checks the sign-ins of open hub connections
-/// and drops the connections of ended ones: the chain was revoked on refresh-token reuse
-/// or has expired. Logout and logout-all drop connections immediately, without this check.
-///
-/// A connection with a token without a sign-in (<c>sid</c>) lives until the token expires.
+/// Every <c>Hub:SessionCheckIntervalSeconds</c> (60 s) drops hub connections whose sign-in has ended
+/// (chain revoked on refresh-token reuse, or expired); logout drops them at once without it.
 /// </summary>
 public sealed class HubSessionMonitor(
     HubConnectionRegistry connections,

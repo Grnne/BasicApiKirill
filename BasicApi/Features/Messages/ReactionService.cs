@@ -8,7 +8,7 @@ using Microsoft.Extensions.Options;
 
 namespace BasicApi.Features.Messages;
 
-/// <summary>Reactions to messages (D7): one per user per message, from the instance's set.</summary>
+/// <summary>Reactions to messages: one per user per message, from the instance's set.</summary>
 public interface IReactionService
 {
     /// <summary>

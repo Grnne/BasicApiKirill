@@ -7,10 +7,7 @@ namespace BasicApi.Tests.TestDoubles;
 /// <summary>One SignalR send: to whom (recipient kind and id) and what.</summary>
 public sealed record SentEvent(string Target, IReadOnlyList<string> Ids, string Method, object?[] Args);
 
-/// <summary>
-/// Hub clients that remember sends together with the recipient.
-/// SendAsync is an extension method, Moq will not verify it; here both recipient and payload are visible.
-/// </summary>
+/// <summary>Hub clients that record each send with its recipient: SendAsync is an extension method Moq cannot verify.</summary>
 public sealed class RecordingHubClients : IHubClients
 {
     public List<SentEvent> Sent { get; } = [];

@@ -5,7 +5,7 @@ using BasicApi.IntegrationTests.Infrastructure;
 
 namespace BasicApi.IntegrationTests.Features.Groups;
 
-/// <summary>The group's action log (plan 2, F3.5).</summary>
+/// <summary>The group's action log.</summary>
 public class GroupAuditTests(PostgresFixture db) : DbTest(db)
 {
     private static Dictionary<string, string?> Settings => new() { ["RateLimiting:CommandsPer10Seconds"] = "1000" };

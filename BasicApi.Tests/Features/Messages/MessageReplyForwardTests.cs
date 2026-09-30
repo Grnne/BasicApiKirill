@@ -11,7 +11,6 @@ using Moq;
 
 namespace BasicApi.Tests.Features.Messages;
 
-/// <summary>Replies and forwards (plan 2, F1.2).</summary>
 public class MessageReplyForwardTests
 {
     private readonly Mock<IChatRepository> _chatRepoMock = new();
@@ -65,8 +64,6 @@ public class MessageReplyForwardTests
         _msgRepoMock
             .Setup(r => r.GetVisibleAsync(_sourceChatId, _userId, It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(messages);
-
-    // ========== Reply ==========
 
     [Fact]
     public async Task Reply_ToAMessageOfTheChat_IsStoredWithTheLink()
@@ -130,8 +127,6 @@ public class MessageReplyForwardTests
         Assert.Equal("Bob", live.SenderName);
         Assert.Null(page.Items[0].ForwardFrom);
     }
-
-    // ========== Forward ==========
 
     [Fact]
     public async Task Forward_CopiesMessagesInOrder_WithTheOriginalAuthor_AndAnnouncesEach()
@@ -229,8 +224,6 @@ public class MessageReplyForwardTests
         Assert.Empty(_created);
         _eventsMock.VerifyNoOtherCalls();
     }
-
-    // ========== Editing a forward ==========
 
     [Fact]
     public async Task Edit_OfAForwardedMessage_IsNotAllowed()

@@ -3,10 +3,7 @@ using System.Security.Cryptography;
 
 namespace BasicApi.Features.Push;
 
-/// <summary>
-/// Push notifications (WebPush), section <c>Push</c>. Without the VAPID keys push is off: clients
-/// learn it from <c>GET /api/push/config</c>, subscribing answers 503 <c>PUSH_UNAVAILABLE</c>.
-/// </summary>
+/// <summary>WebPush settings, section <c>Push</c>; without the VAPID keys push is off and subscribing answers 503.</summary>
 public sealed class PushOptions
 {
     public const string Section = "Push";
@@ -55,9 +52,8 @@ public sealed class PushOptions
 }
 
 /// <summary>
-/// VAPID keys (RFC 8292): a P-256 pair the server signs its requests to push services with.
-/// Both are base64url, as browsers take them: the public key is the uncompressed point (65 bytes),
-/// the private one the scalar (32 bytes).
+/// VAPID keys (RFC 8292), base64url as browsers take them: the public key is the uncompressed
+/// P-256 point (65 bytes), the private one the scalar (32 bytes).
 /// </summary>
 public static class VapidKeys
 {

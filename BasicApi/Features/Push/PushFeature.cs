@@ -7,7 +7,6 @@ public static class PushFeature
 {
     public static IServiceCollection AddPushFeature(this IServiceCollection services, IConfiguration configuration)
     {
-        // WebPush with the VAPID keys from Push:*; without them push is off.
         services.Configure<PushOptions>(configuration.GetSection(PushOptions.Section));
         services.AddScoped<IPushService, PushService>();
         services.AddSingleton(sp => new PushQueue(

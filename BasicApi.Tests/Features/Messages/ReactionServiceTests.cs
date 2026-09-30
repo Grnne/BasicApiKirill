@@ -11,7 +11,6 @@ using Moq;
 
 namespace BasicApi.Tests.Features.Messages;
 
-/// <summary>Reactions (plan 2, F1.4, D7).</summary>
 public class ReactionServiceTests
 {
     private readonly Mock<IChatRepository> _chatRepoMock = new();

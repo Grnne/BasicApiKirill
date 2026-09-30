@@ -9,7 +9,7 @@ using Npgsql;
 
 namespace BasicApi.IntegrationTests.Features.Sync;
 
-/// <summary>Sync after a connection drop (plan 1, 2.7).</summary>
+/// <summary>Sync after a connection drop.</summary>
 public class SyncTests(PostgresFixture db) : DbTest(db)
 {
     private static async Task<JsonElement> GetJsonAsync(HttpClient client, string url)

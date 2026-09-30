@@ -5,7 +5,7 @@ using static BasicApi.IntegrationTests.Features.Media.MediaUploadTests;
 
 namespace BasicApi.IntegrationTests.Features.Messages;
 
-/// <summary>A chat's gallery: photos and videos, files, voice, links (plan 2, F4.3).</summary>
+/// <summary>A chat's gallery: photos and videos, files, voice, links.</summary>
 public class GalleryTests(PostgresFixture db, StorageFixture storage) : DbTest(db)
 {
     private static async Task<Guid> SendAsync(HttpClient api, Guid chatId, object body) =>

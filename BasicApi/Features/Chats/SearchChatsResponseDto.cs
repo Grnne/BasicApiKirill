@@ -2,9 +2,7 @@ using BasicApi.Models.Dto.Chat;
 
 namespace BasicApi.Features.Chats;
 
-/// <summary>
-/// Response for chat search (by title for group chats or by companion name/username for private chats).
-/// </summary>
+/// <summary>Response for chat search.</summary>
 public class SearchChatsResponseDto
 {
     /// <summary>Matching chat items.</summary>

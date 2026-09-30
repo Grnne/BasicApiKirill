@@ -1,14 +1,8 @@
 namespace BasicApi.Services;
 
-/// <summary>
-/// Tracks real-time user status (online/offline, typing).
-/// Used by both SignalR hub (to update state) and REST endpoints (to query state).
-/// </summary>
+/// <summary>Real-time user status (online, typing): the hub updates it, REST endpoints read it.</summary>
 public interface IUserStatusService
 {
-    /// <summary>
-    /// Returns which of the given user IDs are currently online.
-    /// </summary>
     Task<IReadOnlySet<Guid>> GetOnlineUserIdsAsync(IReadOnlySet<Guid> userIds);
 
     /// <summary>
@@ -24,14 +18,8 @@ public interface IUserStatusService
     /// <returns>True if the user's online status actually changed (first connection added / last connection removed).</returns>
     Task<bool> SetUserOnlineStatusAsync(Guid userId, string connectionId, bool status);
 
-    /// <summary>
-    /// Returns the number of active connections for a user.
-    /// </summary>
     Task<int> GetConnectionCountAsync(Guid userId);
 
-    /// <summary>
-    /// Checks whether a specific connection is currently active for a user.
-    /// </summary>
     Task<bool> IsConnectionActiveAsync(Guid userId, string connectionId);
 
     /// <summary>

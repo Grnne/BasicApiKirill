@@ -9,7 +9,7 @@ using static BasicApi.IntegrationTests.Features.Media.MediaUploadTests;
 
 namespace BasicApi.IntegrationTests.Features.Media;
 
-/// <summary>Unused files are removed; the retention policy keeps previews only (plan 2, F4.5, D2).</summary>
+/// <summary>Unused files are removed; the retention policy keeps previews only.</summary>
 public class MediaRetentionTests(PostgresFixture db, StorageFixture storage) : DbTest(db)
 {
     private ApiFactory Factory(Dictionary<string, string?> extra)

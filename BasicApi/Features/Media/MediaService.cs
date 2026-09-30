@@ -284,7 +284,7 @@ public sealed partial class MediaService(
     }
 
     /// <summary>
-    /// How the storage serves a file (R32): photos, videos and voice — inline with the type the server
+    /// How the storage serves a file: photos, videos and voice — inline with the type the server
     /// found (none of them can run script); anything else — a download of unknown type, so an
     /// uploaded HTML or SVG never opens as a page.
     /// </summary>

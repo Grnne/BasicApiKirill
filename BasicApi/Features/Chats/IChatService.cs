@@ -39,16 +39,9 @@ public interface IChatService
     Task<PrivateChatResult> GetOrCreateSavedChatAsync(Guid userId, CancellationToken ct = default);
 
     /// <summary>
-    /// Searches user's chats by query.
-    /// For type=group: searches by chat title (ILIKE).
-    /// For type=private: searches by companion display name or username (ILIKE).
-    /// If type is null/empty: searches both.
+    /// Searches groups by title and private chats by the companion's display name or username (ILIKE).
+    /// <paramref name="type"/> is "group", "private", or null/empty for both.
     /// </summary>
-    /// <param name="userId">Current user ID.</param>
-    /// <param name="query">Search query (min 1 character).</param>
-    /// <param name="type">Optional filter: "group" or "private". Null/empty searches both.</param>
-    /// <param name="limit">Max results.</param>
-    /// <param name="ct">Cancellation.</param>
     Task<SearchChatsResponseDto> SearchChatsAsync(
         Guid userId, string query, string? type, int limit, CancellationToken ct = default);
 }

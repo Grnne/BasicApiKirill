@@ -3,9 +3,8 @@ using FluentMigrator;
 namespace BasicApi.Storage.Migrations;
 
 /// <summary>
-/// "Delivered" status (plan 2, F2.1, D1): the last seq in the chat that at least one device
-/// of the member has received and acknowledged through /sync/ack. What is read has been
-/// delivered too, so the pointer starts at the read one and never falls behind it.
+/// "Delivered" pointer: the last seq at least one of the member's devices acknowledged through /sync/ack.
+/// What is read is delivered too, so it starts at the read pointer and never falls behind it.
 /// </summary>
 [Migration(17)]
 public class AddDeliveryPointer : Migration

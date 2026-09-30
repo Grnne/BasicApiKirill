@@ -9,7 +9,6 @@ public class Session
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid UserId { get; set; }
 
-    /// <summary>Ties together all rotations originating from one login.</summary>
     public Guid FamilyId { get; set; }
 
     /// <summary>SHA-256 of the refresh token. The token itself is never stored.</summary>
