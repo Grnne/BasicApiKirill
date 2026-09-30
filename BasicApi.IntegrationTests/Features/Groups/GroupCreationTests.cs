@@ -6,7 +6,7 @@ using Dapper;
 using Microsoft.AspNetCore.SignalR.Client;
 using Npgsql;
 
-namespace BasicApi.IntegrationTests.Api;
+namespace BasicApi.IntegrationTests.Features.Groups;
 
 /// <summary>Creating a group and its system messages (plan 2, F3.1).</summary>
 public class GroupCreationTests(PostgresFixture db) : DbTest(db)

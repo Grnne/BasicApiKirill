@@ -3,7 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using BasicApi.IntegrationTests.Infrastructure;
 
-namespace BasicApi.IntegrationTests.Api;
+namespace BasicApi.IntegrationTests.Features.Groups;
 
 /// <summary>The group's action log (plan 2, F3.5).</summary>
 public class GroupAuditTests(PostgresFixture db) : DbTest(db)

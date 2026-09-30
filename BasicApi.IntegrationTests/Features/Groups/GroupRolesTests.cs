@@ -5,7 +5,7 @@ using BasicApi.IntegrationTests.Infrastructure;
 using Dapper;
 using Npgsql;
 
-namespace BasicApi.IntegrationTests.Api;
+namespace BasicApi.IntegrationTests.Features.Groups;
 
 /// <summary>Roles and permissions in a group (plan 2, F3.2, D8).</summary>
 public class GroupRolesTests(PostgresFixture db) : DbTest(db)

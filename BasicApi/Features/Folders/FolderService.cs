@@ -1,12 +1,13 @@
 using BasicApi.Middleware.Exceptions;
-using BasicApi.Models.Dto.Message;
 using BasicApi.Models.Dto.Chat;
+using BasicApi.Models.Dto.Message;
+using BasicApi.Services;
 using BasicApi.Services.Events;
 using BasicApi.Storage;
 using BasicApi.Storage.Dto;
 using BasicApi.Storage.Interfaces;
 
-namespace BasicApi.Services;
+namespace BasicApi.Features.Folders;
 
 /// <summary>The user's folders of chats (D9); the other devices follow by <c>FoldersChanged</c>.</summary>
 public interface IFolderService

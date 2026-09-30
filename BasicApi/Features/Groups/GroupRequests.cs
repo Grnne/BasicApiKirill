@@ -1,4 +1,6 @@
-namespace BasicApi.Models.Dto.Chat;
+using BasicApi.Models.Dto.Chat;
+
+namespace BasicApi.Features.Groups;
 
 public class CreateGroupDto
 {

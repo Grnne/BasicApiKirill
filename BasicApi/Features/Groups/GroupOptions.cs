@@ -1,4 +1,4 @@
-namespace BasicApi.Services;
+namespace BasicApi.Features.Groups;
 
 /// <summary>Instance-wide group rules, section <c>Groups</c> of the configuration.</summary>
 public sealed class GroupOptions

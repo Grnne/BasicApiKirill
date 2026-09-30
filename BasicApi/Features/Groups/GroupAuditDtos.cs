@@ -1,4 +1,4 @@
-namespace BasicApi.Models.Dto.Chat;
+namespace BasicApi.Features.Groups;
 
 /// <summary>An entry of the group's action log.</summary>
 public class AuditEntryDto

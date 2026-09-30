@@ -3,6 +3,7 @@ using BasicApi.Features.Media;
 using BasicApi.Middleware.Exceptions;
 using BasicApi.Models.Dto.Chat;
 using BasicApi.Models.Dto.Message;
+using BasicApi.Services;
 using BasicApi.Services.Events;
 using BasicApi.Storage;
 using BasicApi.Storage.Dto;
@@ -10,7 +11,7 @@ using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
 using Microsoft.Extensions.Options;
 
-namespace BasicApi.Services;
+namespace BasicApi.Features.Groups;
 
 /// <summary>
 /// Groups (D8): creating them and managing members, roles and settings. What a member may do is

@@ -2,7 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using BasicApi.IntegrationTests.Infrastructure;
 
-namespace BasicApi.IntegrationTests.Api;
+namespace BasicApi.IntegrationTests.Features.Folders;
 
 /// <summary>Folders of chats (plan 2, F6.2, D9).</summary>
 public class FoldersTests(PostgresFixture db) : DbTest(db)

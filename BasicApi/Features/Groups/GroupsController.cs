@@ -1,11 +1,10 @@
 using BasicApi.Extensions;
 using BasicApi.Models.Dto.Chat;
-using BasicApi.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 
-namespace BasicApi.Features.Chats;
+namespace BasicApi.Features.Groups;
 
 /// <summary>Groups: creating them, members, roles and settings (plan 2, F3).</summary>
 [Authorize]

@@ -4,6 +4,8 @@ using System.Text.Json;
 using System.Threading.RateLimiting;
 using BasicApi.Features.Auth;
 using BasicApi.Features.Devices;
+using BasicApi.Features.Folders;
+using BasicApi.Features.Groups;
 using BasicApi.Features.Media;
 using BasicApi.Features.Push;
 using BasicApi.Features.Sync;

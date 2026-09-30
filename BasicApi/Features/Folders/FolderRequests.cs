@@ -1,4 +1,4 @@
-namespace BasicApi.Models.Dto.Chat;
+namespace BasicApi.Features.Folders;
 
 /// <summary>A new folder, or changes to one: a null field stays as it is.</summary>
 public class SaveFolderDto

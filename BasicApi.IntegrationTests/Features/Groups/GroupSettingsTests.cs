@@ -6,7 +6,7 @@ using Dapper;
 using Microsoft.AspNetCore.SignalR.Client;
 using Npgsql;
 
-namespace BasicApi.IntegrationTests.Api;
+namespace BasicApi.IntegrationTests.Features.Groups;
 
 /// <summary>Renaming a group, its default permissions and deleting it (plan 2, F3.4).</summary>
 public class GroupSettingsTests(PostgresFixture db) : DbTest(db)
