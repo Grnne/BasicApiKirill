@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Full pre-merge check run (stands in for CI until the last stage of plan 2).
+    Full pre-merge check run; CI (.github/workflows/ci.yml) runs the same on every push.
 
 .DESCRIPTION
     1. Solution build (Release).
@@ -28,6 +28,11 @@ $root = Split-Path -Parent $PSScriptRoot
 $results = Join-Path $root 'TestResults'
 $summary = [ordered]@{}
 
+# In GitHub Actions the result also goes to the summary page of the run.
+function Report([string]$text) {
+    if ($env:GITHUB_STEP_SUMMARY) { Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $text -Encoding utf8 }
+}
+
 function Step([string]$name, [scriptblock]$action) {
     Write-Host ""
     Write-Host "=== $name ===" -ForegroundColor Cyan
@@ -35,6 +40,7 @@ function Step([string]$name, [scriptblock]$action) {
     if ($LASTEXITCODE -ne 0) {
         Write-Host ""
         Write-Host "FAILED: $name (exit $LASTEXITCODE)" -ForegroundColor Red
+        Report "**FAILED: $name** (exit $LASTEXITCODE)"
         exit $LASTEXITCODE
     }
 }
@@ -126,3 +132,4 @@ $line = "Tests: $($parts -join ', ') — scripts/test.ps1 @ $commit$dirty, $(Get
 Write-Host ""
 Write-Host 'ALL CHECKS PASSED' -ForegroundColor Green
 Write-Host $line
+Report $line
