@@ -16,6 +16,9 @@ public class DeviceDto
 
     /// <summary>The browser or app, as it introduced itself at the last refresh.</summary>
     public string? UserAgent { get; set; }
+
+    /// <summary>The device is subscribed to push notifications (<c>PUT /api/push/subscription</c>).</summary>
+    public bool PushEnabled { get; set; }
 }
 
 public class DeviceListDto

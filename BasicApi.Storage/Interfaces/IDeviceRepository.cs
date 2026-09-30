@@ -15,6 +15,14 @@ public interface IDeviceRepository
     Task DeleteAllExceptAsync(Guid userId, Guid? keepDeviceId, CancellationToken ct = default);
 
     /// <summary>
+    /// Gives the device this push subscription, taking it from any other device that had it:
+    /// a browser's subscription belongs to whoever signed in there last. Call in a transaction.
+    /// </summary>
+    Task SetPushAsync(Guid deviceId, DevicePush push, DateTime now, CancellationToken ct = default);
+
+    Task ClearPushAsync(Guid userId, Guid deviceId, CancellationToken ct = default);
+
+    /// <summary>
     /// Deletes up to <paramref name="batchSize"/> devices whose sign-in has ended in any way
     /// (logout, expiry, revocation on token theft); returns how many.
     /// </summary>
@@ -32,4 +40,10 @@ public sealed class Device
     public DateTime LastActiveAt { get; set; }
 
     public string? UserAgent { get; set; }
+
+    /// <summary>The device has a push subscription.</summary>
+    public bool PushEnabled { get; set; }
 }
+
+/// <summary>A WebPush subscription: where to deliver and the keys to encrypt for (base64url).</summary>
+public sealed record DevicePush(string Endpoint, string P256dh, string Auth);

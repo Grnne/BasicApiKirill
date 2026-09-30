@@ -7,6 +7,7 @@ using BasicApi.Middleware.Exceptions;
 using BasicApi.Services;
 using BasicApi.Services.Events;
 using BasicApi.Services.Media;
+using BasicApi.Services.Push;
 using BasicApi.Storage;
 using BasicApi.Storage.Interfaces;
 using BasicApi.Storage.Migrations;
@@ -143,6 +144,9 @@ public static class ServiceExtensions
         services.AddScoped<AuthService>();
         services.AddScoped<ISessionService, SessionService>();
         services.AddScoped<IDeviceService, DeviceService>();
+        // Push: WebPush with the VAPID keys from Push:*; without them push is off.
+        services.Configure<PushOptions>(configuration.GetSection(PushOptions.Section));
+        services.AddScoped<IPushService, PushService>();
         // Events: messages and new chats go through the outbox in the transaction of the change,
         // "typing" and online go out immediately (ephemeral).
         services.AddScoped<SignalRChatEventPublisher>();

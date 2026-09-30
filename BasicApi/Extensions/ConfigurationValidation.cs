@@ -1,4 +1,5 @@
 using System.Text;
+using BasicApi.Services.Push;
 
 namespace BasicApi.Extensions;
 
@@ -57,6 +58,23 @@ public static class ConfigurationValidation
                 errors.Add("Storage:AccessKey and Storage:SecretKey are required when Storage:Endpoint is set.");
             else if (!environment.IsDevelopment() && secret.StartsWith("CHANGE_ME", StringComparison.Ordinal))
                 errors.Add("Storage:SecretKey is a placeholder from the repository; generate a real secret.");
+        }
+
+        // A key pair that does not match makes every push fail; half of one is a typo.
+        var vapidPublic = configuration["Push:VapidPublicKey"];
+        var vapidPrivate = configuration["Push:VapidPrivateKey"];
+        if (!string.IsNullOrWhiteSpace(vapidPublic) || !string.IsNullOrWhiteSpace(vapidPrivate))
+        {
+            if (string.IsNullOrWhiteSpace(vapidPublic) || string.IsNullOrWhiteSpace(vapidPrivate))
+                errors.Add("Push:VapidPublicKey and Push:VapidPrivateKey are both needed to send push notifications.");
+            else if (!VapidKeys.IsValidPair(vapidPublic, vapidPrivate))
+                errors.Add("Push:VapidPublicKey and Push:VapidPrivateKey are not one P-256 key pair in base64url; " +
+                           "generate them with --generate-vapid-keys.");
+
+            var subject = configuration["Push:Subject"];
+            if (subject is null || !(subject.StartsWith("mailto:", StringComparison.Ordinal) ||
+                                     subject.StartsWith("https://", StringComparison.Ordinal)))
+                errors.Add("Push:Subject must be a mailto: or https: address push services can reach the operator at.");
         }
 
         if (errors.Count > 0)

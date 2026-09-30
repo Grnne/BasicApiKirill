@@ -34,7 +34,8 @@ public sealed class DeviceService(
                 IsCurrent = d.Id == currentDeviceId,
                 SignedInAt = d.SignedInAt,
                 LastActiveAt = d.LastActiveAt,
-                UserAgent = d.UserAgent
+                UserAgent = d.UserAgent,
+                PushEnabled = d.PushEnabled
             })]
         };
 
