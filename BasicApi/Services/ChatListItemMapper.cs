@@ -1,3 +1,4 @@
+using BasicApi.Models;
 using BasicApi.Models.Dto.Chat;
 using BasicApi.Models.Dto.Message;
 using BasicApi.Storage.Dto;
@@ -19,8 +20,27 @@ public static class ChatListItemMapper
         CompanionId = r.CompanionId,
         CompanionName = r.CompanionName,
         CompanionUsername = r.CompanionUsername,
+        AvatarId = r.Type == Storage.Entities.ChatTypes.Private ? r.CompanionAvatarId : r.ChatAvatarId,
         UnreadCount = r.UnreadCount,
-        LastActivityAt = r.LastMessageCreatedAt ?? r.CreatedAt,
+        UnreadMentionCount = r.UnreadMentionCount,
+        LastReadSeq = r.LastReadSeq,
+        MarkedUnread = r.MarkedUnread,
+        OutboxReadSeq = r.OutboxReadSeq,
+        OutboxDeliveredSeq = r.OutboxDeliveredSeq,
+        LastActivityAt = r.LastActivityAt,
+        PinnedPosition = r.PinnedPosition,
+        Archived = r.ArchivedAt is not null,
+        IsMuted = ChatStates.IsMuted(r.MutedUntil, DateTime.UtcNow),
+        MutedUntil = ChatStates.ShownUntil(r.MutedUntil, DateTime.UtcNow),
+        Draft = r.DraftUpdatedAt is { } draftUpdatedAt
+            ? new DraftDto
+            {
+                Text = r.DraftText ?? string.Empty,
+                Entities = MessageEntities.Deserialize(r.DraftEntitiesJson),
+                ReplyToMessageId = r.DraftReplyToMessageId,
+                UpdatedAt = draftUpdatedAt
+            }
+            : null,
         LastMessage = r.LastMessageId is not null ? new MessageDto
         {
             Id = r.LastMessageId!.Value,
@@ -28,8 +48,15 @@ public static class ChatListItemMapper
             SenderId = r.LastMessageSenderId!.Value,
             SenderName = r.LastMessageSenderName ?? "Unknown",
             Text = r.LastMessageText ?? string.Empty,
+            Type = r.LastMessageType ?? Storage.Entities.MessageTypes.Text,
+            Attachments = Media.MessageAttachments.Read(r.LastMessageAttachmentsJson),
             CreatedAt = r.LastMessageCreatedAt!.Value,
-            IsRead = false,
+            IsRead = r.LastMessageIsOwn
+                ? r.LastMessageSeq <= r.OutboxReadSeq && r.HasOthers
+                : r.LastMessageSeq <= r.LastReadSeq,
+            Status = r.LastMessageIsOwn
+                ? MessageStatuses.OfOwn(r.LastMessageSeq ?? 0, r.HasOthers, r.OutboxReadSeq, r.OutboxDeliveredSeq)
+                : null,
             Seq = r.LastMessageSeq ?? 0
         } : null
     };

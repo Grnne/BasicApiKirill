@@ -41,15 +41,24 @@ public sealed class TestData(IDbConnectionFactory connectionFactory)
         return id;
     }
 
-    public Task<Guid> GroupChatAsync(string title, Guid[] members, DateTime? createdAt = null) =>
-        ChatAsync("group", title, members, createdAt);
+    /// <summary>A group; the first member is its owner.</summary>
+    public async Task<Guid> GroupChatAsync(string title, Guid[] members, DateTime? createdAt = null)
+    {
+        var id = await ChatAsync("group", title, members, createdAt);
+        using var connection = connectionFactory.CreateConnection();
+        await connection.ExecuteAsync(
+            "UPDATE chat_members SET role = 'owner' WHERE chat_id = @id AND user_id = @owner",
+            new { id, owner = members[0] });
+        await connection.ExecuteAsync("UPDATE chats SET created_by = @owner WHERE id = @id", new { id, owner = members[0] });
+        return id;
+    }
 
     private async Task<Guid> ChatAsync(string type, string? title, Guid[] members, DateTime? createdAt)
     {
         var id = Guid.NewGuid();
         using var connection = connectionFactory.CreateConnection();
         await connection.ExecuteAsync(
-            "INSERT INTO chats (id, title, type, created_at) VALUES (@id, @title, @type, @createdAt)",
+            "INSERT INTO chats (id, title, type, created_at, last_activity_at) VALUES (@id, @title, @type, @createdAt, @createdAt)",
             new { id, title, type, createdAt = createdAt ?? T0 });
 
         foreach (var userId in members)
@@ -69,9 +78,13 @@ public sealed class TestData(IDbConnectionFactory connectionFactory)
         var messageId = id ?? Guid.NewGuid();
         using var connection = connectionFactory.CreateConnection();
         await connection.ExecuteAsync(@"
-            WITH next AS (UPDATE chats SET last_seq = last_seq + 1 WHERE id = @chatId RETURNING last_seq)
-            INSERT INTO messages (id, chat_id, sender_id, text, created_at, is_deleted, seq)
-            SELECT @messageId, @chatId, @senderId, @text, @createdAt, @isDeleted, next.last_seq FROM next",
+            WITH next AS (
+                UPDATE chats SET last_seq = last_seq + 1, last_activity_at = GREATEST(last_activity_at, @createdAt)
+                WHERE id = @chatId RETURNING last_seq)
+            INSERT INTO messages (id, chat_id, sender_id, text, created_at, deleted_at, seq)
+            SELECT @messageId, @chatId, @senderId, @text, @createdAt,
+                   CASE WHEN @isDeleted THEN @createdAt END, next.last_seq
+            FROM next",
             new { messageId, chatId, senderId, text, createdAt, isDeleted });
         return messageId;
     }

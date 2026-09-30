@@ -1,8 +1,10 @@
-﻿// Storage/Dto/ChatParticipantRecord.cs
+// Storage/Dto/ChatParticipantRecord.cs
 namespace BasicApi.Storage.Dto;
 
 public record ChatParticipantDto(
     Guid UserId,
     string DisplayName,
-    string Username
+    string Username,
+    string Role,
+    Guid? AvatarId
 );

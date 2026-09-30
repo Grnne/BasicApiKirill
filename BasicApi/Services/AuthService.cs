@@ -125,6 +125,29 @@ public sealed class AuthService(
     /// no new one can be obtained; open hub connections are closed right away and cannot
     /// be reopened with the old token.
     /// </summary>
+    /// <summary>
+    /// Changes the password and ends every other sign-in of the user, with their hub connections;
+    /// the one that asked stays. Errors: 400 <c>WRONG_PASSWORD</c>/<c>PASSWORD_TOO_LONG</c>.
+    /// </summary>
+    public async Task ChangePasswordAsync(
+        Guid userId, Guid? sessionFamilyId, string currentPassword, string newPassword, CancellationToken ct = default)
+    {
+        if (Encoding.UTF8.GetByteCount(newPassword) > MaxPasswordBytes)
+            throw new BadRequestException(
+                $"Password must be at most {MaxPasswordBytes} bytes in UTF-8", "PASSWORD_TOO_LONG");
+
+        var user = await userRepository.GetByIdAsync(userId, ct)
+            ?? throw new UnauthorizedException("Authentication required", "TOKEN_MISSING_OR_EXPIRED");
+        // Not 401: the client would take it for an expired token and refresh it.
+        if (!BCrypt.Net.BCrypt.Verify(currentPassword, user.PasswordHash))
+            throw new BadRequestException("The current password is wrong", "WRONG_PASSWORD");
+
+        await userRepository.SetPasswordHashAsync(userId, BCrypt.Net.BCrypt.HashPassword(newPassword), ct);
+        // Whoever might know the old password is signed out everywhere else, at once.
+        await sessionService.RevokeOthersAsync(userId, sessionFamilyId, ct);
+        hubConnections.AbortUserExcept(userId, sessionFamilyId);
+    }
+
     public async Task LogoutAllAsync(Guid userId, CancellationToken ct = default)
     {
         await sessionService.RevokeAllForUserAsync(userId, ct);

@@ -163,12 +163,15 @@ public class StackE2ETests(E2EUsers users)
         var broken = await aliceApi.GetAsync($"api/chats/{chatId}/messages/cursor?cursor=garbage!!");
         Assert.Equal(HttpStatusCode.BadRequest, broken.StatusCode);
 
-        // Sync: Bob's journal has the new chat and two messages, in order
+        // Sync: Bob's journal has the new chat, two messages and his reading (for his other devices), in order
         var state = await (await bobApi.GetAsync("api/sync/state")).ReadAsync<JsonElement>();
-        Assert.Equal(3, state.GetProperty("pts").GetInt64());
+        Assert.Equal(4, state.GetProperty("pts").GetInt64());
         var missed = await (await bobApi.GetAsync("api/sync?since=1")).ReadAsync<JsonElement>();
-        Assert.Equal(["hello from alice", "hello back"], missed.GetProperty("updates").EnumerateArray()
+        var updates = missed.GetProperty("updates").EnumerateArray().ToList();
+        Assert.Equal(["MessageCreated", "MessageCreated", "ReadStateChanged"], updates.Select(u => u.GetProperty("type").GetString()));
+        Assert.Equal(["hello from alice", "hello back"], updates.Take(2)
             .Select(u => u.GetProperty("payload").GetProperty("text").GetString()));
+        Assert.Equal(0, updates[2].GetProperty("payload").GetProperty("unreadCount").GetInt32());
     }
 
     [E2EFact]

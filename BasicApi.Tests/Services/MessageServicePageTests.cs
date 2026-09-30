@@ -21,7 +21,7 @@ public class MessageServicePageTests
         _chatRepoMock = new Mock<IChatRepository>();
         _msgRepoMock = new Mock<IMessageRepository>();
         _service = new MessageService(new FakeDbSession(), _msgRepoMock.Object, new MembershipService(_chatRepoMock.Object),
-            new ChatPolicy(new MembershipService(_chatRepoMock.Object)), Mock.Of<IChatEventPublisher>());
+            new ChatPolicy(new MembershipService(_chatRepoMock.Object)), Mock.Of<IChatEventPublisher>(), Mock.Of<IDraftRepository>(), Mock.Of<IGroupRepository>(), Mock.Of<IAttachmentRepository>());
     }
 
     private static MessageWithSender ToMessageWithSender(Storage.Entities.Message msg, string senderName)
@@ -32,7 +32,6 @@ public class MessageServicePageTests
             SenderId = msg.SenderId,
             Text = msg.Text,
             CreatedAt = msg.CreatedAt,
-            IsDeleted = msg.IsDeleted,
             Seq = msg.CreatedAt.Ticks, // sequence numbers follow the time order, as with real messages
             SenderName = senderName
         };
@@ -72,7 +71,7 @@ public class MessageServicePageTests
             .ReturnsAsync(true);
 
         _msgRepoMock
-            .Setup(r => r.GetMessagesWithSenderCursorAsync(chatId, null, 20, It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetMessagesWithSenderCursorAsync(chatId, userId, null, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new CursorResult<MessageWithSender>
             {
                 Items = messages,
@@ -113,7 +112,7 @@ public class MessageServicePageTests
             .ReturnsAsync(true);
 
         _msgRepoMock
-            .Setup(r => r.GetMessagesWithSenderCursorAsync(chatId, null, 2, It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetMessagesWithSenderCursorAsync(chatId, userId, null, 2, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new CursorResult<MessageWithSender>
             {
                 Items = messages,
@@ -148,7 +147,7 @@ public class MessageServicePageTests
             .ReturnsAsync(true);
 
         _msgRepoMock
-            .Setup(r => r.GetMessagesWithSenderCursorAsync(chatId, null, 20, It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetMessagesWithSenderCursorAsync(chatId, userId, null, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new CursorResult<MessageWithSender>
             {
                 Items = messages,
@@ -183,7 +182,7 @@ public class MessageServicePageTests
             .ReturnsAsync(true);
 
         _msgRepoMock
-            .Setup(r => r.GetMessagesWithSenderCursorAsync(chatId, 42L, 20, It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetMessagesWithSenderCursorAsync(chatId, userId, 42L, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new CursorResult<MessageWithSender>
             {
                 Items = messages,
@@ -198,7 +197,7 @@ public class MessageServicePageTests
         Assert.Equal("Older msg", result.Items[0].Text);
 
         _msgRepoMock.Verify(
-            r => r.GetMessagesWithSenderCursorAsync(chatId, 42L, 20, It.IsAny<CancellationToken>()),
+            r => r.GetMessagesWithSenderCursorAsync(chatId, userId, 42L, 20, It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -211,12 +210,12 @@ public class MessageServicePageTests
         _chatRepoMock.Setup(r => r.IsMemberAsync(chatId, userId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
         _msgRepoMock.Setup(r => r.GetSeqAsync(chatId, messageId, It.IsAny<CancellationToken>())).ReturnsAsync(17);
         _msgRepoMock
-            .Setup(r => r.GetMessagesWithSenderCursorAsync(chatId, 17L, 20, It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetMessagesWithSenderCursorAsync(chatId, userId, 17L, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new CursorResult<MessageWithSender>());
 
         await _service.GetPageAsync(chatId, userId, MessageCursor.EncodeLegacy(DateTime.UtcNow, messageId), 20);
 
-        _msgRepoMock.Verify(r => r.GetMessagesWithSenderCursorAsync(chatId, 17L, 20, It.IsAny<CancellationToken>()), Times.Once);
+        _msgRepoMock.Verify(r => r.GetMessagesWithSenderCursorAsync(chatId, userId, 17L, 20, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -285,7 +284,7 @@ public class MessageServicePageTests
             .ReturnsAsync(true);
 
         _msgRepoMock
-            .Setup(r => r.SearchMessagesCursorAsync(chatId, query, null, 20, It.IsAny<CancellationToken>()))
+            .Setup(r => r.SearchMessagesCursorAsync(chatId, userId, query, null, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync((new CursorResult<MessageWithSender>
             {
                 Items = messages,
@@ -317,7 +316,7 @@ public class MessageServicePageTests
             .ReturnsAsync(true);
 
         _msgRepoMock
-            .Setup(r => r.SearchMessagesCursorAsync(chatId, query, null, 20, It.IsAny<CancellationToken>()))
+            .Setup(r => r.SearchMessagesCursorAsync(chatId, userId, query, null, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync((new CursorResult<MessageWithSender>
             {
                 Items = [],
@@ -355,7 +354,7 @@ public class MessageServicePageTests
             .ReturnsAsync(true);
 
         _msgRepoMock
-            .Setup(r => r.SearchMessagesCursorAsync(chatId, query, 42L, 20, It.IsAny<CancellationToken>()))
+            .Setup(r => r.SearchMessagesCursorAsync(chatId, userId, query, 42L, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync((new CursorResult<MessageWithSender>
             {
                 Items = messages,
@@ -368,7 +367,7 @@ public class MessageServicePageTests
         // Assert
         Assert.Single(result.Items);
         _msgRepoMock.Verify(
-            r => r.SearchMessagesCursorAsync(chatId, query, 42L, 20, It.IsAny<CancellationToken>()),
+            r => r.SearchMessagesCursorAsync(chatId, userId, query, 42L, 20, It.IsAny<CancellationToken>()),
             Times.Once);
     }
 }

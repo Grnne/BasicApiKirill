@@ -26,6 +26,20 @@ public interface IUserRepository
     /// </summary>
     Task<User?> GetByIdAsync(Guid id, CancellationToken ct = default);
 
+    Task SetPasswordHashAsync(Guid userId, string passwordHash, CancellationToken ct = default);
+
+    /// <summary>Sets the name shown to others; false when it was already so.</summary>
+    Task<bool> SetDisplayNameAsync(Guid userId, string displayName, CancellationToken ct = default);
+
+    /// <summary>Records when the user was last seen online.</summary>
+    Task SetLastSeenAsync(Guid userId, DateTime at, CancellationToken ct = default);
+
+    /// <summary>Sets or clears the avatar; false when it was already so.</summary>
+    Task<bool> SetAvatarAsync(Guid userId, Guid? attachmentId, CancellationToken ct = default);
+
+    /// <summary>The users with these ids; missing ones are simply absent.</summary>
+    Task<IReadOnlyList<User>> GetByIdsAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default);
+
     /// <summary>
     /// Searches users by display name or username using ILIKE (case-insensitive).
     /// Excludes the current user from results.

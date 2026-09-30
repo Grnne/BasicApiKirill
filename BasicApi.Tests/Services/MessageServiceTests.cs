@@ -12,7 +12,7 @@ using Moq;
 
 namespace BasicApi.Tests.Services;
 
-/// <summary>Sending, read state and "jump to date".</summary>
+/// <summary>Sending and "jump to date".</summary>
 public class MessageServiceTests
 {
     private readonly Mock<IChatRepository> _chatRepoMock = new();
@@ -25,6 +25,7 @@ public class MessageServiceTests
 
     public MessageServiceTests()
     {
+        _chatRepoMock.WithMembersFromIsMember();
         _chatRepoMock
             .Setup(r => r.GetMemberIdsAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
@@ -35,13 +36,18 @@ public class MessageServiceTests
             .Setup(r => r.IsMemberAsync(_chatId, _userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
+        _msgRepoMock
+            .Setup(r => r.GetAuthorsNewlyReachedAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<long>(),
+                It.IsAny<long>(), It.IsAny<ReceiptKind>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
         // The repository returns what was inserted, with the number and the sender name
         _msgRepoMock
             .Setup(r => r.CreateAsync(It.IsAny<Message>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Message m, Guid? clientMessageId, CancellationToken _) => Stored(m.ChatId, m.Text, clientMessageId, m.Id));
 
         var membership = new MembershipService(_chatRepoMock.Object);
-        _service = new MessageService(new FakeDbSession(), _msgRepoMock.Object, membership, new ChatPolicy(membership), _eventsMock.Object);
+        _service = new MessageService(new FakeDbSession(), _msgRepoMock.Object, membership, new ChatPolicy(membership), _eventsMock.Object, Mock.Of<IDraftRepository>(), Mock.Of<IGroupRepository>(), Mock.Of<IAttachmentRepository>());
     }
 
     private MessageWithSender Stored(Guid chatId, string text, Guid? clientMessageId = null, Guid? id = null) => new()
@@ -173,55 +179,6 @@ public class MessageServiceTests
         Assert.Equal("CLIENT_MESSAGE_ID_CONFLICT", ex.ErrorCode);
     }
 
-    // ========== MarkRead ==========
-
-    [Fact]
-    public async Task MarkRead_MovesPointer()
-    {
-        var messageId = Guid.NewGuid();
-        _msgRepoMock
-            .Setup(r => r.MarkReadAsync(_chatId, _userId, messageId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(ReadPointerUpdate.Moved);
-
-        await _service.MarkReadAsync(_chatId, _userId, messageId);
-
-        _msgRepoMock.Verify(r => r.MarkReadAsync(_chatId, _userId, messageId, It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task MarkRead_OlderMessage_IsNotAnError()
-    {
-        // The pointer does not move backwards, but for the client this is not an error: they have already read further.
-        _msgRepoMock
-            .Setup(r => r.MarkReadAsync(_chatId, _userId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(ReadPointerUpdate.NotMoved);
-
-        await _service.MarkReadAsync(_chatId, _userId, Guid.NewGuid());
-    }
-
-    [Fact]
-    public async Task MarkRead_MessageNotInChat_Is404()
-    {
-        _msgRepoMock
-            .Setup(r => r.MarkReadAsync(_chatId, _userId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(ReadPointerUpdate.MessageNotFound);
-
-        var ex = await Assert.ThrowsAsync<NotFoundException>(() =>
-            _service.MarkReadAsync(_chatId, _userId, Guid.NewGuid()));
-
-        Assert.Equal("MESSAGE_NOT_FOUND", ex.ErrorCode);
-    }
-
-    [Fact]
-    public async Task MarkRead_NotMember_Is403()
-    {
-        var ex = await Assert.ThrowsAsync<ForbiddenException>(() =>
-            _service.MarkReadAsync(Guid.NewGuid(), _userId, Guid.NewGuid()));
-
-        Assert.Equal("NOT_A_MEMBER", ex.ErrorCode);
-        _msgRepoMock.VerifyNoOtherCalls();
-    }
-
     // ========== Jump to date ==========
 
     [Fact]
@@ -232,12 +189,12 @@ public class MessageServiceTests
             .Setup(r => r.GetFirstSeqAfterAsync(_chatId, date, It.IsAny<CancellationToken>()))
             .ReturnsAsync(7);
         _msgRepoMock
-            .Setup(r => r.GetMessagesWithSenderCursorAsync(_chatId, It.IsAny<long?>(), 20, It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetMessagesWithSenderCursorAsync(_chatId, _userId, It.IsAny<long?>(), 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new CursorResult<MessageWithSender>());
 
         await _service.GetPageAtAsync(_chatId, _userId, date, 20);
 
-        _msgRepoMock.Verify(r => r.GetMessagesWithSenderCursorAsync(_chatId, 7L, 20, It.IsAny<CancellationToken>()),
+        _msgRepoMock.Verify(r => r.GetMessagesWithSenderCursorAsync(_chatId, _userId, 7L, 20, It.IsAny<CancellationToken>()),
             Times.Once);
     }
 

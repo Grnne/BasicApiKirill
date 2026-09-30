@@ -54,7 +54,8 @@ public class SyncController(ISyncService sync) : ControllerBase
     /// </summary>
     /// <remarks>
     /// The device is the sign-in behind the access token. The acknowledged pts only moves
-    /// forward. Plan 2 builds the "delivered" status on it.
+    /// forward. New messages the journal carried up to this pts become <c>delivered</c>: their
+    /// authors get <c>MessagesDelivered</c> if no other member had received them before.
     /// </remarks>
     /// <param name="dto">The last received pts.</param>
     /// <param name="ct">Request cancellation.</param>

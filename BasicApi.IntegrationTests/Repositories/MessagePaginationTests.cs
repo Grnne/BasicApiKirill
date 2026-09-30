@@ -25,7 +25,7 @@ public class MessagePaginationTests(PostgresFixture db) : DbTest(db)
         var pages = 0;
         do
         {
-            var page = await Repository.GetMessagesWithSenderCursorAsync(chat, beforeSeq, limit: 3);
+            var page = await Repository.GetMessagesWithSenderCursorAsync(chat, alice, beforeSeq, limit: 3);
             seen.AddRange(page.Items.Select(m => m.Id));
             beforeSeq = page.HasMore ? page.Items[^1].Seq : null;
             pages++;
@@ -47,7 +47,7 @@ public class MessagePaginationTests(PostgresFixture db) : DbTest(db)
         await Data.MessageAsync(chat, bob, "deleted", TestData.T0.AddMinutes(1), isDeleted: true);
         var recent = await Data.MessageAsync(chat, bob, "recent", TestData.T0.AddMinutes(2));
 
-        var page = await Repository.GetMessagesWithSenderCursorAsync(chat, beforeSeq: null, limit: 10);
+        var page = await Repository.GetMessagesWithSenderCursorAsync(chat, alice, beforeSeq: null, limit: 10);
 
         Assert.Equal([recent, old], page.Items.Select(m => m.Id));
         Assert.False(page.HasMore);
@@ -67,7 +67,7 @@ public class MessagePaginationTests(PostgresFixture db) : DbTest(db)
         var mine = await Data.MessageAsync(chat, alice, "here", TestData.T0);
         await Data.MessageAsync(other, carol, "elsewhere", TestData.T0);
 
-        var page = await Repository.GetMessagesWithSenderCursorAsync(chat, beforeSeq: null, limit: 10);
+        var page = await Repository.GetMessagesWithSenderCursorAsync(chat, alice, beforeSeq: null, limit: 10);
 
         Assert.Equal([mine], page.Items.Select(m => m.Id));
     }

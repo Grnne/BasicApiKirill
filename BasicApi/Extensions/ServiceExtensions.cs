@@ -6,6 +6,7 @@ using BasicApi.Hubs;
 using BasicApi.Middleware.Exceptions;
 using BasicApi.Services;
 using BasicApi.Services.Events;
+using BasicApi.Services.Media;
 using BasicApi.Storage;
 using BasicApi.Storage.Interfaces;
 using BasicApi.Storage.Migrations;
@@ -105,14 +106,38 @@ public static class ServiceExtensions
         services.AddScoped<ISessionRepository, SessionRepository>();
         services.AddScoped<IOutboxRepository, OutboxRepository>();
         services.AddScoped<IUpdateJournal, UpdateJournalRepository>();
+        services.AddScoped<IReactionRepository, ReactionRepository>();
+        services.AddScoped<IDraftRepository, DraftRepository>();
+        services.AddScoped<IGroupRepository, GroupRepository>();
+        services.AddScoped<IAttachmentRepository, AttachmentRepository>();
+        services.AddScoped<IPrivacyRepository, PrivacyRepository>();
+        services.AddScoped<IChatStateRepository, ChatStateRepository>();
+        services.AddScoped<IFolderRepository, FolderRepository>();
 
         // Domain services: controllers and the hub are only adapters over them.
         services.AddScoped<IMembershipService, MembershipService>();
+        services.Configure<MessageOptions>(configuration.GetSection(MessageOptions.Section));
+        services.Configure<GroupOptions>(configuration.GetSection(GroupOptions.Section));
         services.AddScoped<IChatPolicy, ChatPolicy>();
         services.AddScoped<IChatService, ChatService>();
         services.AddScoped<IMessageService, MessageService>();
+        services.AddScoped<IReactionService, ReactionService>();
+        services.AddScoped<IReadStateService, ReadStateService>();
+        services.AddScoped<IDraftService, DraftService>();
+        services.AddScoped<IGroupService, GroupService>();
+        // Files: kept in S3-compatible storage; without Storage:Endpoint media is off (503).
+        services.Configure<StorageOptions>(configuration.GetSection(StorageOptions.Section));
+        services.Configure<MediaOptions>(configuration.GetSection(MediaOptions.Section));
+        services.AddSingleton<IObjectStorage, S3ObjectStorage>();
+        services.AddScoped<IMediaService, MediaService>();
+        services.AddSingleton<MediaCleanup>();
+        services.AddHostedService(sp => sp.GetRequiredService<MediaCleanup>());
         services.AddScoped<IPresenceService, PresenceService>();
         services.AddScoped<IUserService, UserService>();
+        services.AddScoped<IProfileService, ProfileService>();
+        services.AddScoped<IPrivacyService, PrivacyService>();
+        services.AddScoped<IChatStateService, ChatStateService>();
+        services.AddScoped<IFolderService, FolderService>();
         services.AddScoped<ISyncService, SyncService>();
         services.AddScoped<AuthService>();
         services.AddScoped<ISessionService, SessionService>();

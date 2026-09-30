@@ -51,7 +51,7 @@ public class ReadStateTests(PostgresFixture db) : DbTest(db)
         for (var i = 0; i < 3; i++)
             ids.Add(await Data.MessageAsync(chat, bob, $"m{i}", TestData.T0)); // order is by seq, not by time
 
-        Assert.Equal(ReadPointerUpdate.Moved, await Messages.MarkReadAsync(chat, alice, ids[1]));
+        Assert.Equal(ReadPointerUpdate.Moved, (await Messages.MarkReadAsync(chat, alice, ids[1])).Update);
 
         Assert.Equal(1, await UnreadAsync(chat, alice));
     }
@@ -68,8 +68,8 @@ public class ReadStateTests(PostgresFixture db) : DbTest(db)
         var foreign = await Data.MessageAsync(other, carol, "secret", TestData.T0.AddMinutes(1));
         await Messages.MarkReadAsync(chat, alice, mine);
 
-        Assert.Equal(ReadPointerUpdate.MessageNotFound, await Messages.MarkReadAsync(chat, alice, foreign));
-        Assert.Equal(ReadPointerUpdate.MessageNotFound, await Messages.MarkReadAsync(chat, alice, Guid.NewGuid()));
+        Assert.Equal(ReadPointerUpdate.MessageNotFound, (await Messages.MarkReadAsync(chat, alice, foreign)).Update);
+        Assert.Equal(ReadPointerUpdate.MessageNotFound, (await Messages.MarkReadAsync(chat, alice, Guid.NewGuid())).Update);
 
         Assert.Equal(await Data.SeqOfAsync(mine), await PointerAsync(chat, alice));
     }
@@ -84,8 +84,8 @@ public class ReadStateTests(PostgresFixture db) : DbTest(db)
         var older = await Data.MessageAsync(chat, bob, "1", TestData.T0);
         var newer = await Data.MessageAsync(chat, bob, "2", TestData.T0.AddMinutes(1));
 
-        Assert.Equal(ReadPointerUpdate.Moved, await Messages.MarkReadAsync(chat, alice, newer));
-        Assert.Equal(ReadPointerUpdate.NotMoved, await Messages.MarkReadAsync(chat, alice, older));
+        Assert.Equal(ReadPointerUpdate.Moved, (await Messages.MarkReadAsync(chat, alice, newer)).Update);
+        Assert.Equal(ReadPointerUpdate.NotMoved, (await Messages.MarkReadAsync(chat, alice, older)).Update);
 
         Assert.Equal(await Data.SeqOfAsync(newer), await PointerAsync(chat, alice));
         Assert.Equal(0, await UnreadAsync(chat, alice));

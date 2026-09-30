@@ -30,6 +30,26 @@ public class SecurityHeadersTests(PostgresFixture db)
     }
 
     [Fact]
+    public async Task FilesFromAnotherOrigin_AreAllowedOnlyFromTheStorage()
+    {
+        await using var factory = new ApiFactory(db.ConnectionString, new Dictionary<string, string?>
+        {
+            ["Storage:Endpoint"] = "http://seaweedfs:8333",
+            ["Storage:PublicUrl"] = "http://localhost:8333",
+            ["Storage:AccessKey"] = "key",
+            ["Storage:SecretKey"] = "secret"
+        });
+        using var client = factory.CreateClient();
+
+        var csp = Assert.Single((await client.GetAsync("/health/live")).Headers.GetValues("Content-Security-Policy"));
+
+        Assert.Contains("img-src 'self' data: http://localhost:8333;", csp);
+        Assert.Contains("media-src 'self' http://localhost:8333;", csp);
+        Assert.Contains("connect-src 'self' http://localhost:8333;", csp);
+        Assert.DoesNotContain("seaweedfs", csp); // the internal address is nobody's business
+    }
+
+    [Fact]
     public async Task SwaggerUi_HasNoInlineScripts_SoStrictPolicyDoesNotBreakIt()
     {
         await using var factory = new ApiFactory(db.ConnectionString,

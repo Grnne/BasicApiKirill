@@ -21,6 +21,13 @@ public interface IUpdateJournal
     Task AckAsync(Guid userId, Guid sessionFamilyId, long pts, CancellationToken ct = default);
 
     /// <summary>
+    /// Moves the user's delivery pointers to the messages their journal carried up to
+    /// <paramref name="pts"/> beyond what any of their devices acknowledged before. Call it before
+    /// <see cref="AckAsync"/> in the same transaction. Returns the pointers that moved.
+    /// </summary>
+    Task<IReadOnlyList<PointerMove>> DeliverUpToAsync(Guid userId, long pts, CancellationToken ct = default);
+
+    /// <summary>
     /// Deletes journal entries older than <paramref name="olderThan"/> - no more than
     /// <paramref name="batchSize"/> at a time, to avoid holding long locks.
     /// </summary>

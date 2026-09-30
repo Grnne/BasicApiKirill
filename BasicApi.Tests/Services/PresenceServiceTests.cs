@@ -3,6 +3,7 @@ using BasicApi.Services;
 using BasicApi.Services.Events;
 using BasicApi.Storage.Interfaces;
 using Microsoft.Extensions.Logging.Abstractions;
+using BasicApi.Tests.TestDoubles;
 using Moq;
 
 namespace BasicApi.Tests.Services;
@@ -22,6 +23,7 @@ public class PresenceServiceTests
 
     public PresenceServiceTests()
     {
+        _chatRepoMock.WithMembersFromIsMember();
         _chatRepoMock
             .Setup(r => r.GetAllChatMembersAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);

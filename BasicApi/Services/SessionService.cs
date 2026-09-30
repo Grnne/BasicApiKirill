@@ -141,6 +141,9 @@ public class SessionService(
     public Task RevokeAllForUserAsync(Guid userId, CancellationToken ct = default)
         => sessionRepository.RevokeAllForUserAsync(userId, DateTime.UtcNow, ct);
 
+    public Task RevokeOthersAsync(Guid userId, Guid? keepFamilyId, CancellationToken ct = default)
+        => sessionRepository.RevokeAllForUserExceptAsync(userId, keepFamilyId, DateTime.UtcNow, ct);
+
     public Task<bool> IsSessionFamilyLiveAsync(Guid sessionFamilyId, CancellationToken ct = default)
         => sessionRepository.HasLiveSessionInFamilyAsync(sessionFamilyId, ct);
 

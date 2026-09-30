@@ -15,7 +15,7 @@ public class UserRepository(IDbSession db) : IUserRepository
                 username as Username, 
                 email as Email, 
                 password_hash as PasswordHash, 
-                display_name as DisplayName, 
+                display_name as DisplayName, avatar_attachment_id as AvatarAttachmentId,
                 created_at as CreatedAt, 
                 last_login_at as LastLoginAt, 
                 is_active as IsActive
@@ -65,6 +65,15 @@ public class UserRepository(IDbSession db) : IUserRepository
         return await db.QueryFirstOrDefaultAsync<Guid?>(sql, new { username }, ct);
     }
 
+    public Task<IReadOnlyList<User>> GetByIdsAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default) =>
+        db.QueryAsync<User>(@"
+            SELECT id AS Id, username AS Username, email AS Email, display_name AS DisplayName, avatar_attachment_id AS AvatarAttachmentId,
+                   last_seen_at AS LastSeenAt,
+                   created_at AS CreatedAt, last_login_at AS LastLoginAt, is_active AS IsActive
+            FROM users
+            WHERE id = ANY(@ids)",
+            new { ids = ids.Distinct().ToArray() }, ct);
+
     public async Task<User?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
         const string sql = @"
@@ -74,6 +83,7 @@ public class UserRepository(IDbSession db) : IUserRepository
                 email as Email,
                 password_hash as PasswordHash,
                 display_name as DisplayName,
+                avatar_attachment_id as AvatarAttachmentId,
                 created_at as CreatedAt,
                 last_login_at as LastLoginAt,
                 is_active as IsActive
@@ -83,6 +93,23 @@ public class UserRepository(IDbSession db) : IUserRepository
 
         return await db.QueryFirstOrDefaultAsync<User>(sql, new { Id = id }, ct);
     }
+
+    public Task SetPasswordHashAsync(Guid userId, string passwordHash, CancellationToken ct = default) =>
+        db.ExecuteAsync("UPDATE users SET password_hash = @passwordHash WHERE id = @userId", new { userId, passwordHash }, ct);
+
+    public async Task<bool> SetDisplayNameAsync(Guid userId, string displayName, CancellationToken ct = default) =>
+        await db.ExecuteAsync(
+            "UPDATE users SET display_name = @displayName WHERE id = @userId AND display_name <> @displayName",
+            new { userId, displayName }, ct) > 0;
+
+    public Task SetLastSeenAsync(Guid userId, DateTime at, CancellationToken ct = default) =>
+        db.ExecuteAsync("UPDATE users SET last_seen_at = @at WHERE id = @userId", new { userId, at }, ct);
+
+    public async Task<bool> SetAvatarAsync(Guid userId, Guid? attachmentId, CancellationToken ct = default) =>
+        await db.ExecuteAsync(@"
+            UPDATE users SET avatar_attachment_id = @attachmentId
+            WHERE id = @userId AND avatar_attachment_id IS DISTINCT FROM @attachmentId",
+            new { userId, attachmentId }, ct) > 0;
 
     public async Task<IEnumerable<User>> SearchByDisplayNameOrUsernameAsync(
         string query, Guid excludeUserId, int limit, CancellationToken ct = default)
@@ -94,6 +121,7 @@ public class UserRepository(IDbSession db) : IUserRepository
                 email as Email,
                 password_hash as PasswordHash,
                 display_name as DisplayName,
+                avatar_attachment_id as AvatarAttachmentId,
                 created_at as CreatedAt,
                 last_login_at as LastLoginAt,
                 is_active as IsActive

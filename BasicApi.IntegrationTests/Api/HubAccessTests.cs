@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using BasicApi.IntegrationTests.Infrastructure;
 using Dapper;
 using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 
 namespace BasicApi.IntegrationTests.Api;
@@ -21,6 +22,32 @@ public class HubAccessTests(PostgresFixture db) : DbTest(db)
     {
         ["Hub:SessionCheckIntervalSeconds"] = "1",
     };
+
+    [Fact]
+    public async Task ConnectionDroppedWhileConnecting_DoesNotLeaveTheUserOnline()
+    {
+        // A client that leaves while the hub is still connecting it (a quick reload, a flaky
+        // network) aborted OnConnectedAsync after the user was marked online; SignalR then does not
+        // call OnDisconnectedAsync, and the user stayed online until a restart.
+        await using var factory = new ApiFactory(Db.ConnectionString);
+        var alice = await factory.RegisterAsync("alice");
+        var status = factory.Services.GetRequiredService<BasicApi.Services.IUserStatusService>();
+
+        for (var i = 0; i < 10; i++)
+        {
+            await using var hub = factory.CreateHubConnection(alice.Token);
+            await hub.StartAsync();
+            await hub.StopAsync();
+        }
+
+        var connections = -1;
+        for (var i = 0; i < 100 && connections != 0; i++)
+        {
+            await Task.Delay(50);
+            connections = await status.GetConnectionCountAsync(alice.UserId);
+        }
+        Assert.Equal(0, connections);
+    }
 
     [Fact]
     public async Task Connection_OutlivesAccessToken_WhileSessionIsLive()

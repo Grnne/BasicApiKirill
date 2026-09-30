@@ -32,6 +32,9 @@ public interface ISessionService
     /// <summary>Ends every live session of a user ("log out everywhere").</summary>
     Task RevokeAllForUserAsync(Guid userId, CancellationToken ct = default);
 
+    /// <summary>Ends every sign-in of the user but <paramref name="keepFamilyId"/> (null — all of them).</summary>
+    Task RevokeOthersAsync(Guid userId, Guid? keepFamilyId, CancellationToken ct = default);
+
     /// <summary>
     /// Whether the sign-in behind an access token (its <c>sid</c>) is still open.
     /// An access token outlives logout by minutes; the hub checks this on connect.

@@ -1,3 +1,4 @@
+using BasicApi.Hubs;
 using System.Text.Json;
 using BasicApi.Models.Dto.Chat;
 using BasicApi.Models.Dto.Message;
@@ -61,13 +62,13 @@ public class OutboxTests
 
     public OutboxTests()
     {
-        _publisher = new OutboxChatEventPublisher(_db, _outbox, _journalMock.Object, _signal, new SignalRChatEventPublisher(_hub));
+        _publisher = new OutboxChatEventPublisher(_db, _outbox, _journalMock.Object, _signal, new SignalRChatEventPublisher(_hub, new HubConnectionRegistry()));
 
         var services = new ServiceCollection()
             .AddScoped<IDbSession>(_ => _db)
             .AddScoped<IOutboxRepository>(_ => _outbox)
             .BuildServiceProvider();
-        _dispatcher = new OutboxDispatcher(services.GetRequiredService<IServiceScopeFactory>(), _hub, _signal,
+        _dispatcher = new OutboxDispatcher(services.GetRequiredService<IServiceScopeFactory>(), _hub, new HubConnectionRegistry(), _signal,
             new ConfigurationBuilder().Build(), _logger);
     }
 
@@ -109,7 +110,7 @@ public class OutboxTests
         var chat = new ChatListItemDto { ChatId = Guid.NewGuid(), Type = "private", CompanionId = Guid.NewGuid() };
 
         var direct = new RecordingHubContext();
-        var directPublisher = new SignalRChatEventPublisher(direct);
+        var directPublisher = new SignalRChatEventPublisher(direct, new HubConnectionRegistry());
         await directPublisher.MessageCreatedAsync(message, members);
         await directPublisher.ChatCreatedAsync(recipient, chat);
 

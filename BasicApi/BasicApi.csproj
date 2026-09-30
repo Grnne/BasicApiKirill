@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+<Project Sdk="Microsoft.NET.Sdk.Web">
 
 	<PropertyGroup>
 		<TargetFramework>net10.0</TargetFramework>
@@ -17,6 +17,12 @@
 		<PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.6" />
 		<PackageReference Include="BCrypt.Net-Next" Version="4.1.0" />
 		<PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.17.0" />
+
+		<!-- Media: S3-compatible storage and previews of pictures -->
+		<PackageReference Include="AWSSDK.S3" Version="4.0.103.4" />
+		<PackageReference Include="SkiaSharp" Version="4.153.0" />
+		<!-- Skia for Linux without system dependencies (fontconfig): the image stays as it is -->
+		<PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.153.0" />
 
 		<!-- Existing packages -->
 		<PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.22.1" />

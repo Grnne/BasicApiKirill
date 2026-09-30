@@ -7,9 +7,25 @@
 }
 
 {$DOMAIN} {
+	# Files (plan 2, F4): signed links go straight to the storage. The signature covers the
+	# host, and Caddy passes the Host header through unchanged, so links signed for {$DOMAIN}
+	# check out. Whatever a user uploaded is never active content on the site (R32): the
+	# browser must not guess the type, and a page from here gets no script and no origin.
+	handle /media/* {
+		reverse_proxy seaweedfs:8333
+		header {
+			X-Content-Type-Options nosniff
+			Content-Security-Policy "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; sandbox"
+			X-Frame-Options DENY
+			-Server
+		}
+	}
+
 	# Caddy sets X-Forwarded-For/-Proto itself and does not trust the same headers
 	# from the client, so the client IP cannot be spoofed through the proxy.
-	reverse_proxy basicapi:8080
+	handle {
+		reverse_proxy basicapi:8080
+	}
 
 	header {
 		Strict-Transport-Security "max-age=31536000"

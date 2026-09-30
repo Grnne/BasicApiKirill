@@ -1,7 +1,10 @@
-﻿using BasicApi.Middleware.Exceptions;
+using BasicApi.Middleware.Exceptions;
 using BasicApi.Models.Dto.Chat;
+using BasicApi.Models.Dto.Message;
 using BasicApi.Services.Events;
 using BasicApi.Storage;
+using ChatListCursor = BasicApi.Storage.Dto.ChatListCursor;
+using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
 
 namespace BasicApi.Services;
@@ -12,12 +15,36 @@ public sealed class ChatService(
     IUserRepository userRepository,
     IChatPolicy policy,
     IPresenceService presence,
-    IChatEventPublisher events) : IChatService
+    IChatEventPublisher events,
+    IPrivacyRepository? privacy = null) : IChatService
 {
     public async Task<List<ChatListItemDto>> GetUserChatsAsync(Guid userId, CancellationToken ct = default)
     {
         var rows = await chatRepository.GetUserChatsBatchedAsync(userId, ct);
         return [.. rows.Select(ChatListItemMapper.Map)];
+    }
+
+    public async Task<CursorPaginatedResponse<ChatListItemDto>> GetUserChatsPageAsync(
+        Guid userId, string? cursor, int limit, CancellationToken ct = default, bool archived = false)
+    {
+        ChatListCursor? before = null;
+        if (!string.IsNullOrEmpty(cursor))
+            before = ChatListCursor.TryDecode(cursor, out var parsed)
+                ? parsed
+                : throw new BadRequestException("Cursor is malformed", "INVALID_CURSOR");
+
+        // The main list starts with all pinned chats (at most ten, outside the limit); the pages then
+        // go on by activity without them. The archive has no pins.
+        var pinned = !archived && before is null ? await chatRepository.GetPinnedChatsAsync(userId, ct) : [];
+        var rows = await chatRepository.GetUserChatsPageAsync(userId, before, limit + 1, ct, archived, unpinnedOnly: !archived);
+        var page = rows.Take(limit).ToList();
+        var hasMore = rows.Count > limit;
+        return new CursorPaginatedResponse<ChatListItemDto>
+        {
+            Items = [.. pinned.Concat(page).Select(ChatListItemMapper.Map)],
+            HasMore = hasMore,
+            NextCursor = hasMore ? new ChatListCursor(page[^1].LastActivityAt, page[^1].ChatId).Encode() : null
+        };
     }
 
     public async Task<ChatListItemDto> GetChatListItemAsync(Guid chatId, Guid userId, CancellationToken ct = default)
@@ -43,6 +70,12 @@ public sealed class ChatService(
         await policy.DemandReadAsync(userId, chatId, ct);
 
         var participants = await chatRepository.GetChatParticipantsAsync(chatId, ct);
+        var me = await chatRepository.GetMemberAsync(chatId, userId, ct);
+        // Those who blocked the caller do not show their avatar to them.
+        var hidden = privacy is null
+            ? new HashSet<Guid>()
+            : await privacy.GetBlockersAsync(userId, [.. participants.Select(p => p.UserId)], ct);
+        var isGroup = chat.Type == ChatTypes.Group;
 
         return new ChatDetailDto
         {
@@ -53,8 +86,17 @@ public sealed class ChatService(
             {
                 UserId = p.UserId,
                 DisplayName = p.DisplayName,
-                Username = p.Username
-            })]
+                Username = p.Username,
+                Role = p.Role,
+                AvatarId = hidden.Contains(p.UserId) ? null : p.AvatarId
+            })],
+            AvatarId = chat.Type == ChatTypes.Private
+                ? participants.FirstOrDefault(p => p.UserId != userId && !hidden.Contains(p.UserId))?.AvatarId
+                : chat.AvatarAttachmentId,
+            CreatedBy = chat.CreatedBy,
+            MyRole = me?.Role ?? ChatRoles.Member,
+            MyPermissions = isGroup && me is not null ? GroupRights.Effective(me) : null,
+            MemberPermissions = isGroup ? GroupRights.MemberPermissions(chat.SettingsJson) : null
         };
     }
 
@@ -69,6 +111,10 @@ public sealed class ChatService(
         var other = await userRepository.GetByIdAsync(otherUserId, ct);
         if (other is null || !other.IsActive)
             throw new NotFoundException("User not found", "USER_NOT_FOUND");
+
+        // Privacy decides only whether a new chat may start: an existing one keeps working (D11).
+        if (await chatRepository.GetPrivateChatIdAsync(userId, otherUserId, ct) is null)
+            (await policy.CanStartPrivateChatAsync(userId, otherUserId, ct)).Demand();
 
         // The chat and its events are one transaction.
         var result = await db.InTransactionAsync(async ct =>
@@ -95,6 +141,19 @@ public sealed class ChatService(
 
         return result;
     }
+
+    public Task<PrivateChatResult> GetOrCreateSavedChatAsync(Guid userId, CancellationToken ct = default) =>
+        db.InTransactionAsync(async ct =>
+        {
+            var (chatId, created) = await chatRepository.GetOrCreateSavedChatAsync(userId, ct);
+            var item = ChatListItemMapper.Map(await chatRepository.GetChatListItemAsync(chatId, userId, ct)
+                ?? throw ChatNotFound());
+
+            if (created)
+                await events.ChatCreatedAsync(userId, item, live: false, ct);
+
+            return new PrivateChatResult(item, created);
+        }, ct: ct);
 
     public async Task<SearchChatsResponseDto> SearchChatsAsync(
         Guid userId, string query, string? type, int limit, CancellationToken ct = default)

@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.Security.Claims;
 using System.Threading.RateLimiting;
 using BasicApi.Extensions;
@@ -50,17 +50,28 @@ public class ChatHub(
             var sessionFamilyId = Context.User?.GetSessionFamilyId();
             connectionRegistry.Add(Context, userId, sessionFamilyId, Context.User?.GetTokenExpiry());
 
-            if (sessionFamilyId is not null &&
-                !await sessions.IsSessionFamilyLiveAsync(sessionFamilyId.Value, Context.ConnectionAborted))
+            try
             {
-                // The access token has not expired yet, but the sign-in is already closed (logout, logout-all).
-                logger.LogDebug("Rejected hub connection of revoked session: userId={UserId}", userId);
-                connectionRegistry.Remove(Context.ConnectionId);
-                Context.Abort();
-                return;
-            }
+                if (sessionFamilyId is not null &&
+                    !await sessions.IsSessionFamilyLiveAsync(sessionFamilyId.Value, Context.ConnectionAborted))
+                {
+                    // The access token has not expired yet, but the sign-in is already closed (logout, logout-all).
+                    logger.LogDebug("Rejected hub connection of revoked session: userId={UserId}", userId);
+                    connectionRegistry.Remove(Context.ConnectionId);
+                    Context.Abort();
+                    return;
+                }
 
-            await presence.ConnectedAsync(userId, Context.ConnectionId, Context.ConnectionAborted);
+                await presence.ConnectedAsync(userId, Context.ConnectionId, Context.ConnectionAborted);
+            }
+            catch
+            {
+                // SignalR does not call OnDisconnectedAsync when OnConnectedAsync fails — typically the
+                // client left while it ran. Without this the user stayed online until a restart.
+                connectionRegistry.Remove(Context.ConnectionId);
+                await presence.DisconnectedAsync(userId, Context.ConnectionId);
+                throw;
+            }
         }
         await base.OnConnectedAsync();
     }

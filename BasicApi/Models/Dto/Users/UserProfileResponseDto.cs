@@ -11,4 +11,7 @@ public class UserProfileResponseDto
     public Guid UserId { get; set; }
     public string Username { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
+
+    /// <summary>The photo; null — none. Fetched by <c>POST /api/media/links</c>.</summary>
+    public Guid? AvatarId { get; set; }
 }

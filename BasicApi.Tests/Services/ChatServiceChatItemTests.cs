@@ -55,6 +55,7 @@ public class ChatServiceChatItemTests
                 LastMessageSenderId = companionId,
                 LastMessageText = "hi",
                 LastMessageCreatedAt = createdAt,
+                LastActivityAt = createdAt,
                 LastMessageSenderName = "Alice"
             });
 

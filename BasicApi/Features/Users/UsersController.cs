@@ -1,8 +1,9 @@
-﻿using BasicApi.Models.Dto.Users;
+using BasicApi.Models.Dto.Users;
 using BasicApi.Extensions;
 using BasicApi.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace BasicApi.Features.Users;
 
@@ -11,7 +12,8 @@ namespace BasicApi.Features.Users;
 [Produces("application/json")]
 [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
 [Tags("Users")]
-public class UsersController(IUserService users, IPresenceService presence) : ControllerBase
+public class UsersController(
+    IUserService users, IPresenceService presence, IProfileService profile, IPrivacyService privacy) : ControllerBase
 {
     /// <summary>
     /// Get a user's ID by username.
@@ -69,7 +71,7 @@ public class UsersController(IUserService users, IPresenceService presence) : Co
     [ProducesResponseType(typeof(UserProfileResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetUserProfile(Guid userId, CancellationToken ct)
-        => Ok(await users.GetUserProfileAsync(userId, ct));
+        => Ok(await users.GetUserProfileAsync(userId, ct, User.GetUserId()));
 
     /// <summary>
     /// Get the current user's own profile, resolved from the JWT.
@@ -95,6 +97,136 @@ public class UsersController(IUserService users, IPresenceService presence) : Co
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetOwnProfile(CancellationToken ct)
         => Ok(await users.GetOwnProfileAsync(User.GetUserId(), ct));
+
+    /// <summary>
+    /// Change the caller's profile.
+    /// </summary>
+    /// <remarks>
+    /// <c>displayName</c> — the name shown to others, 1–100 characters after trimming. Answers with
+    /// the own profile; the caller's other devices and everyone who shares a chat with them get
+    /// <c>UserUpdated</c>. Messages already sent show the new name too: it is not copied into them.
+    ///
+    /// Errors: <c>400 INVALID_DISPLAY_NAME</c>.
+    /// </remarks>
+    [Authorize]
+    [HttpPatch("me")]
+    [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
+    [ProducesResponseType(typeof(OwnProfileResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileDto dto, CancellationToken ct)
+        => Ok(await profile.UpdateAsync(User.GetUserId(), dto, ct));
+
+    /// <summary>
+    /// The caller's privacy settings.
+    /// </summary>
+    /// <remarks>
+    /// <c>lastSeen</c>, <c>messages</c>, <c>groupAdd</c> — each <c>everybody</c>, <c>contacts</c> (those who
+    /// share a chat with the caller) or <c>nobody</c>; never changed — everybody.
+    /// </remarks>
+    [Authorize]
+    [HttpGet("me/privacy")]
+    [ProducesResponseType(typeof(PrivacySettingsDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetPrivacy(CancellationToken ct)
+        => Ok(await privacy.GetAsync(User.GetUserId(), ct));
+
+    /// <summary>
+    /// Change the caller's privacy settings.
+    /// </summary>
+    /// <remarks>
+    /// Only the fields given change. Answers with all settings; the caller's other devices get
+    /// <c>PrivacyUpdated</c>.
+    ///
+    /// - <c>lastSeen</c> — who sees online and last seen. It works both ways: whoever hides theirs
+    ///   (<c>nobody</c>) does not see the others' either. Takes effect at once.
+    /// - <c>messages</c> — who may start a private chat; an existing chat keeps working.
+    /// - <c>groupAdd</c> — who may add the caller to groups.
+    ///
+    /// Errors: <c>400 INVALID_PRIVACY</c>.
+    /// </remarks>
+    [Authorize]
+    [HttpPut("me/privacy")]
+    [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
+    [ProducesResponseType(typeof(PrivacySettingsDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> UpdatePrivacy([FromBody] PrivacySettingsDto dto, CancellationToken ct)
+        => Ok(await privacy.UpdateAsync(User.GetUserId(), dto, ct));
+
+    /// <summary>
+    /// Block a user.
+    /// </summary>
+    /// <remarks>
+    /// In a private chat neither may write to the other (the caller gets <c>403 USER_BLOCKED</c>, the
+    /// blocked one <c>403 PRIVACY_RESTRICTED</c> — the same as for privacy settings, so a block is not
+    /// told). The blocked one cannot start a private chat with the caller or add them to groups, and
+    /// sees neither their online, last seen nor avatar. Takes effect at once; the caller's devices
+    /// get <c>BlockListChanged</c>. Blocking twice is not an error.
+    ///
+    /// Errors: <c>400 INVALID_REQUEST</c> (oneself), <c>404 USER_NOT_FOUND</c>.
+    /// </remarks>
+    [Authorize]
+    [HttpPut("{userId:guid}/block")]
+    [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Block(Guid userId, CancellationToken ct)
+    {
+        await privacy.SetBlockedAsync(User.GetUserId(), userId, blocked: true, ct);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Unblock a user.
+    /// </summary>
+    [Authorize]
+    [HttpDelete("{userId:guid}/block")]
+    [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Unblock(Guid userId, CancellationToken ct)
+    {
+        await privacy.SetBlockedAsync(User.GetUserId(), userId, blocked: false, ct);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Whom the caller blocked, the latest first.
+    /// </summary>
+    [Authorize]
+    [HttpGet("me/blocked")]
+    [ProducesResponseType(typeof(IEnumerable<UserProfileResponseDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetBlocked(CancellationToken ct)
+        => Ok(await privacy.GetBlockedAsync(User.GetUserId(), ct));
+
+    /// <summary>
+    /// Set the caller's avatar.
+    /// </summary>
+    /// <remarks>
+    /// A photo the caller uploaded (<c>POST /api/media/uploads</c>, kind <c>photo</c>). Answers with
+    /// the own profile; the caller's other devices and everyone who shares a chat with them get
+    /// <c>UserUpdated</c>. Anyone signed in may download a user's avatar.
+    ///
+    /// Errors: <c>400 INVALID_AVATAR</c> (not a photo), <c>404 ATTACHMENT_NOT_FOUND</c>.
+    /// </remarks>
+    [Authorize]
+    [HttpPut("me/avatar")]
+    [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
+    [ProducesResponseType(typeof(OwnProfileResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SetAvatar([FromBody] SetAvatarDto dto, CancellationToken ct)
+        => Ok(await profile.SetAvatarAsync(User.GetUserId(), dto.AttachmentId, ct));
+
+    /// <summary>
+    /// Remove the caller's avatar.
+    /// </summary>
+    /// <remarks>The same as setting one, with <c>avatarId: null</c>.</remarks>
+    [Authorize]
+    [HttpDelete("me/avatar")]
+    [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
+    [ProducesResponseType(typeof(OwnProfileResponseDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> RemoveAvatar(CancellationToken ct)
+        => Ok(await profile.SetAvatarAsync(User.GetUserId(), null, ct));
 
     /// <summary>
     /// Get online status of all chat members for the current user.
