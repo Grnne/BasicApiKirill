@@ -39,6 +39,8 @@ async function save(): Promise<void> {
     includeGroups: includeGroups.value,
     onlyUnread: onlyUnread.value,
     chatIds: [...chatIds.value],
+    // The server keeps every pinned chat in the folder: an unchecked one is unpinned too.
+    pinnedChatIds: (props.folder?.pinnedChatIds ?? []).filter((id) => chatIds.value.has(id)),
   })
   busy.value = false
   if (ok) emit('close')

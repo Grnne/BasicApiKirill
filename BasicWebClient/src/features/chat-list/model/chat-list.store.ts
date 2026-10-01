@@ -5,6 +5,7 @@ import { defineStore } from 'pinia'
 
 import * as chatApi from '@/entities/chat/api'
 import { useChatsStore } from '@/entities/chat/model/chats.store'
+import { matchesFolderTypes } from '@/entities/chat/model/folders'
 import { useAuthStore } from '@/features/auth/model/auth.store'
 import { useHubStore } from '@/shared/api/hub.store'
 import { describeError } from '@/shared/api/problem'
@@ -172,10 +173,18 @@ export const useChatListStore = defineStore('chatList', () => {
 
   /** Pinned inside the folder (on top of it), apart from the global pins. */
   function pinInFolder(folder: FolderDto, chatId: string, pinned: boolean): Promise<void> {
-    const pinnedChatIds = pinned
-      ? [chatId, ...folder.pinnedChatIds.filter((id) => id !== chatId)]
-      : folder.pinnedChatIds.filter((id) => id !== chatId)
-    return saveFolder(folder.id, { pinnedChatIds }).then(() => {})
+    if (pinned) {
+      const pinnedChatIds = [chatId, ...folder.pinnedChatIds.filter((id) => id !== chatId)]
+      return saveFolder(folder.id, { pinnedChatIds }).then(() => {})
+    }
+    const pinnedChatIds = folder.pinnedChatIds.filter((id) => id !== chatId)
+    // The server lists every pinned chat by name. One the folder holds by its type goes back to
+    // being held by type, or it would stay in the folder once archived.
+    const chat = chats.get(chatId)
+    const body: SaveFolderDto = chat && matchesFolderTypes(folder, chat)
+      ? { pinnedChatIds, chatIds: folder.chatIds.filter((id) => id !== chatId) }
+      : { pinnedChatIds }
+    return saveFolder(folder.id, body).then(() => {})
   }
 
   function reset(): void {
