@@ -203,3 +203,25 @@ describe('jumping in the history', () => {
     expect(store.hasNewer).toBe(false)
   })
 })
+
+describe('opening a chat at a found message', () => {
+  it('a requested jump opens the chat around the message instead of its newest page', async () => {
+    setActivePinia(createPinia())
+    const auth = useAuthStore()
+    auth.user = { userId: ME, username: 'me', email: 'me@test', displayName: 'Me', avatarId: null }
+    useChatsStore().replaceAll([chat({ chatId: 'chat-2' })], [])
+    const found = message({ chatId: 'chat-2', seq: 40 })
+    vi.mocked(messageEntityApi.getMessagesPage).mockClear()
+    vi.mocked(messageEntityApi.getMessageContext).mockResolvedValue({
+      items: [{ ...found }], nextCursor: 'c', hasMore: true, hasNewer: true,
+    })
+    const store = useMessagesStore()
+
+    store.requestJump('chat-2', found.id)
+    await store.openChat('chat-2')
+
+    expect(messageEntityApi.getMessageContext).toHaveBeenCalledWith('chat-2', found.id)
+    expect(messageEntityApi.getMessagesPage).not.toHaveBeenCalled()
+    expect(store.jumpTarget).toBe(found.id)
+  })
+})

@@ -53,6 +53,8 @@ export const useMessagesStore = defineStore('messages', () => {
   const selected = ref<Set<string>>(new Set())
   /** A message the list should scroll to and highlight. */
   const jumpTarget = ref<string | null>(null)
+  /** Open the next chat at this message instead of its newest page (a global search hit). */
+  let pendingJump: { chatId: string; messageId: string } | null = null
 
   const current = computed(() => history.get(chatId.value))
   const messages = computed(() => current.value?.messages ?? [])
@@ -96,14 +98,21 @@ export const useMessagesStore = defineStore('messages', () => {
     }
   }
 
+  function requestJump(id: string, messageId: string): void {
+    pendingJump = { chatId: id, messageId }
+  }
+
   async function openChat(id: string): Promise<void> {
+    const jump = pendingJump?.chatId === id ? pendingJump.messageId : null
+    pendingJump = null
     if (chatId.value !== id) {
       editing.value = null
       replyTo.value = null
       selected.value = new Set()
     }
     chatId.value = id
-    await loadLatest(id)
+    if (jump) await jumpTo(jump)
+    else await loadLatest(id)
   }
 
   // A new snapshot means a long disconnect: the cached pages may have gaps.
@@ -377,6 +386,7 @@ export const useMessagesStore = defineStore('messages', () => {
     forward,
     jumpTo,
     jumpToDate,
+    requestJump,
     loadNewer,
     backToLatest,
     react,

@@ -8,6 +8,7 @@ import ChatListPanel from '@/features/chat-list/ui/ChatListPanel.vue'
 import FolderTabs from '@/features/chat-list/ui/FolderTabs.vue'
 import ChatWindow from '@/features/messages/ui/ChatWindow.vue'
 import UserSearchPanel from '@/features/user-search/ui/UserSearchPanel.vue'
+import MessageSearchPanel from '@/features/message-search/ui/MessageSearchPanel.vue'
 import { useAuthStore } from '@/features/auth/model/auth.store'
 import { useChatListStore } from '@/features/chat-list/model/chat-list.store'
 import { useMessagesStore } from '@/features/messages/model/messages.store'
@@ -34,6 +35,16 @@ const query = ref('')
 async function onUserSelected(userId: string): Promise<void> {
   await chatList.openPrivateChat(userId)
   query.value = ''
+}
+
+/** A found message: its chat opens at it (or the open chat scrolls to it). */
+async function onMessageFound(chatId: string, messageId: string): Promise<void> {
+  if (chatList.selectedChatId === chatId) {
+    await messages.jumpTo(messageId)
+    return
+  }
+  messages.requestJump(chatId, messageId)
+  await chatList.select(chatId)
 }
 
 async function onLogout(): Promise<void> {
@@ -63,7 +74,7 @@ async function onLogout(): Promise<void> {
             v-model="query"
             class="search-input"
             type="search"
-            placeholder="Поиск чатов и людей"
+            placeholder="Поиск чатов, людей и сообщений"
             autocomplete="off"
           />
         </div>
@@ -71,6 +82,7 @@ async function onLogout(): Promise<void> {
         <div class="panels">
           <ChatListPanel :query="query" />
           <UserSearchPanel :query="query" @select="onUserSelected" />
+          <MessageSearchPanel :query="query" @open="onMessageFound" />
         </div>
       </aside>
 
