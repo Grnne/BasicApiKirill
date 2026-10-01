@@ -89,20 +89,20 @@ export const usePresenceStore = defineStore('presence', () => {
     if (changed) typingUntil.value = next
   }
 
-  let isSubscribed = false
+  let unsubscribe: (() => void)[] = []
   let pruneTimer: ReturnType<typeof setInterval> | undefined
 
   function subscribeToHub(): void {
-    if (isSubscribed) return
-    isSubscribed = true
+    if (unsubscribe.length > 0) return
 
-    hub.on('UserOnlineChanged', (userId, isOnlineNow) => {
-      online.value = { ...online.value, [userId]: isOnlineNow }
-    })
-
-    hub.on('TypingChanged', (chatId, userId, isTyping) => {
-      setTyping(chatId, userId, isTyping)
-    })
+    unsubscribe = [
+      hub.on('UserOnlineChanged', (userId, isOnlineNow) => {
+        online.value = { ...online.value, [userId]: isOnlineNow }
+      }),
+      hub.on('TypingChanged', (chatId, userId, isTyping) => {
+        setTyping(chatId, userId, isTyping)
+      }),
+    ]
 
     pruneTimer = setInterval(pruneTyping, PRUNE_INTERVAL_MS)
   }
@@ -110,7 +110,8 @@ export const usePresenceStore = defineStore('presence', () => {
   function reset(): void {
     clearInterval(pruneTimer)
     pruneTimer = undefined
-    isSubscribed = false
+    for (const off of unsubscribe) off()
+    unsubscribe = []
     online.value = {}
     typingUntil.value = {}
   }

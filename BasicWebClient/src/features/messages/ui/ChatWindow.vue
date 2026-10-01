@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue'
+import { computed, watch } from 'vue'
 
 import { chatTitle } from '@/entities/chat/lib'
 import { usePresenceStore } from '@/entities/user/presence.store'
@@ -25,10 +25,6 @@ const subtitle = computed(() => {
 const isTyping = computed(
   () => chatList.selectedChat !== null && presence.isSomeoneTyping(chatList.selectedChat.chatId),
 )
-
-onMounted(() => {
-  messages.subscribeToHub()
-})
 
 // One-way link: the chat list knows nothing about messages, which follow the selected chatId.
 watch(

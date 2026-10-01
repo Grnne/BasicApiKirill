@@ -10,12 +10,14 @@ import UserSearchPanel from '@/features/user-search/ui/UserSearchPanel.vue'
 import { useAuthStore } from '@/features/auth/model/auth.store'
 import { useChatListStore } from '@/features/chat-list/model/chat-list.store'
 import { useMessagesStore } from '@/features/messages/model/messages.store'
-import { usePresenceStore } from '@/entities/user/presence.store'
+import { useAccountStore } from '@/entities/user/model/account.store'
+import { useSyncStore } from '@/features/realtime/model/sync.store'
 
 const auth = useAuthStore()
 const chatList = useChatListStore()
 const messages = useMessagesStore()
-const presence = usePresenceStore()
+const account = useAccountStore()
+const sync = useSyncStore()
 const router = useRouter()
 
 // Dynamic and dev-only: a static import would put the panel into the prod bundle.
@@ -37,7 +39,7 @@ async function onLogout(): Promise<void> {
   // No user data may survive logout: stores are cleared before the tokens.
   messages.reset()
   chatList.reset()
-  presence.reset()
+  sync.stop()
   await auth.logout()
   await router.replace({ name: 'login' })
 }
@@ -48,7 +50,7 @@ async function onLogout(): Promise<void> {
     <header class="bar">
       <span class="brand">Basic<span class="accent">Chat</span></span>
       <ConnectionStatus />
-      <span class="user">{{ auth.user?.displayName }}</span>
+      <span class="user">{{ account.me?.displayName ?? auth.user?.displayName }}</span>
       <BaseButton variant="ghost" @click="onLogout">Выйти</BaseButton>
     </header>
 

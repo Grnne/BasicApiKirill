@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { ref, watch } from 'vue'
 
 import type { ChatListItem } from '@/entities/chat/types'
-import { usePresenceStore } from '@/entities/user/presence.store'
+import { useChatsStore } from '@/entities/chat/model/chats.store'
 import { useDebounced } from '@/shared/lib/useDebounced'
 import * as chatsApi from '../api/chats.api'
 import { useChatListStore } from '../model/chat-list.store'
@@ -11,7 +11,7 @@ import ChatRow from './ChatRow.vue'
 const props = defineProps<{ query: string }>()
 
 const store = useChatListStore()
-const presence = usePresenceStore()
+const chats = useChatsStore()
 
 const found = ref<ChatListItem[]>([])
 const isSearching = ref(false)
@@ -48,27 +48,13 @@ watch(debouncedQuery, async (query) => {
   }
 })
 
-onMounted(async () => {
-  store.subscribeToHub()
-  presence.subscribeToHub()
-
-  await store.load()
-
-  // UserOnlineChanged events from before we connected were missed, so fetch the current statuses.
-  const companionIds = store.chats
-    .map((chat) => chat.companionId)
-    .filter((id): id is string => id !== null)
-
-  await Promise.all([presence.loadStatuses(companionIds), presence.loadTyping()])
-})
 </script>
 
 <template>
   <section class="panel">
     <h2 class="heading">{{ query.trim() ? 'Найденные чаты' : 'Чаты' }}</h2>
 
-    <p v-if="store.isLoading" class="note">загрузка…</p>
-    <p v-else-if="store.loadError" class="note error">{{ store.loadError }}</p>
+    <p v-if="!chats.loaded" class="note">загрузка…</p>
 
     <template v-else-if="query.trim()">
       <p v-if="isSearching" class="note">ищем…</p>
@@ -83,9 +69,9 @@ onMounted(async () => {
     </template>
 
     <template v-else>
-      <p v-if="store.chats.length === 0" class="note">пока ни одного чата</p>
+      <p v-if="chats.list.length === 0" class="note">пока ни одного чата</p>
       <ChatRow
-        v-for="chat in store.chats"
+        v-for="chat in chats.list"
         :key="chat.chatId"
         :chat="chat"
         :active="chat.chatId === store.selectedChatId"
