@@ -1,12 +1,26 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
 
+import DevicesSection from '@/features/devices/ui/DevicesSection.vue'
 import PasswordSection from '@/features/profile/ui/PasswordSection.vue'
 import ProfileSection from '@/features/profile/ui/ProfileSection.vue'
 import BlockedSection from '@/features/privacy/ui/BlockedSection.vue'
 import PrivacySection from '@/features/privacy/ui/PrivacySection.vue'
+import { describeError } from '@/shared/api/problem'
+import { useNoticesStore } from '@/shared/ui/notices.store'
+import { useLogout } from './lib/useLogout'
 
 const router = useRouter()
+const notices = useNoticesStore()
+const { logout, logoutEverywhere } = useLogout()
+
+async function onSignOutEverywhere(): Promise<void> {
+  try {
+    await logoutEverywhere()
+  } catch (e) {
+    notices.push(describeError(e))
+  }
+}
 </script>
 
 <template>
@@ -21,6 +35,7 @@ const router = useRouter()
       <PasswordSection />
       <PrivacySection />
       <BlockedSection />
+      <DevicesSection @sign-out-here="logout" @sign-out-everywhere="onSignOutEverywhere" />
     </main>
   </div>
 </template>
@@ -30,6 +45,7 @@ const router = useRouter()
   display: grid;
   grid-template-rows: auto 1fr;
   height: 100%;
+  overflow: hidden;
 }
 .bar {
   display: flex;

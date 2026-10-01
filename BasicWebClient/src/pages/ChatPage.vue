@@ -14,6 +14,7 @@ import GroupEditDialog from '@/features/groups/ui/GroupEditDialog.vue'
 import MemberDialog from '@/features/groups/ui/MemberDialog.vue'
 import CreateGroupDialog from '@/features/groups/ui/CreateGroupDialog.vue'
 import { useNoticesStore } from '@/shared/ui/notices.store'
+import { useLogout } from './lib/useLogout'
 import UserSearchPanel from '@/features/user-search/ui/UserSearchPanel.vue'
 import MessageSearchPanel from '@/features/message-search/ui/MessageSearchPanel.vue'
 import { useAuthStore } from '@/features/auth/model/auth.store'
@@ -21,13 +22,11 @@ import { useChatListStore } from '@/features/chat-list/model/chat-list.store'
 import { useMessagesStore } from '@/features/messages/model/messages.store'
 import { useAccountStore } from '@/entities/user/model/account.store'
 import AvatarCircle from '@/entities/media/ui/AvatarCircle.vue'
-import { useSyncStore } from '@/features/realtime/model/sync.store'
 
 const auth = useAuthStore()
 const chatList = useChatListStore()
 const messages = useMessagesStore()
 const account = useAccountStore()
-const sync = useSyncStore()
 const router = useRouter()
 
 // Dynamic and dev-only: a static import would put the panel into the prod bundle.
@@ -88,14 +87,7 @@ async function onInfoJump(messageId: string): Promise<void> {
   await messages.jumpTo(messageId)
 }
 
-async function onLogout(): Promise<void> {
-  // No user data may survive logout: stores are cleared before the tokens.
-  messages.reset()
-  chatList.reset()
-  sync.stop()
-  await auth.logout()
-  await router.replace({ name: 'login' })
-}
+const { logout: onLogout } = useLogout()
 </script>
 
 <template>
