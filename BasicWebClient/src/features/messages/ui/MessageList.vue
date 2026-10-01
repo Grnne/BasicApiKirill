@@ -107,7 +107,11 @@ function startsNewDay(index: number): boolean {
 
       <template v-for="(message, index) in store.messages" :key="message.id">
         <p v-if="startsNewDay(index)" class="day">{{ formatDay(message.createdAt) }}</p>
-        <MessageBubble :message="message" :own="message.senderId === auth.user?.userId" />
+        <MessageBubble
+          :message="message"
+          :own="message.senderId === auth.user?.userId"
+          :me-id="auth.user?.userId ?? null"
+        />
       </template>
 
       <PendingBubble

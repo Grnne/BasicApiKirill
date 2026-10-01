@@ -4,6 +4,8 @@ import { computed } from 'vue'
 import type { ChatListItem } from '@/entities/chat/types'
 import { chatInitial, chatTitle } from '@/entities/chat/lib'
 import { usePresenceStore } from '@/entities/user/presence.store'
+import { messagePreview } from '@/entities/message/lib/preview'
+import { useAuthStore } from '@/features/auth/model/auth.store'
 import { formatTime } from '@/shared/lib/date'
 
 const props = defineProps<{
@@ -12,6 +14,7 @@ const props = defineProps<{
 }>()
 
 const presence = usePresenceStore()
+const auth = useAuthStore()
 
 const title = computed(() => chatTitle(props.chat))
 
@@ -27,7 +30,7 @@ const preview = computed(() => {
 
   const message = props.chat.lastMessage
   if (!message) return 'нет сообщений'
-  return `${message.senderName}: ${message.text}`
+  return messagePreview(message, auth.user?.userId ?? null, props.chat.type === 'group')
 })
 
 const time = computed(() =>

@@ -1,19 +1,33 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+
 import type { Message } from '@/entities/message/types'
+import FormattedText from '@/entities/message/ui/FormattedText'
 import { formatTime } from '@/shared/lib/date'
 
-defineProps<{
+const props = defineProps<{
   message: Message
   own: boolean
+  meId: string | null
 }>()
+
+const files = computed(() => props.message.attachments.length)
 </script>
 
 <template>
-  <article :class="['bubble', { own }]">
+  <!-- A record of what happened in a group: the server writes its text in Russian. -->
+  <p v-if="message.type === 'system'" class="system">{{ message.text }}</p>
+
+  <article v-else :class="['bubble', { own }]">
     <span v-if="!own" class="sender">{{ message.senderName }}</span>
-    <!-- Interpolation only, never v-html: message text is user input. -->
-    <p class="text">{{ message.text }}</p>
-    <span class="time">{{ formatTime(message.createdAt) }}</span>
+    <p v-if="files > 0" class="files">📎 Файлов: {{ files }}</p>
+    <p v-if="message.text" class="text">
+      <FormattedText :text="message.text" :entities="message.entities" :me-id="meId" />
+    </p>
+    <span class="time">
+      <span v-if="message.editedAt" class="edited">изменено</span>
+      {{ formatTime(message.createdAt) }}
+    </span>
   </article>
 </template>
 
@@ -45,6 +59,65 @@ defineProps<{
   margin: 0;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+.files {
+  margin: 0 0 2px;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+.system {
+  align-self: center;
+  max-width: 80%;
+  margin: 4px 0;
+  padding: 3px 12px;
+  border-radius: 10px;
+  background: var(--surface-hover);
+  color: var(--text-dim);
+  font-size: 12px;
+  text-align: center;
+}
+.edited {
+  margin-right: 4px;
+  font-style: italic;
+}
+.text :deep(code) {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--surface-hover);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.92em;
+}
+.text :deep(pre) {
+  margin: 4px 0;
+  padding: 6px 8px;
+  overflow-x: auto;
+  border-radius: var(--radius-sm);
+  background: var(--surface-hover);
+  white-space: pre;
+}
+.text :deep(pre code) {
+  padding: 0;
+  background: none;
+}
+.text :deep(a) {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.text :deep(.mention) {
+  color: var(--accent);
+  font-weight: 600;
+}
+.text :deep(.mention.me) {
+  padding: 0 2px;
+  border-radius: 4px;
+  background: var(--accent-soft);
+}
+.text :deep(.spoiler:not(.revealed)) {
+  border-radius: 4px;
+  background: var(--text-dim);
+  color: transparent;
+  cursor: pointer;
+  user-select: none;
 }
 .time {
   display: block;
