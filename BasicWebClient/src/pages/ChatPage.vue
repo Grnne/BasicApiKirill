@@ -115,7 +115,7 @@ const { logout: onLogout } = useLogout()
           :initial="(account.me?.displayName ?? auth.user?.displayName ?? '?').charAt(0).toUpperCase()"
           :size="26"
         />
-        {{ account.me?.displayName ?? auth.user?.displayName }}
+        <span class="user-name">{{ account.me?.displayName ?? auth.user?.displayName }}</span>
       </button>
       <BaseButton variant="ghost" title="Новая группа" @click="creatingGroup = true">＋</BaseButton>
       <BaseButton variant="ghost" title="Избранное" @click="chatList.openSaved()">★</BaseButton>
@@ -217,6 +217,7 @@ const { logout: onLogout } = useLogout()
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
   margin-left: auto;
   padding: 2px 8px 2px 2px;
   border: none;
@@ -227,6 +228,25 @@ const { logout: onLogout } = useLogout()
 .user:hover {
   background: var(--surface-hover);
   color: var(--text);
+}
+.user-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* A phone has room for the buttons only: the avatar stands for the name. */
+@media (max-width: 720px) {
+  .bar {
+    gap: 6px;
+    padding: 8px 10px;
+  }
+  .brand,
+  .user-name {
+    display: none;
+  }
+  .bar :deep(.btn) {
+    padding: 8px 10px;
+  }
 }
 .body {
   display: grid;

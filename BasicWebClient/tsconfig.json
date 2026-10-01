@@ -1,7 +1,7 @@
 {
   // A single config for the whole project: no project references to keep in sync.
   "extends": "@vue/tsconfig/tsconfig.dom.json",
-  "include": ["src/**/*.ts", "src/**/*.vue", "vite.config.ts"],
+  "include": ["src/**/*.ts", "src/**/*.vue", "vite.config.ts", "playwright.config.ts", "e2e/**/*.ts"],
   "compilerOptions": {
     "types": ["node", "vite/client"],
 

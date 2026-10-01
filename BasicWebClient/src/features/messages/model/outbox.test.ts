@@ -91,4 +91,38 @@ describe('Outbox', () => {
 
     expect(await done).toBe(true)
   })
+
+  it("sends one chat's messages one after another, other chats meanwhile", async () => {
+    // Sent together, quick messages took their order from whichever request finished first.
+    const answers: ((m: MessageDto) => void)[] = []
+    const send = vi.fn((_chatId: string, _body: SendMessageDto) => new Promise<MessageDto>((r) => answers.push(r)))
+    const sink = { stored: vi.fn(), failed: vi.fn(), sending: vi.fn() } satisfies OutboxSink
+    const outbox = new Outbox({ send }, sink, [100])
+
+    const first = outbox.deliver(pending)
+    const second = outbox.deliver({ ...pending, clientMessageId: 'cm-2' })
+    const elsewhere = outbox.deliver({ ...pending, chatId: 'chat-2', clientMessageId: 'cm-3' })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(send.mock.calls.map((c) => c[1].clientMessageId)).toEqual(['cm-1', 'cm-3'])
+
+    answers[0]!(message({ clientMessageId: 'cm-1' }))
+    expect(await first).toBe(true)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(send.mock.calls.map((c) => c[1].clientMessageId)).toEqual(['cm-1', 'cm-3', 'cm-2'])
+
+    answers[1]!(message({ clientMessageId: 'cm-3' }))
+    answers[2]!(message({ clientMessageId: 'cm-2' }))
+    expect(await Promise.all([second, elsewhere])).toEqual([true, true])
+  })
+
+  it('a message that gave up does not hold the next one back', async () => {
+    const { send, outbox } = setup([new ApiError(403, { errorCode: 'NOT_A_MEMBER' }), message({ clientMessageId: 'cm-2' })])
+
+    const first = outbox.deliver(pending)
+    const second = outbox.deliver({ ...pending, clientMessageId: 'cm-2' })
+
+    expect(await first).toBe(false)
+    expect(await second).toBe(true)
+    expect(send).toHaveBeenCalledTimes(2)
+  })
 })

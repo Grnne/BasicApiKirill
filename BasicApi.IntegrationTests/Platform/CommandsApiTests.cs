@@ -120,12 +120,42 @@ public class CommandsApiTests(PostgresFixture db) : DbTest(db)
         // A second device of the same user shares the same budget — the limit is per user.
         var alice2 = await factory.LoginAsync("alice");
         using var aliceLaptop = factory.CreateClient(alice2.Token);
-        var limited = await aliceLaptop.PostAsJsonAsync($"/api/chats/{chat}/typing", new { isTyping = true });
+        var limited = await aliceLaptop.PostAsJsonAsync($"/api/chats/{chat}/messages", new { text = "one more" });
         Assert.Equal(HttpStatusCode.TooManyRequests, limited.StatusCode);
         Assert.Equal("RATE_LIMITED", await ErrorCodeAsync(limited));
 
         // Another user has their own budget.
         Assert.Equal(HttpStatusCode.Created,
             (await bobClient.PostAsJsonAsync($"/api/chats/{chat}/messages", new { text = "bob" })).StatusCode);
+    }
+
+    [Fact]
+    public async Task Typing_HasItsOwnBudget_AndNeverHoldsBackMessages()
+    {
+        await using var factory = new ApiFactory(Db.ConnectionString, new Dictionary<string, string?>
+        {
+            ["RateLimiting:CommandsPer10Seconds"] = "3",
+            ["RateLimiting:ComposerPer10Seconds"] = "4"
+        });
+        var alice = await factory.RegisterAsync("alice");
+        var bob = await factory.RegisterAsync("bob");
+        var chat = await Data.PrivateChatAsync(alice.UserId, bob.UserId);
+        using var client = factory.CreateClient(alice.Token);
+
+        // Every message of a quick exchange costs a "typing" and a "stopped typing".
+        for (var i = 0; i < 3; i++)
+        {
+            Assert.Equal(HttpStatusCode.NoContent,
+                (await client.PostAsJsonAsync($"/api/chats/{chat}/typing", new { isTyping = true })).StatusCode);
+            Assert.Equal(HttpStatusCode.Created,
+                (await client.PostAsJsonAsync($"/api/chats/{chat}/messages", new { text = $"m{i}" })).StatusCode);
+        }
+
+        // Typing runs out on its own.
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await client.PostAsJsonAsync($"/api/chats/{chat}/typing", new { isTyping = false })).StatusCode);
+        var limited = await client.PostAsJsonAsync($"/api/chats/{chat}/typing", new { isTyping = true });
+        Assert.Equal(HttpStatusCode.TooManyRequests, limited.StatusCode);
+        Assert.Equal("RATE_LIMITED", await ErrorCodeAsync(limited));
     }
 }

@@ -62,9 +62,13 @@ export const useChatListStore = defineStore('chatList', () => {
 
   /** The server returns the existing private chat if there is one. */
   async function openPrivateChat(userId: string): Promise<void> {
-    const chat = await chatsApi.createPrivateChat(userId)
-    chats.put(chat)
-    await select(chat.chatId)
+    try {
+      const chat = await chatsApi.createPrivateChat(userId)
+      chats.put(chat)
+      await select(chat.chatId)
+    } catch (e) {
+      notices.push(describeError(e))
+    }
   }
 
   async function openSaved(): Promise<void> {

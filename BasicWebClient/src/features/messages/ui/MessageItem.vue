@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 
 import { useChatsStore } from '@/entities/chat/model/chats.store'
 import { useChatDetailsStore } from '@/entities/chat/model/details.store'
@@ -10,6 +10,7 @@ import AvatarCircle from '@/entities/media/ui/AvatarCircle.vue'
 import type { Message } from '@/entities/message/types'
 import ConfirmDialog from '@/shared/ui/ConfirmDialog.vue'
 import { useNoticesStore } from '@/shared/ui/notices.store'
+import { opensBelow } from '../lib/menu'
 import { useMessagesStore } from '../model/messages.store'
 import ForwardDialog from './ForwardDialog.vue'
 import MessageBubble from './MessageBubble.vue'
@@ -42,6 +43,9 @@ const actions = computed(() =>
     now: Date.now(),
     editWindowHours: config.config.messages.editWindowHours,
     deleteWindowHours: config.config.messages.deleteWindowHours,
+    canDeleteOthers:
+      chats.get(props.message.chatId)?.type === 'group' &&
+      details.get(props.message.chatId)?.myPermissions?.deleteMessages === true,
   }),
 )
 
@@ -49,6 +53,19 @@ const selecting = computed(() => store.selected.size > 0)
 const isSelected = computed(() => store.selected.has(props.message.id))
 
 const menuOpen = ref(false)
+const menuBelow = ref(false)
+const menu = ref<HTMLElement | null>(null)
+
+async function toggleMenu(event: MouseEvent): Promise<void> {
+  menuOpen.value = !menuOpen.value
+  if (!menuOpen.value) return
+  menuBelow.value = false
+  await nextTick()
+  const button = event.currentTarget as HTMLElement | null
+  const list = button?.closest('.viewport')
+  if (!button || !list || !menu.value) return
+  menuBelow.value = opensBelow(button.getBoundingClientRect(), list.getBoundingClientRect(), menu.value.offsetHeight)
+}
 const forwarding = ref(false)
 const confirmingDelete = ref(false)
 const forEveryone = ref(false)
@@ -153,11 +170,11 @@ async function confirmDelete(): Promise<void> {
         title="Действия"
         aria-haspopup="menu"
         :aria-expanded="menuOpen"
-        @click.stop="menuOpen = !menuOpen"
+        @click.stop="toggleMenu"
       >
         ⋯
       </button>
-      <ul v-if="menuOpen" class="menu" role="menu">
+      <ul v-if="menuOpen" ref="menu" :class="['menu', { below: menuBelow }]" role="menu">
         <li v-if="actions.react" class="emoji-row">
           <button
             v-for="emoji in config.config.messages.reactions"
@@ -272,6 +289,11 @@ async function confirmDelete(): Promise<void> {
   background: var(--surface-solid);
   box-shadow: 0 4px 16px #0008;
   list-style: none;
+}
+.menu.below {
+  top: 100%;
+  bottom: auto;
+  margin: 4px 0 0;
 }
 .item.own .menu {
   right: 0;

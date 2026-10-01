@@ -19,7 +19,7 @@ import { useMessagesStore } from '../model/messages.store'
 import UploadTray from './UploadTray.vue'
 
 /**
- * Typing shares the per-user command limit with sending (20 per 10 s): repeat it only while
+ * Typing has a per-user limit of its own, shared with drafts (20 per 10 s): repeat it only while
  * typing goes on; the server drops it after 6 s without a repeat.
  */
 const TYPING_THROTTLE_MS = 3_000
@@ -331,7 +331,8 @@ const suggestions = computed(() => {
 function updateMention(): void {
   const el = input.value
   const caret = el && el.selectionStart === el.selectionEnd ? el.selectionStart : -1
-  mention.value = caret >= 0 && members.value.length > 0 ? mentionQuery(text.value, caret) : null
+  // Kept without members too: they may still be loading, the suggestions follow when they come.
+  mention.value = caret >= 0 ? mentionQuery(text.value, caret) : null
   activeSuggestion.value = 0
 }
 

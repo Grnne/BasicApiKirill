@@ -13,6 +13,9 @@
 #    docker compose -f docker-compose.prod.yml logs -f basicapi
 #
 #  Only 80/443 (Caddy) are open to the outside. The API and Postgres live in internal networks.
+#
+#  Memory: the limits add up to 1 GB — a small server, up to ~100 clients online
+#  (docs/capacity-and-limits.md). For more, raise *_MEMORY in .env.prod.
 #  Before the first start: the DOMAIN DNS record points to the server and ports 80 and 443
 #  are open — otherwise Let's Encrypt will not issue a certificate.
 # ═══════════════════════════════════════════════════════════════════════
@@ -32,6 +35,10 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
 
+    # Sized for the memory limit below: shared_buffers is the main fixed cost, and each of
+    # max_connections may become a process of its own. The API's pool takes at most 10.
+    command: ["postgres", "-c", "shared_buffers=64MB", "-c", "max_connections=30"]
+
     # 🚨 Postgres is NOT published. The database is reachable ONLY inside the docker network.
     #    Internet scanners knock on 5432 — give them no chance at all.
     #    If you need access from the host (backups, psql), uncomment and bind to
@@ -49,7 +56,7 @@ services:
       retries: 15
       start_period: 10s
 
-    shm_size: "256mb"
+    shm_size: "64mb"
 
     security_opt:
       - no-new-privileges:true
@@ -72,10 +79,10 @@ services:
       resources:
         limits:             # 🛡 protect the server from overload
           cpus: "1.0"
-          memory: 768M
+          memory: ${POSTGRES_MEMORY:-288M}
           pids: 100
         reservations:
-          memory: 256M
+          memory: 128M
 
     networks:
       - chat_network
@@ -95,9 +102,12 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production     # ✅ NOT Development!
       ASPNETCORE_URLS: http://+:8080
-      # Maximum Pool Size well below Postgres max_connections (100): under a peak
+      # Maximum Pool Size well below Postgres max_connections (30): under a peak
       # queries wait in the pool queue instead of being refused by the server (capacity-and-limits.md).
-      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${DB_NAME};Username=${DB_USER};Password=${DB_PASSWORD};Timeout=15;Command Timeout=30;Pooling=true;Maximum Pool Size=30"
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${DB_NAME};Username=${DB_USER};Password=${DB_PASSWORD};Timeout=15;Command Timeout=30;Pooling=true;Maximum Pool Size=${DB_POOL_SIZE:-10}"
+      # A small heap rather than speed: workstation GC, and the runtime gives memory back sooner.
+      DOTNET_gcServer: "0"
+      DOTNET_GCConserveMemory: "5"
       Jwt__Key: ${JWT_KEY}                   # 🛡 a strong secret, not the default
       Jwt__Issuer: ${JWT_ISSUER:-ChatApi}
       Jwt__Audience: ${JWT_AUDIENCE:-ChatClient}
@@ -131,7 +141,7 @@ services:
     # 🛡 read-only rootfs + tmpfs for temporary files
     read_only: true
     tmpfs:
-      - /tmp:size=64m
+      - /tmp:size=16m
       # Owned by the app user: a root-owned tmpfs made Data Protection log an Error
       # on every restart (it could not write its key ring).
       - /home/app/.aspnet/DataProtection-Keys:uid=1654,gid=1654,mode=0700
@@ -166,10 +176,10 @@ services:
       resources:
         limits:
           cpus: "1.0"
-          memory: 512M
+          memory: ${API_MEMORY:-256M}
           pids: 200
         reservations:
-          memory: 128M
+          memory: 96M
 
     networks:
       - chat_network
@@ -187,6 +197,10 @@ services:
     environment:
       AWS_ACCESS_KEY_ID: ${STORAGE_ACCESS_KEY}
       AWS_SECRET_ACCESS_KEY: ${STORAGE_SECRET_KEY}
+      # Go does not see the container's limit: a 60 MB upload next to others made the heap outgrow
+      # 256M, and the kernel killed the storage. A soft limit of its own (~80% of STORAGE_MEMORY)
+      # makes the collector work harder instead.
+      GOMEMLIMIT: ${STORAGE_GOMEMLIMIT:-256MiB}
     volumes:
       - media_data:/data     # the files themselves — back up together with the database
     tmpfs:
@@ -221,7 +235,7 @@ services:
       resources:
         limits:
           cpus: "1.0"
-          memory: 512M
+          memory: ${STORAGE_MEMORY:-320M}
           pids: 200
         reservations:
           memory: 64M
@@ -270,12 +284,12 @@ services:
 
     # Caddy needs ~220-250 KB of memory per open WebSocket. With 128M, 1000 clients
     # drove it into constant GC at its CPU limit (latency x4) and to the edge of an
-    # OOM kill; 512M is enough for ~2000 clients (docs/load-testing.md).
+    # OOM kill (docs/load-testing.md). 160M is for ~100-300 clients; 512M — for ~2000.
     deploy:
       resources:
         limits:
           cpus: "1.0"
-          memory: 512M
+          memory: ${CADDY_MEMORY:-160M}
           pids: 100
 
     networks:

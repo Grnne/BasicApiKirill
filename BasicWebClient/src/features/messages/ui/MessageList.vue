@@ -121,9 +121,15 @@ function startsNewDay(index: number): boolean {
 <template>
   <div ref="viewport" class="viewport" @scroll.passive="onScroll">
     <p v-if="store.isLoading" class="note">загрузка…</p>
-    <p v-else-if="store.error" class="note error">{{ store.error }}</p>
+    <!-- What is already loaded stays on screen; the load is repeated by itself as well. -->
+    <p v-else-if="store.error && store.messages.length === 0" class="note error">
+      {{ store.error }} <button type="button" class="retry" @click="store.reload()">Повторить</button>
+    </p>
 
     <template v-else>
+      <p v-if="store.error" class="note error">
+        {{ store.error }} <button type="button" class="retry" @click="store.reload()">Повторить</button>
+      </p>
       <p v-if="store.isLoadingOlder" class="note">грузим историю…</p>
       <p v-else-if="!store.hasMore && store.messages.length > 0" class="note">начало переписки</p>
       <p v-else-if="store.messages.length === 0" class="note">пока ни одного сообщения</p>
@@ -182,6 +188,14 @@ function startsNewDay(index: number): boolean {
 }
 .note.error {
   color: var(--danger);
+}
+.retry {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: inherit;
+  text-decoration: underline;
 }
 .day {
   margin: 10px auto 4px;

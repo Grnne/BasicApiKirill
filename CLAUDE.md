@@ -12,6 +12,7 @@
 ./scripts/test.ps1 -SkipClient       # только бэкенд, без Node.js
 ./scripts/test.ps1 -Image            # плюс сборка прод-образа
 ./scripts/e2e.ps1                    # сквозные тесты против развёрнутого стека
+./scripts/e2e-ui.ps1 -Restart        # сценарии пользователя в браузере (Playwright) против локального прод-стека
 ```
 
 CI (`.github/workflows/ci.yml`) запускает тот же `scripts/test.ps1` на каждый push.

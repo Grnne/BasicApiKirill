@@ -54,7 +54,14 @@ export const usePushStore = defineStore('push', () => {
         state.value = answer === 'denied' ? 'denied' : 'off'
         return
       }
-      const subscription = await browser.subscribe(config.vapidPublicKey)
+      let subscription: PushSubscription
+      try {
+        subscription = await browser.subscribe(config.vapidPublicKey)
+      } catch {
+        // The browser's own push service said no (switched off, blocked by a policy, private mode).
+        error.value = 'Браузер не смог подписаться на уведомления — возможно, они выключены в его настройках'
+        return
+      }
       await pushApi.saveSubscription(subscription.toJSON())
       state.value = 'on'
     } catch (e) {

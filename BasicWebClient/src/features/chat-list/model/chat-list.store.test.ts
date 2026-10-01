@@ -65,6 +65,19 @@ describe('marking chats', () => {
   })
 })
 
+describe('opening a private chat', () => {
+  it('a refusal is shown, not swallowed', async () => {
+    // Before: a person who allows no new chats was a click that did nothing.
+    useChatsStore().replaceAll([], [])
+    vi.mocked(chatsApi.createPrivateChat).mockRejectedValueOnce(new ApiError(403, { errorCode: 'PRIVACY_RESTRICTED' }))
+
+    await useChatListStore().openPrivateChat('bob')
+
+    expect(useNoticesStore().items[0]!.text).toBe('Пользователь ограничил, кто может ему писать или добавлять его')
+    expect(useChatListStore().selectedChatId).toBeNull()
+  })
+})
+
 describe('pinned chats', () => {
   it('pinning puts the order from the answer and takes the chat out of the archive', async () => {
     const chats = useChatsStore()

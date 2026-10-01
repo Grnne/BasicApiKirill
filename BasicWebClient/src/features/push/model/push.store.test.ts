@@ -99,6 +99,18 @@ describe('push', () => {
 
     expect(sub.unsubscribe).toHaveBeenCalled()
   })
+
+  it('a browser that refuses the subscription is named, not "something went wrong"', async () => {
+    // Seen in a browser with its push service off: "Registration failed - permission denied".
+    vi.mocked(browser.requestPermission).mockResolvedValue('granted')
+    vi.mocked(browser.subscribe).mockRejectedValue(new DOMException('Registration failed - permission denied', 'AbortError'))
+    const push = usePushStore()
+
+    await push.enable()
+
+    expect(push.error).toBe('Браузер не смог подписаться на уведомления — возможно, они выключены в его настройках')
+    expect(push.state).not.toBe('on')
+  })
 })
 
 it('a VAPID key comes as base64url and goes to the browser as bytes', () => {

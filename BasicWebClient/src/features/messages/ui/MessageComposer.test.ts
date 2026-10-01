@@ -1,12 +1,19 @@
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import * as chatApi from '@/entities/chat/api'
 import { useChatsStore } from '@/entities/chat/model/chats.store'
+import type { ChatDetail } from '@/entities/chat/types'
 import { chat } from '@/testing/fixtures'
 import * as messagesApi from '../api/messages.api'
 import { useMessagesStore } from '../model/messages.store'
 import MessageComposer from './MessageComposer.vue'
+
+vi.mock('@/entities/chat/api', async (original) => ({
+  ...(await original<typeof import('@/entities/chat/api')>()),
+  getChatDetail: vi.fn(),
+}))
 
 vi.mock('../api/messages.api', () => ({
   sendTyping: vi.fn(async () => {}),
@@ -69,6 +76,35 @@ describe('MessageComposer', () => {
     await area.setValue('line')
     await area.trigger('keydown', { key: 'Enter', shiftKey: true })
     expect(send).not.toHaveBeenCalled()
+  })
+})
+
+describe('mentions', () => {
+  it('suggestions come up once the members load, even if "@" was typed before', async () => {
+    // Before: typed before the member list arrived, "@na" showed nothing until the next key.
+    let loaded!: (detail: ChatDetail) => void
+    vi.mocked(chatApi.getChatDetail).mockReturnValue(new Promise((r) => (loaded = r)))
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    useChatsStore().replaceAll([chat({ type: 'group', title: 'G' })], [])
+    useMessagesStore().chatId = 'chat-1'
+    const wrapper = mount(MessageComposer, { global: { plugins: [pinia] }, attachTo: document.body })
+
+    const area = wrapper.get('textarea')
+    await area.setValue('привет @bo')
+    ;(area.element as HTMLTextAreaElement).setSelectionRange(10, 10)
+    await area.trigger('keyup')
+    expect(wrapper.find('[role=listbox]').exists()).toBe(false)
+
+    const perms = { addAdmins: false, addMembers: false, changeInfo: false, deleteMessages: false, removeMembers: false, sendMedia: true, sendMessages: true }
+    loaded({
+      chatId: 'chat-1', type: 'group', title: 'G', avatarId: null, createdBy: 'x', myRole: 'member',
+      myPermissions: perms, memberPermissions: perms,
+      participants: [{ userId: 'bob-1', username: 'bob', displayName: 'Боб', avatarId: null, role: 'member' }],
+    })
+    await flushPromises()
+
+    expect(wrapper.get('[role=listbox]').text()).toContain('Боб')
   })
 })
 

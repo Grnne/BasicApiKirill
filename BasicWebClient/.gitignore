@@ -7,3 +7,5 @@ dist/
 .token2.json
 send-as-user2.mjs
 presence-as-user2.mjs
+e2e-results/
+e2e-report/

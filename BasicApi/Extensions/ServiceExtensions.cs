@@ -35,8 +35,11 @@ public static class ServiceExtensions
 {
     public const string ReadyTag = "ready";
 
-    /// <summary>Limit on commands (send, "typing") — same as the hub's per-connection limit, but per user.</summary>
+    /// <summary>Limit on commands (send, edit, reactions…) — like the hub's per-connection limit, but per user.</summary>
     public const string CommandsRateLimitPolicy = "commands";
+
+    /// <summary>What the composer sends while the user types: "typing" and drafts.</summary>
+    public const string ComposerRateLimitPolicy = "composer";
 
     public static IServiceCollection AddApiServices(
         this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
@@ -258,6 +261,8 @@ public static class ServiceExtensions
         var perUser = configuration.GetValue("RateLimiting:PerUserPerMinute", 300);
         var perIp = configuration.GetValue("RateLimiting:PerIpPerMinute", 100);
         var commandsPer10Seconds = configuration.GetValue("RateLimiting:CommandsPer10Seconds", 20);
+        var composerPer10Seconds = configuration.GetValue("RateLimiting:ComposerPer10Seconds", 20);
+        var authPerMinute = configuration.GetValue("RateLimiting:AuthPerMinute", 5);
 
         services.AddRateLimiter(options =>
         {
@@ -274,19 +279,19 @@ public static class ServiceExtensions
                         _ => PerMinute(perIp));
             });
 
-            // Brute-force protection: 5 login/registration attempts per minute from one IP
+            // Brute-force protection: 5 login/registration attempts per minute from one IP by default
             // (applies IN ADDITION to the global limit, both must pass).
             options.AddPolicy("auth", context =>
                 RateLimitPartition.GetFixedWindowLimiter(
                     partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
-                        PermitLimit = 5,
+                        PermitLimit = authPerMinute,
                         Window = TimeSpan.FromMinutes(1),
                         QueueLimit = 0
                     }));
 
-            // Sending and "typing" write to the database and fan out to all participants — a separate
+            // Commands write to the database and fan out to all participants — a separate
             // per-user limit (in addition to the general one), like the hub's per-connection one.
             options.AddPolicy(CommandsRateLimitPolicy, context =>
                 RateLimitPartition.GetFixedWindowLimiter(
@@ -296,6 +301,20 @@ public static class ServiceExtensions
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = commandsPer10Seconds,
+                        Window = TimeSpan.FromSeconds(10),
+                        QueueLimit = 0
+                    }));
+
+            // Typing and drafts come with every message of a quick exchange; on the commands budget
+            // they would hold the messages themselves back after a few of them.
+            options.AddPolicy(ComposerRateLimitPolicy, context =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: RateLimitUserId(context) is { } userId
+                        ? "user:" + userId
+                        : "ip:" + (context.Connection.RemoteIpAddress?.ToString() ?? "unknown"),
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = composerPer10Seconds,
                         Window = TimeSpan.FromSeconds(10),
                         QueueLimit = 0
                     }));

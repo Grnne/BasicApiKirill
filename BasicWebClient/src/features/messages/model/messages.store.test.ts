@@ -52,6 +52,44 @@ beforeEach(() => {
 })
 afterEach(() => vi.useRealTimers())
 
+describe('a failed load of the open chat', () => {
+  it('is retried by itself until it loads', async () => {
+    // Seen with a database restart: the chat said "could not load" until another chat was opened.
+    const auth = useAuthStore()
+    auth.user = { userId: ME, username: 'me', email: 'me@test', displayName: 'Me', avatarId: null }
+    useChatsStore().replaceAll([chat({ lastMessage: m1 })], [])
+    vi.mocked(messageEntityApi.getMessagesPage)
+      .mockRejectedValueOnce(new ApiError(503, { errorCode: 'SERVICE_UNAVAILABLE' }))
+      .mockRejectedValueOnce(new ApiError(500, { errorCode: 'INTERNAL_ERROR' }))
+      .mockResolvedValue({ items: [{ ...m1 }], nextCursor: null, hasMore: false })
+    const store = useMessagesStore()
+
+    await store.openChat('chat-1')
+    expect(store.error).toBe('Не удалось загрузить сообщения')
+
+    await vi.advanceTimersByTimeAsync(30_000)
+
+    expect(store.error).toBe('')
+    expect(store.messages.map((m) => m.id)).toEqual([m1.id])
+  })
+
+  it('stops retrying once another chat is open', async () => {
+    const auth = useAuthStore()
+    auth.user = { userId: ME, username: 'me', email: 'me@test', displayName: 'Me', avatarId: null }
+    useChatsStore().replaceAll([chat({ lastMessage: m1 }), chat({ chatId: 'chat-2' })], [])
+    vi.mocked(messageEntityApi.getMessagesPage).mockReset()
+    vi.mocked(messageEntityApi.getMessagesPage).mockRejectedValue(new ApiError(500, { errorCode: 'INTERNAL_ERROR' }))
+    const store = useMessagesStore()
+
+    await store.openChat('chat-1')
+    store.reset()
+    const calls = vi.mocked(messageEntityApi.getMessagesPage).mock.calls.length
+    await vi.advanceTimersByTimeAsync(120_000)
+
+    expect(vi.mocked(messageEntityApi.getMessagesPage).mock.calls.length).toBe(calls)
+  })
+})
+
 describe('reading the open chat', () => {
   it('opening the chat reads it', async () => {
     const { chats } = await openChatWithUnread()
@@ -128,8 +166,10 @@ describe('reply and forward', () => {
     store.startReply(m1)
     store.send('answer')
 
-    expect(messagesApi.sendMessage).toHaveBeenCalledWith('chat-1', expect.objectContaining({ replyToMessageId: m1.id }))
     expect(store.replyTo).toBeNull()
+    await vi.waitFor(() =>
+      expect(messagesApi.sendMessage).toHaveBeenCalledWith('chat-1', expect.objectContaining({ replyToMessageId: m1.id })),
+    )
   })
 
   it('forwards the selected messages in the chat order with a clientMessageId each', async () => {

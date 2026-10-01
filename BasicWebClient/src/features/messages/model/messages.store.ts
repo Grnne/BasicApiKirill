@@ -8,7 +8,7 @@ import { useHistoryStore } from '@/entities/message/model/history.store'
 import { useAuthStore } from '@/features/auth/model/auth.store'
 import type { Message } from '@/entities/message/types'
 import type { AttachmentDto, MessageEntityDto } from '@/shared/api/schema'
-import { describeError } from '@/shared/api/problem'
+import { ApiError, NetworkError, describeError } from '@/shared/api/problem'
 import { uuid } from '@/shared/lib/uuid'
 import { useNoticesStore } from '@/shared/ui/notices.store'
 import * as messagesApi from '../api/messages.api'
@@ -85,9 +85,17 @@ export const useMessagesStore = defineStore('messages', () => {
   /** Aborted when switching to another chat. */
   let inFlight: AbortController | null = null
 
+  // A failed load of the open chat is repeated by itself: after a server or network hiccup the
+  // chat would otherwise stay empty until the user opened another one.
+  const RELOAD_DELAYS_MS = [2_000, 5_000, 15_000, 30_000]
+  let reloadTimer: ReturnType<typeof setTimeout> | undefined
+  let reloadAttempt = 0
+
   function reset(): void {
     inFlight?.abort()
     inFlight = null
+    clearTimeout(reloadTimer)
+    reloadAttempt = 0
     clearTimeout(readTimer)
     editing.value = null
     replyTo.value = null
@@ -99,6 +107,7 @@ export const useMessagesStore = defineStore('messages', () => {
   }
 
   async function loadLatest(id: string): Promise<void> {
+    clearTimeout(reloadTimer)
     inFlight?.abort()
     const controller = new AbortController()
     inFlight = controller
@@ -109,9 +118,19 @@ export const useMessagesStore = defineStore('messages', () => {
     try {
       await history.loadLatest(id, controller.signal)
       if (controller.signal.aborted || chatId.value !== id) return
+      reloadAttempt = 0
       await markReadUpToLast()
-    } catch {
-      if (!controller.signal.aborted) error.value = 'Не удалось загрузить сообщения'
+    } catch (e) {
+      if (controller.signal.aborted) return
+      error.value = 'Не удалось загрузить сообщения'
+      const transient = e instanceof NetworkError || (e instanceof ApiError && (e.status >= 500 || e.status === 429))
+      if (transient) {
+        const delay = RELOAD_DELAYS_MS[Math.min(reloadAttempt, RELOAD_DELAYS_MS.length - 1)]
+        reloadAttempt += 1
+        reloadTimer = setTimeout(() => {
+          if (chatId.value === id) void loadLatest(id)
+        }, delay)
+      }
     } finally {
       if (!controller.signal.aborted) isLoading.value = false
     }
@@ -125,6 +144,7 @@ export const useMessagesStore = defineStore('messages', () => {
     const jump = pendingJump?.chatId === id ? pendingJump.messageId : null
     pendingJump = null
     if (chatId.value !== id) {
+      reloadAttempt = 0
       editing.value = null
       replyTo.value = null
       selected.value = new Set()
@@ -383,7 +403,13 @@ export const useMessagesStore = defineStore('messages', () => {
   const isRestricted = (id: string | null) => !!id && restricted.value.has(id)
   const tryAgain = (id: string) => setRestricted(id, false)
 
+  /** "Retry" after a failed load. */
+  function reload(): void {
+    if (chatId.value) void loadLatest(chatId.value)
+  }
+
   return {
+    reload,
     isRestricted,
     tryAgain,
     chatId,
