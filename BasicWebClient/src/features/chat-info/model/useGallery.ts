@@ -78,5 +78,8 @@ export function useGallery(chatId: Readonly<Ref<string | null>>, filter: Readonl
     controller?.abort()
   }
 
-  return { messages, files, done, busy, error, loadMore: () => load(true), reload: () => load(false), stop }
+  // Again what failed: the next page if some are loaded, else the first one.
+  const retry = () => load(messages.value.length > 0)
+
+  return { messages, files, done, busy, error, loadMore: () => load(true), retry, stop }
 }

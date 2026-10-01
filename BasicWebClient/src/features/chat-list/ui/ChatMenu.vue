@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 
 import { isMutedNow } from '@/entities/chat/lib'
 import type { ChatListItem } from '@/entities/chat/types'
@@ -16,6 +16,8 @@ const folder = computed(() => store.selectedFolder)
 const pinnedInFolder = computed(() => !!folder.value?.pinnedChatIds.includes(props.chat.chatId))
 const muted = computed(() => isMutedNow(props.chat))
 const choosingMute = ref(false)
+// Opened on another row while mounted: a right click there fires no click that would close it.
+watch(() => props.chat.chatId, () => (choosingMute.value = false))
 
 const HOUR = 3_600_000
 const MUTE_FOR = [

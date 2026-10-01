@@ -37,10 +37,12 @@ const sender = computed(() =>
   props.avatar === 'show' ? details.member(props.message.chatId, props.message.senderId) : null,
 )
 const system = computed(() => props.message.type === 'system')
+/** When the menu was opened: the edit and delete windows are counted from it. */
+const openedAt = ref(Date.now())
 const actions = computed(() =>
   messageActions(props.message, {
     meId: props.meId,
-    now: Date.now(),
+    now: openedAt.value,
     editWindowHours: config.config.messages.editWindowHours,
     deleteWindowHours: config.config.messages.deleteWindowHours,
     canDeleteOthers:
@@ -59,6 +61,7 @@ const menu = ref<HTMLElement | null>(null)
 async function toggleMenu(event: MouseEvent): Promise<void> {
   menuOpen.value = !menuOpen.value
   if (!menuOpen.value) return
+  openedAt.value = Date.now()
   menuBelow.value = false
   await nextTick()
   const button = event.currentTarget as HTMLElement | null

@@ -37,6 +37,22 @@ describe('gallery', () => {
     expect(galleryFiles([album], 'links')).toEqual([])
   })
 
+  it('"retry" after a page that failed loads that page, keeping the ones before', async () => {
+    // The bug: it reloaded from the first page, and five pages scrolled through were gone.
+    vi.mocked(mediaApi.getChatMedia).mockResolvedValueOnce(page(['m1'], 'c-2'))
+    const { gallery } = run()
+    await flushPromises()
+    vi.mocked(mediaApi.getChatMedia).mockRejectedValueOnce(new Error('offline'))
+    await gallery.loadMore()
+    expect(gallery.error.value).not.toBeNull()
+
+    vi.mocked(mediaApi.getChatMedia).mockResolvedValueOnce(page(['m2'], null))
+    await gallery.retry()
+
+    expect(vi.mocked(mediaApi.getChatMedia).mock.calls.at(-1)![2]).toBe('c-2')
+    expect(gallery.messages.value.map((m) => m.id)).toEqual(['m1', 'm2'])
+  })
+
   it('pages go back in time; a message shifted onto the next page is not shown twice', async () => {
     vi.mocked(mediaApi.getChatMedia)
       .mockResolvedValueOnce(page(['m3', 'm2'], 'cur'))

@@ -17,6 +17,8 @@ export interface ProblemDetails {
   traceId?: string
   /** Validation errors: field name -> its errors. */
   errors?: Record<string, FieldError[]>
+  /** Whom a refusal is about, when there are several (adding to a group). */
+  userIds?: string[]
 }
 
 export class ApiError extends Error {

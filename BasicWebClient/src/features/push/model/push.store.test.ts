@@ -56,6 +56,17 @@ describe('push', () => {
     expect(push.state).toBe('on')
   })
 
+  it('a browser that will not say whether it is subscribed: the state is "off", no unhandled error', async () => {
+    // getRegistration rejects with site data blocked; the settings page calls refresh unawaited.
+    const push = usePushStore()
+    vi.mocked(browser.permission).mockReturnValue('granted')
+    vi.mocked(browser.currentSubscription).mockRejectedValueOnce(new DOMException('blocked', 'SecurityError'))
+
+    await expect(push.refresh()).resolves.toBeUndefined()
+
+    expect(push.state).toBe('off')
+  })
+
   it('turned on by the user: permission, a subscription with the server key, given to the server', async () => {
     const sub = subscription()
     vi.mocked(browser.requestPermission).mockResolvedValue('granted')

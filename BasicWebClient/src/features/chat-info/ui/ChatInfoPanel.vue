@@ -282,7 +282,7 @@ function onScroll(event: Event): void {
 
       <p v-if="gallery.error.value" class="note error">
         {{ gallery.error.value }}
-        <button type="button" class="jump" @click="gallery.reload()">Повторить</button>
+        <button type="button" class="jump" @click="gallery.retry()">Повторить</button>
       </p>
       <p v-else-if="gallery.busy.value" class="note">загрузка…</p>
       <p v-else-if="empty" class="note">{{ tab.empty }}</p>

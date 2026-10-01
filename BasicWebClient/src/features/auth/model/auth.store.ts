@@ -27,6 +27,12 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isAuthenticated = computed(() => accessToken.value !== null && user.value !== null)
 
+  /**
+   * Signed out of this tab only because the server could not be reached (network, 5xx): the
+   * sign-in itself is alive and can be resumed without the password.
+   */
+  const canResume = computed(() => !isAuthenticated.value && refreshToken.value !== null)
+
   function applyAuth(response: AuthResponse): void {
     accessToken.value = response.token
     refreshToken.value = response.refreshToken
@@ -157,6 +163,7 @@ export const useAuthStore = defineStore('auth', () => {
     accessToken,
     user,
     isAuthenticated,
+    canResume,
     isSessionRestored,
     login,
     register,
