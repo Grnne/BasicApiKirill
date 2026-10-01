@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
+import { STATUS_MARKS, type OwnStatus } from '@/entities/message/lib/status'
 import type { Message } from '@/entities/message/types'
 import FormattedText from '@/entities/message/ui/FormattedText'
 import { formatTime } from '@/shared/lib/date'
@@ -9,6 +10,7 @@ const props = defineProps<{
   message: Message
   own: boolean
   meId: string | null
+  status?: OwnStatus | null
 }>()
 defineEmits<{ jump: [messageId: string]; react: [emoji: string] }>()
 
@@ -52,6 +54,9 @@ const files = computed(() => props.message.attachments.length)
     <span class="time">
       <span v-if="message.editedAt" class="edited">изменено</span>
       {{ formatTime(message.createdAt) }}
+      <span v-if="status" :class="['status', status]" :title="STATUS_MARKS[status].title">
+        {{ STATUS_MARKS[status].mark }}
+      </span>
     </span>
   </article>
 </template>
@@ -152,6 +157,13 @@ const files = computed(() => props.message.attachments.length)
   color: var(--text-dim);
   font-size: 12px;
   text-align: center;
+}
+.status {
+  margin-left: 3px;
+  letter-spacing: -3px;
+}
+.status.read {
+  color: var(--accent);
 }
 .edited {
   margin-right: 4px;

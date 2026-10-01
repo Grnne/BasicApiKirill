@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue'
 
+import { useChatsStore } from '@/entities/chat/model/chats.store'
 import { useConfigStore } from '@/entities/config/config.store'
+import { ownStatus } from '@/entities/message/lib/status'
 import { messageActions } from '@/entities/message/lib/actions'
 import type { Message } from '@/entities/message/types'
 import ConfirmDialog from '@/shared/ui/ConfirmDialog.vue'
@@ -15,6 +17,8 @@ const props = defineProps<{ message: Message; meId: string | null }>()
 const store = useMessagesStore()
 const config = useConfigStore()
 const notices = useNoticesStore()
+const chats = useChatsStore()
+const status = computed(() => ownStatus(props.message, chats.get(props.message.chatId), props.meId))
 
 const own = computed(() => props.message.senderId === props.meId)
 const system = computed(() => props.message.type === 'system')
@@ -115,6 +119,7 @@ async function confirmDelete(): Promise<void> {
       :message="message"
       :own="own"
       :me-id="meId"
+      :status="status"
       @jump="store.jumpTo($event)"
       @react="store.react(message, $event)"
     />

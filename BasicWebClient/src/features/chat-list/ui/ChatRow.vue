@@ -5,6 +5,7 @@ import type { ChatListItem } from '@/entities/chat/types'
 import { chatInitial, chatTitle } from '@/entities/chat/lib'
 import { usePresenceStore } from '@/entities/user/presence.store'
 import { messagePreview } from '@/entities/message/lib/preview'
+import { STATUS_MARKS, ownStatus } from '@/entities/message/lib/status'
 import { useAuthStore } from '@/features/auth/model/auth.store'
 import { formatTime } from '@/shared/lib/date'
 
@@ -33,6 +34,10 @@ const preview = computed(() => {
   return messagePreview(message, auth.user?.userId ?? null, props.chat.type === 'group')
 })
 
+const status = computed(() =>
+  props.chat.lastMessage ? ownStatus(props.chat.lastMessage, props.chat, auth.user?.userId ?? null) : null,
+)
+
 const time = computed(() =>
   props.chat.lastMessage ? formatTime(props.chat.lastMessage.createdAt) : '',
 )
@@ -52,7 +57,12 @@ const time = computed(() =>
     </span>
 
     <span class="right">
-      <span class="time">{{ time }}</span>
+      <span class="time">
+        <span v-if="status" :class="['status', status]" :title="STATUS_MARKS[status].title">
+          {{ STATUS_MARKS[status].mark }}
+        </span>
+        {{ time }}
+      </span>
       <span v-if="chat.unreadCount > 0 && !active" class="badge">{{ chat.unreadCount }}</span>
     </span>
   </button>
@@ -139,5 +149,12 @@ const time = computed(() =>
   font-size: 11px;
   font-weight: 700;
   text-align: center;
+}
+.status {
+  margin-right: 2px;
+  letter-spacing: -3px;
+}
+.status.read {
+  color: var(--accent);
 }
 </style>
