@@ -132,3 +132,24 @@ describe('details store', () => {
     expect(store.get('g1')).toBeNull()
   })
 })
+
+describe('details store: my permissions', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.mocked(chatApi.getChatDetail).mockReset()
+  })
+
+  it('new group defaults: a member reloads the card, as their own overrides are not known here', async () => {
+    vi.mocked(chatApi.getChatDetail)
+      .mockResolvedValueOnce(detail())
+      .mockResolvedValueOnce({ ...detail(), myPermissions: { ...PERMS, sendMessages: false } })
+    const store = useChatDetailsStore()
+    await store.load('g1')
+
+    store.apply('ChatUpdated', { chatId: 'g1', title: 'Team', avatarId: null, memberPermissions: { ...PERMS, sendMessages: false } }, ME)
+    await flushPromises()
+
+    expect(chatApi.getChatDetail).toHaveBeenCalledTimes(2)
+    expect(store.get('g1')!.myPermissions!.sendMessages).toBe(false)
+  })
+})
