@@ -92,6 +92,36 @@ docker compose --env-file .env.local -f docker-compose.prod.yml -f docker-compos
 - **48–58 с** — волна списков чатов: Postgres 99% CPU (~1800 запросов списка за 5 с).
 - **58–87 с** — последние ~170 клиентов ждут своей попытки по расписанию (+47 с).
 
+## Результаты, 2026-10-01: малый сервер
+
+Стенд: прод-compose с лимитами по умолчанию (в сумме 1 ГБ: Postgres 320 МБ, API 256 МБ,
+SeaweedFS 256 МБ, Caddy 192 МБ; пул Npgsql 10), все четыре контейнера закреплены на одном ядре
+(`cpuset` в локальном override) — как на сервере с одним ядром. Данные: 200 пользователей ×
+20 чатов × 20 сообщений (35 МБ).
+
+```powershell
+Get-Content tools/BasicApi.LoadTest/seed.sql | docker exec -i basicchat_postgres `
+    psql -U <DB_USER> -d <DB_NAME> -v users=200 -v peers=10 -v messages=20
+dotnet run --project tools/BasicApi.LoadTest -c Release -- `
+    --base-url https://localhost:8443 --insecure --jwt-key <JWT_KEY> `
+    --users 200 --peers 10 --connections 100 --send-rate 5 --list-rate 2 --duration 60 `
+    --restart-container basicchat_api --stats basicchat_api,basicchat_postgres,basicchat_caddy,basicchat_seaweedfs
+```
+
+| | p50 / p95 / p99 / max, мс | Ошибки |
+|---|---|---|
+| Подключение к хабу (100 клиентов) | 358 / 625 / 635 / 636 | нет |
+| Отправка (300) | 12 / 21 / 35 / 243 | нет |
+| Список чатов (120) | 9 / 16 / 32 / 152 | нет |
+| Доставка события (579 из 579) | 12 / 23 / 54 / 267 | нет |
+
+Память в пике: API 88 МБ, Postgres 88 МБ, SeaweedFS 128 МБ, Caddy 46 МБ — около 350 МБ из
+1 ГБ. CPU — единицы процентов, в рестарт API — 74%.
+
+Рестарт API: `docker restart` — 1,8 с, все 100 клиентов вернулись за 3,8 с, списки чатов после
+реконнекта — p50 0,8 с / max 1,1 с, **15 ответов 502**: Caddy отвечал, пока API поднимался
+(лечится `lb_try_duration`, см. capacity-and-limits.md).
+
 ## Что нашёл прогон
 
 - **Caddy упирался в свою память.** Около 220–250 КБ на открытый WebSocket; при
