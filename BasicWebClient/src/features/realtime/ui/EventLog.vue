@@ -1,8 +1,5 @@
 <script setup lang="ts">
-/**
- * Панель событий хаба — инструмент разработчика, а не часть интерфейса.
- * Показывается только в dev-сборке (см. import.meta.env.DEV в ChatPage).
- */
+/* Developer tool, not part of the UI: shown only in dev builds. */
 import { onUnmounted, ref } from 'vue'
 
 import { HUB_EVENT_NAMES } from '@/shared/api/hub.types'
@@ -31,10 +28,8 @@ function add(event: string, args: unknown[]): void {
   if (entries.value.length > MAX_ENTRIES) entries.value.length = MAX_ENTRIES
 }
 
-// Подписываемся на все события разом: панели неважно, какое именно пришло.
 const unsubscribers = HUB_EVENT_NAMES.map((event) =>
-  // Приведение нужно, потому что у каждого события своя сигнатура,
-  // а панели важен только сам факт и payload.
+  // Each event has its own signature; the log only needs the raw arguments.
   hub.on(event, ((...args: unknown[]) => add(event, args)) as never),
 )
 

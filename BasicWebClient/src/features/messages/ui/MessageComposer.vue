@@ -4,16 +4,14 @@ import { computed, onUnmounted, ref } from 'vue'
 import { useHubStore } from '@/shared/api/hub.store'
 import { useMessagesStore } from '../model/messages.store'
 
-/** Сервер режет длинный текст в превью списка; здесь просто разумный предел. */
 const MAX_LENGTH = 4000
 
 /**
- * «Печатает» отправляем не чаще раза в 3 секунды: на хабе стоит лимит вызовов,
- * и тратить его на каждую букву — верный способ упереться в него при отправке.
+ * The hub rate-limits calls; sending typing on every keystroke would eat the budget needed for
+ * sending messages.
  */
 const TYPING_THROTTLE_MS = 3_000
 
-/** Через столько после последнего нажатия сообщаем, что печатать перестали. */
 const TYPING_STOP_DELAY_MS = 3_000
 
 const hub = useHubStore()
@@ -52,13 +50,10 @@ function onInput(): void {
     void hub.sendTyping(chatId, true)
   }
 
-  // Явное «перестал печатать» — иначе у собеседника индикатор провисит
-  // до истечения таймаута.
   clearTimeout(stopTypingTimer)
   stopTypingTimer = setTimeout(stopTyping, TYPING_STOP_DELAY_MS)
 }
 
-// Уходя со страницы, не оставляем собеседнику вечное «печатает…».
 onUnmounted(stopTyping)
 
 async function submit(): Promise<void> {
@@ -68,13 +63,12 @@ async function submit(): Promise<void> {
   errorText.value = ''
 
   const value = text.value
-  // Очищаем поле сразу — иначе быстрый набор следующего сообщения затрётся.
+  // Cleared before awaiting, so typing the next message is not overwritten.
   text.value = ''
   stopTyping()
 
   const ok = await store.send(value)
   if (!ok) {
-    // Не потеряли текст: возвращаем в поле, чтобы можно было отправить снова.
     text.value = value
     errorText.value = 'Сообщение не ушло. Проверь связь и попробуй ещё раз.'
   }
@@ -82,7 +76,6 @@ async function submit(): Promise<void> {
   isSending.value = false
 }
 
-/** Enter отправляет, Shift+Enter переносит строку — привычно по мессенджерам. */
 function onKeydown(event: KeyboardEvent): void {
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault()

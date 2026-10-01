@@ -1,12 +1,7 @@
-/**
- * Соединение с SignalR-хабом.
- *
- * Стор держит одно соединение на всё приложение и берёт на себя три вещи,
- * в которых легко ошибиться:
- *  1) токен запрашивается в момент подключения, а не захватывается заранее;
- *  2) после реконнекта чат перезаходится сам — группы на сервере не переживают
- *     разрыв, и без этого сообщения молча перестают приходить;
- *  3) подписки переживают пересоздание соединения.
+/*
+ * The single SignalR connection. The token is fetched on each (re)connect rather than captured;
+ * the open chat is rejoined after a reconnect, because server groups do not survive a dropped
+ * connection and messages would silently stop; subscriptions survive connection re-creation.
  */
 
 import { ref, shallowRef } from 'vue'
@@ -28,7 +23,7 @@ import {
 
 const HUB_URL = '/hubs/chat'
 
-/** Паузы перед попытками переподключения, мс. Дальше — сдаёмся и ждём действий пользователя. */
+/** After the last delay the client gives up and stays disconnected. */
 const RECONNECT_DELAYS = [0, 2_000, 5_000, 10_000, 30_000]
 
 type AnyHandler = (...args: never[]) => void
@@ -37,10 +32,10 @@ export const useHubStore = defineStore('hub', () => {
   const status = ref<ConnectionStatus>('disconnected')
   const connection = shallowRef<HubConnection | null>(null)
 
-  /** Чат, в группу которого мы вошли. Нужен, чтобы вернуться в неё после разрыва. */
+  /** Kept to rejoin the group after a reconnect. */
   const joinedChatId = ref<string | null>(null)
 
-  /** Подписки фич. Хранятся отдельно от соединения, чтобы пережить его пересоздание. */
+  /** Kept apart from the connection so they survive its re-creation. */
   const listeners = new Map<HubEventName, Set<AnyHandler>>()
 
   function listenersFor(event: HubEventName): Set<AnyHandler> {
@@ -52,10 +47,7 @@ export const useHubStore = defineStore('hub', () => {
     return set
   }
 
-  /**
-   * Подписка на событие хаба. Возвращает функцию отписки — её удобно вызвать
-   * в onUnmounted компонента.
-   */
+  /** Works before connecting and across reconnects; returns an unsubscribe function. */
   function on<K extends HubEventName>(event: K, handler: HubEvents[K]): () => void {
     listenersFor(event).add(handler as AnyHandler)
     return () => {
@@ -63,11 +55,6 @@ export const useHubStore = defineStore('hub', () => {
     }
   }
 
-  /**
-   * Соединение вызывает подписчиков через эту прослойку, а не напрямую.
-   * Поэтому on() работает и до подключения, и после реконнекта, и не надо
-   * ничего переподписывать вручную.
-   */
   function attachEvents(hub: HubConnection): void {
     for (const event of HUB_EVENT_NAMES) {
       hub.on(event, (...args: never[]) => {
@@ -75,7 +62,7 @@ export const useHubStore = defineStore('hub', () => {
           try {
             handler(...args)
           } catch (error) {
-            // Ошибка одного подписчика не должна ронять остальных.
+            // One failing handler must not break the others.
             console.error(`Обработчик ${event} упал:`, error)
           }
         }
@@ -90,11 +77,7 @@ export const useHubStore = defineStore('hub', () => {
 
     const hub = new HubConnectionBuilder()
       .withUrl(HUB_URL, {
-        /**
-         * Вызывается на каждом подключении и переподключении — поэтому здесь
-         * функция, а не готовая строка. Если access-токен уже истёк (например,
-         * вкладка была свёрнута), сначала обновляем пару.
-         */
+        // Called on every connect and reconnect, so the token is always current.
         accessTokenFactory: async () => {
           const bridge = getAuthBridge()
           if (!bridge) return ''
@@ -115,7 +98,7 @@ export const useHubStore = defineStore('hub', () => {
 
     hub.onreconnected(() => {
       status.value = 'connected'
-      // Группы чатов живут на конкретном соединении и после разрыва теряются.
+      // Groups belong to a connection and are lost when it drops.
       if (joinedChatId.value) void invokeSafe('JoinChat', joinedChatId.value)
     })
 
@@ -144,11 +127,7 @@ export const useHubStore = defineStore('hub', () => {
     if (hub) await hub.stop()
   }
 
-  /**
-   * Вызов метода хаба. Ошибки не пробрасываем: сервер может ответить
-   * HubException (например, при превышении лимита вызовов), и валить на этом
-   * интерфейс незачем — возвращаем false.
-   */
+  /** Never throws: a HubException (e.g. rate limit) becomes false instead of breaking the UI. */
   async function invokeSafe(method: string, ...args: unknown[]): Promise<boolean> {
     const hub = connection.value
     if (!hub || hub.state !== HubConnectionState.Connected) return false
@@ -162,13 +141,11 @@ export const useHubStore = defineStore('hub', () => {
     }
   }
 
-  /* ── Методы хаба ── */
-
   async function joinChat(chatId: string): Promise<void> {
     if (joinedChatId.value === chatId) return
     if (joinedChatId.value) await invokeSafe('LeaveChat', joinedChatId.value)
 
-    // Запоминаем до вызова: если соединение сейчас лежит, зайдём при реконнекте.
+    // Recorded before the call: if the connection is down, the chat is joined on reconnect.
     joinedChatId.value = chatId
     await invokeSafe('JoinChat', chatId)
   }

@@ -1,21 +1,18 @@
-/**
- * Ошибки API. Бэкенд отвечает ProblemDetails (RFC 7807) —
- * см. BasicApi/Middleware/ExceptionHandlingMiddleware.cs.
- */
+/* API errors arrive as ProblemDetails (RFC 7807). */
 
 export interface ProblemDetails {
   type?: string
   title?: string
   status?: number
   detail?: string
-  /** Ошибки валидации: имя поля -> список сообщений. */
+  /** Validation errors: field name -> messages. */
   errors?: Record<string, string[]>
 }
 
 export class ApiError extends Error {
   readonly status: number
   readonly problem: ProblemDetails | null
-  /** Сколько секунд ждать до повтора — заполняется для 429. */
+  /** Set for 429 from the Retry-After header. */
   readonly retryAfterSeconds: number | null
 
   constructor(
@@ -30,20 +27,15 @@ export class ApiError extends Error {
     this.retryAfterSeconds = retryAfterSeconds
   }
 
-  /** Токен недействителен или сессия закончилась. */
   get isUnauthorized(): boolean {
     return this.status === 401
   }
 
-  /** Слишком часто — на логине бэкенд включает rate limit. */
   get isRateLimited(): boolean {
     return this.status === 429
   }
 
-  /**
-   * Текст для показа пользователю. Первым делом — ошибки валидации,
-   * потому что title у них общий и бесполезный ("One or more validation errors").
-   */
+  /** Validation errors come first: their title is the generic "One or more validation errors". */
   get userMessage(): string {
     const fieldErrors = this.problem?.errors
     if (fieldErrors) {
@@ -58,9 +50,9 @@ export class ApiError extends Error {
   }
 }
 
-/** Сеть недоступна / запрос оборвался — до сервера не дошли. */
+/** The request never reached the server. */
 export class NetworkError extends Error {
-  /** Исходная ошибка fetch — для логов, не для показа пользователю. */
+  /** The original fetch error, for logs only. */
   readonly reason: unknown
 
   constructor(reason: unknown) {

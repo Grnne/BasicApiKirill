@@ -15,7 +15,6 @@ const presence = usePresenceStore()
 
 const title = computed(() => chatTitle(props.chat))
 
-// Точку показываем только у приватных чатов: у группы нет одного собеседника.
 const isCompanionOnline = computed(
   () => props.chat.type === 'private' && presence.isOnline(props.chat.companionId),
 )
@@ -44,7 +43,7 @@ const time = computed(() =>
     </span>
 
     <span class="middle">
-      <!-- Всё через интерполяцию: имена и тексты приходят от других пользователей. -->
+      <!-- Interpolation only: names and texts come from other users. -->
       <span class="title">{{ title }}</span>
       <span :class="['preview', { typing: isTyping }]">{{ preview }}</span>
     </span>

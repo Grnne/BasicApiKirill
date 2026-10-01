@@ -1,9 +1,6 @@
-/* Мелкие функции отображения чата. Держим их рядом с типом, а не в компонентах:
-   заголовок чата нужен и в списке, и в шапке переписки. */
-
 import type { ChatListItem } from './types'
 
-/** Название приватного чата — имя собеседника, группового — его заголовок. */
+/** A private chat is titled by the companion's name, a group chat by its own title. */
 export function chatTitle(chat: ChatListItem): string {
   if (chat.type === 'private') {
     return chat.companionName || chat.companionUsername || 'Без имени'
@@ -11,7 +8,6 @@ export function chatTitle(chat: ChatListItem): string {
   return chat.title || 'Без названия'
 }
 
-/** Одна буква для кружка-аватарки. */
 export function chatInitial(chat: ChatListItem): string {
   return chatTitle(chat).trim().charAt(0).toUpperCase() || '?'
 }

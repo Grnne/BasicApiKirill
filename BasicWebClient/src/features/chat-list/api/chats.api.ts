@@ -1,26 +1,16 @@
-/* Запросы по чатам. BasicApi/Features/Chats/ChatsController.cs */
-
 import { http } from '@/shared/api/http'
 import type { ChatListItem, SearchChatsResponse } from '@/entities/chat/types'
 
-/** Все чаты текущего пользователя, уже с превью последнего сообщения. */
 export function getChats(): Promise<ChatListItem[]> {
   return http.get<ChatListItem[]>('/api/chats')
 }
 
-/**
- * Одна строка списка. Нужна, когда пришло событие про чат, которого у нас нет
- * (например, вкладка была закрыта в момент его создания) — дешевле, чем
- * перезагружать весь список.
- */
+/** For an event about a chat missing from the list; cheaper than reloading the whole list. */
 export function getChatItem(chatId: string): Promise<ChatListItem> {
   return http.get<ChatListItem>(`/api/chats/${chatId}/item`)
 }
 
-/**
- * Создать приватный чат или получить существующий (сервер вернёт 200 вместо
- * 201, если он уже есть). В обоих случаях тело — готовая строка списка.
- */
+/** Idempotent: returns the existing chat (200) or creates one (201), both as a list item. */
 export function createPrivateChat(userId: string): Promise<ChatListItem> {
   return http.post<ChatListItem>(`/api/chats/private/${userId}`)
 }

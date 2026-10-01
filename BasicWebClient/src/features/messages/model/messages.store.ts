@@ -1,9 +1,5 @@
-/**
- * Лента сообщений открытого чата.
- *
- * Порядок в messages — от старых к новым, как на экране. Страницы приходят
- * назад по времени, поэтому подгруженные сообщения добавляются В НАЧАЛО.
- */
+/* Messages of the open chat, oldest to newest as on screen. Pages arrive going back in time,
+   so older pages are prepended. */
 
 import { ref, shallowRef } from 'vue'
 import { defineStore } from 'pinia'
@@ -24,7 +20,7 @@ export const useMessagesStore = defineStore('messages', () => {
 
   const nextCursor = shallowRef<string | null>(null)
 
-  /** Запрос текущего чата. Отменяется при переключении на другой. */
+  /** Aborted when switching to another chat. */
   let inFlight: AbortController | null = null
 
   function reset(): void {
@@ -37,7 +33,6 @@ export const useMessagesStore = defineStore('messages', () => {
     error.value = ''
   }
 
-  /** Открыть чат и показать последнюю страницу. */
   async function openChat(id: string): Promise<void> {
     inFlight?.abort()
     const controller = new AbortController()
@@ -52,7 +47,7 @@ export const useMessagesStore = defineStore('messages', () => {
 
     try {
       const page = await messagesApi.getMessagesPage(id, null, controller.signal)
-      // Пока грузили, пользователь мог переключиться на другой чат.
+      // The user may have switched chats while this was loading.
       if (controller.signal.aborted || chatId.value !== id) return
 
       messages.value = page.items
@@ -66,7 +61,6 @@ export const useMessagesStore = defineStore('messages', () => {
     }
   }
 
-  /** Подгрузить страницу постарше — вызывается при прокрутке вверх. */
   async function loadOlder(): Promise<void> {
     const id = chatId.value
     const cursor = nextCursor.value
@@ -77,21 +71,19 @@ export const useMessagesStore = defineStore('messages', () => {
       const page = await messagesApi.getMessagesPage(id, cursor)
       if (chatId.value !== id) return
 
-      // Именно в начало: страница старее того, что уже на экране.
       messages.value = [...page.items, ...messages.value]
       nextCursor.value = page.nextCursor
       hasMore.value = page.hasMore
     } catch {
-      // Молча: пользователь просто попробует прокрутить ещё раз.
+      // Ignored: scrolling up again retries.
     } finally {
       isLoadingOlder.value = false
     }
   }
 
   /**
-   * Отправка идёт через хаб, а не через REST. Сервер разошлёт MessageCreated
-   * всем в группе, включая нас, — поэтому в ленту здесь ничего не добавляем.
-   * Своё сообщение придёт тем же путём, что и чужие, и не разъедется с сервером.
+   * Sent through the hub, and nothing is appended here: the server broadcasts MessageCreated to
+   * the group including us, so our own message arrives the same way as others' and cannot diverge.
    */
   async function send(text: string): Promise<boolean> {
     const id = chatId.value
@@ -109,15 +101,13 @@ export const useMessagesStore = defineStore('messages', () => {
     try {
       await messagesApi.markRead(id, last.id)
     } catch {
-      // Не критично: отметка о прочтении повторится при следующем открытии.
+      // Not critical: the read mark is sent again next time the chat is opened.
     }
   }
 
-  /* ── События хаба ── */
-
   function appendLive(message: Message): void {
     if (message.chatId !== chatId.value) return
-    // Защита от дубля: сообщение могло попасть и в загруженную страницу.
+    // The message may already be in a loaded page.
     if (messages.value.some((item) => item.id === message.id)) return
     messages.value.push(message)
   }

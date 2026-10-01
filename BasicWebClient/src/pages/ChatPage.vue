@@ -18,21 +18,14 @@ const messages = useMessagesStore()
 const presence = usePresenceStore()
 const router = useRouter()
 
-/**
- * Панель событий — инструмент разработчика. Грузим её динамически и только
- * в dev: при статическом импорте код панели попадал бы в прод-бандл, даже
- * если она никогда не рендерится (v-if убирает вывод, но не импорт).
- */
+// Dynamic and dev-only: a static import would put the panel into the prod bundle.
 const EventLog = import.meta.env.DEV
   ? defineAsyncComponent(() => import('@/features/realtime/ui/EventLog.vue'))
   : null
 
 const isDev = import.meta.env.DEV
 
-/**
- * Строка поиска живёт здесь, а не внутри панелей: одно поле ищет и по чатам,
- * и по пользователям, а страница — то место, где фичи складываются вместе.
- */
+// One search field feeds both the chat and the user search panels.
 const query = ref('')
 
 async function onUserSelected(userId: string): Promise<void> {
@@ -41,7 +34,7 @@ async function onUserSelected(userId: string): Promise<void> {
 }
 
 async function onLogout(): Promise<void> {
-  // Чужие данные не должны пережить выход: чистим сторы до сброса токенов.
+  // No user data may survive logout: stores are cleared before the tokens.
   messages.reset()
   chatList.reset()
   presence.reset()
@@ -114,12 +107,10 @@ async function onLogout(): Promise<void> {
   grid-template-columns: 300px minmax(0, 1fr);
   overflow: hidden;
 }
-/* Третья колонка — только панель разработчика. */
 .body.with-log {
   grid-template-columns: 300px minmax(0, 1fr) 320px;
 }
 
-/* Панель событий — инструмент, на среднем экране она только мешает. */
 @media (max-width: 1100px) {
   .body.with-log {
     grid-template-columns: 260px minmax(0, 1fr);
@@ -129,7 +120,7 @@ async function onLogout(): Promise<void> {
   }
 }
 
-/* Узкий экран: список и переписка не помещаются рядом, показываем что-то одно. */
+/* Narrow screens show either the chat list or the open chat. */
 @media (max-width: 720px) {
   .body,
   .body.with-log {

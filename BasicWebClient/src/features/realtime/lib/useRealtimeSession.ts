@@ -1,11 +1,5 @@
-/**
- * Связывает жизнь соединения с авторизацией: залогинились — подключились,
- * вышли — отключились. Вызывается один раз, в корневом компоненте.
- *
- * Почему не внутри auth-стора: тогда auth зависел бы от hub, а hub уже зависит
- * от auth (ему нужен токен). Кольцо импортов и невозможность тестировать
- * авторизацию отдельно.
- */
+/* Ties the hub connection to the session. Not in the auth store: the hub already depends on auth
+   for the token, so that would be an import cycle. */
 
 import { watch } from 'vue'
 
@@ -25,7 +19,7 @@ export function useRealtimeSession(): void {
         void hub.stop()
       }
     },
-    // immediate: сессия могла восстановиться до того, как повесили наблюдение.
+    // The session may have been restored before the watcher was set up.
     { immediate: true },
   )
 }

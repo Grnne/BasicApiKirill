@@ -48,8 +48,8 @@ async function submit(): Promise<void> {
         username: form.username.trim(),
         email: form.email.trim(),
         password: form.password,
-        // Пустую строку не шлём: у поля на сервере есть ограничение длины,
-        // а отсутствие значения он трактует как «взять username».
+        // Omitted rather than empty: the server length-checks it and defaults a missing one
+        // to the username.
         ...(displayName ? { displayName } : {}),
       })
     }
@@ -64,8 +64,7 @@ async function submit(): Promise<void> {
 
 function describe(error: unknown): string {
   if (error instanceof ApiError) {
-    // 401 на логине — это всегда «не тот логин или пароль». Показывать
-    // серверный текст не нужно, да и незачем уточнять, что именно не совпало.
+    // Never reveal which of login or password was wrong.
     if (error.isUnauthorized) return 'Неверный логин или пароль'
     return error.userMessage
   }
@@ -145,7 +144,7 @@ function describe(error: unknown): string {
       />
     </template>
 
-    <!-- Именно текстовая интерполяция, не v-html: сюда попадают сообщения сервера. -->
+    <!-- Text interpolation, never v-html: this shows server-provided messages. -->
     <p v-if="errorText" class="error" role="alert">{{ errorText }}</p>
 
     <BaseButton type="submit" :disabled="isBusy">

@@ -18,8 +18,6 @@ export function devOnlyCsp(): Plugin {
 }
 
 export default defineConfig(({ mode, command }) => {
-  // Читаем .env, чтобы узнать адрес бэкенда. Третий аргумент '' — забрать
-  // все переменные, а не только с префиксом VITE_.
   const env = loadEnv(mode, process.cwd(), '')
   const apiTarget = env.VITE_API_TARGET || 'http://localhost:5235'
   const mediaTarget = env.VITE_MEDIA_TARGET || 'http://localhost:8333'
@@ -35,8 +33,7 @@ export default defineConfig(({ mode, command }) => {
 
     server: {
       port: 5173,
-      // Прокси делает бэкенд «своим» origin'ом: браузер видит только
-      // localhost:5173. Значит — никакого CORS и никаких cross-site cookie.
+      // The proxy keeps the API same-origin: no CORS and no cross-site cookies.
       proxy: {
         '/api': { target: apiTarget, changeOrigin: true },
         '/hubs': { target: apiTarget, changeOrigin: true, ws: true },
@@ -47,11 +44,10 @@ export default defineConfig(({ mode, command }) => {
     },
 
     build: {
-      // Прод-сборка ложится в статику API. Отдаёт её Kestrel, nginx не нужен.
+      // The production build is served by the API as static files.
       outDir: '../BasicApi/wwwroot/client',
       emptyOutDir: true,
     },
-    // В проде приложение живёт по /client/, в деве — в корне 5173-го порта.
     base: command === 'build' ? '/client/' : '/',
 
     test: {

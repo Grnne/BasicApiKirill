@@ -11,7 +11,7 @@ defineProps<{
 <template>
   <article :class="['bubble', { own }]">
     <span v-if="!own" class="sender">{{ message.senderName }}</span>
-    <!-- Текст сообщения — только интерполяция. Никакого v-html здесь быть не может. -->
+    <!-- Interpolation only, never v-html: message text is user input. -->
     <p class="text">{{ message.text }}</p>
     <span class="time">{{ formatTime(message.createdAt) }}</span>
   </article>
@@ -43,7 +43,6 @@ defineProps<{
 }
 .text {
   margin: 0;
-  /* Переносим длинные слова и сохраняем переводы строк из ввода. */
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }

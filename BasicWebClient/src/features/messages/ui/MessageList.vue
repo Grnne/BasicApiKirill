@@ -6,10 +6,8 @@ import { formatDay, parseApiDate } from '@/shared/lib/date'
 import { useMessagesStore } from '../model/messages.store'
 import MessageBubble from './MessageBubble.vue'
 
-/** Насколько близко к низу пользователь должен быть, чтобы лента доскроллилась сама. */
 const STICK_THRESHOLD_PX = 120
 
-/** За сколько пикселей до верха начинаем подгружать старые сообщения. */
 const LOAD_OLDER_THRESHOLD_PX = 150
 
 const auth = useAuthStore()
@@ -29,13 +27,8 @@ function scrollToBottom(): void {
   if (element) element.scrollTop = element.scrollHeight
 }
 
-/**
- * Подгрузка вверх с сохранением позиции.
- *
- * Если просто добавить сообщения в начало, содержимое уедет вниз и
- * пользователь потеряет место, где читал. Поэтому запоминаем высоту до
- * вставки и после неё сдвигаем прокрутку ровно на прирост.
- */
+// Prepending pushes the content down; shifting the scroll by the height growth keeps the
+// reading position.
 async function loadOlderKeepingPosition(): Promise<void> {
   const element = viewport.value
   if (!element || store.isLoadingOlder || !store.hasMore) return
@@ -52,8 +45,7 @@ function onScroll(): void {
   if (element.scrollTop < LOAD_OLDER_THRESHOLD_PX) void loadOlderKeepingPosition()
 }
 
-// Новое сообщение доскроллит ленту, только если пользователь и так внизу.
-// Иначе он читает историю — дёргать его нельзя.
+// Follow new messages only when already at the bottom, not while the user reads history.
 watch(
   () => store.messages.length,
   async (length, previousLength) => {
@@ -65,12 +57,8 @@ watch(
 )
 
 /**
- * Открытый чат — всегда в самый низ.
- *
- * Следим именно за окончанием загрузки, а не за сменой chatId: пока
- * isLoading === true, в ленте висит заглушка, и сообщения появляются в DOM
- * только после её снятия. Прокрутка по chatId срабатывала на пустом списке
- * и не давала ничего.
+ * Scroll to the bottom when loading ends, not on chatId change: while loading, a placeholder is
+ * shown and the messages are not in the DOM yet.
  */
 watch(
   () => store.isLoading,
@@ -81,7 +69,6 @@ watch(
   },
 )
 
-/** Разделитель дат: показываем, когда следующее сообщение уже из другого дня. */
 function startsNewDay(index: number): boolean {
   const current = store.messages[index]
   if (!current) return false

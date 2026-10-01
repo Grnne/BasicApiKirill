@@ -7,9 +7,8 @@ const route = useRoute()
 const router = useRouter()
 
 /**
- * Куда вернуться после входа. Значение приходит из адресной строки, поэтому
- * пускаем только внутренние пути: "//evil.com" и "https://evil.com" браузер
- * считает абсолютными адресами — так делают open redirect.
+ * The redirect comes from the URL, so only same-origin paths pass: "//evil.com" and
+ * "https://evil.com" are absolute URLs and would make an open redirect.
  */
 function safeRedirect(): string {
   const target = route.query.redirect

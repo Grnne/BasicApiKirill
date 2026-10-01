@@ -12,7 +12,7 @@ const chatList = useChatListStore()
 const messages = useMessagesStore()
 const presence = usePresenceStore()
 
-/** Подпись под названием чата: «печатает…» важнее, чем «в сети». */
+// Typing takes precedence over the online status.
 const subtitle = computed(() => {
   const chat = chatList.selectedChat
   if (!chat) return ''
@@ -30,10 +30,7 @@ onMounted(() => {
   messages.subscribeToHub()
 })
 
-/**
- * Лента следует за выбором в списке чатов. Связь односторонняя: список ничего
- * не знает про сообщения, а сообщения только читают выбранный chatId.
- */
+// One-way link: the chat list knows nothing about messages, which follow the selected chatId.
 watch(
   () => chatList.selectedChatId,
   (chatId) => {
@@ -50,7 +47,6 @@ watch(
 <template>
   <section v-if="chatList.selectedChat" class="window">
     <header class="head">
-      <!-- Видна только на узких экранах: там список и переписка не помещаются рядом. -->
       <button type="button" class="back" title="К списку чатов" @click="chatList.deselect()">
         ←
       </button>

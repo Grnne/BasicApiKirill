@@ -1,15 +1,12 @@
-/* Сообщения чата. BasicApi/Features/Chats/ChatsController.cs */
-
 import { http } from '@/shared/api/http'
 import type { MessagePage } from '@/entities/message/types'
 
-/** Сколько сообщений тянем за раз. Сервер ограничивает сотней. */
+/** The server caps the page size at 100. */
 export const PAGE_SIZE = 30
 
 /**
- * Страница сообщений. Внутри страницы они идут от старых к новым, а сама
- * следующая страница — старее текущей: cursor ведёт назад по времени.
- * Без cursor отдаются самые свежие.
+ * Items within a page go oldest to newest, but the cursor walks back in time: the next page is
+ * older than the current one. Without a cursor the newest page is returned.
  */
 export function getMessagesPage(
   chatId: string,
@@ -22,7 +19,7 @@ export function getMessagesPage(
   })
 }
 
-/** Отметить прочитанным всё до указанного сообщения включительно. */
+/** Marks everything up to and including the given message as read. */
 export function markRead(chatId: string, lastMessageId: string): Promise<void> {
   return http.post<void>(`/api/chats/${chatId}/read`, { lastMessageId })
 }

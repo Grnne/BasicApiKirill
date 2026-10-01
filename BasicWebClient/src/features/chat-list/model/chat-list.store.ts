@@ -1,9 +1,5 @@
-/**
- * Список чатов: загрузка, выбор, живое обновление.
- *
- * Список — единственный источник правды о том, какие чаты есть и что в них
- * последнее. Сообщения внутри чата — забота отдельного стора.
- */
+/* The single source of truth for which chats exist and their latest message;
+   the messages inside a chat belong to the messages store. */
 
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
@@ -28,16 +24,12 @@ export const useChatListStore = defineStore('chatList', () => {
     () => chats.value.find((chat) => chat.chatId === selectedChatId.value) ?? null,
   )
 
-  /* ── Работа со списком ── */
-
-  /** Свежие сверху — как в любом мессенджере. */
   function sortByActivity(): void {
     chats.value.sort(
       (a, b) => parseApiDate(b.lastActivityAt).getTime() - parseApiDate(a.lastActivityAt).getTime(),
     )
   }
 
-  /** Добавить чат или заменить существующий. Ключ — chatId. */
   function upsert(item: ChatListItem): void {
     const index = chats.value.findIndex((chat) => chat.chatId === item.chatId)
     if (index === -1) {
@@ -64,38 +56,29 @@ export const useChatListStore = defineStore('chatList', () => {
   async function select(chatId: string): Promise<void> {
     selectedChatId.value = chatId
 
-    // Открытый чат считаем прочитанным — счётчик гасим сразу, не дожидаясь
-    // ответа сервера (сам POST /read отправит фича сообщений).
+    // Cleared optimistically; the messages feature sends the actual POST /read.
     const chat = chats.value.find((item) => item.chatId === chatId)
     if (chat) chat.unreadCount = 0
 
     await hub.joinChat(chatId)
   }
 
-  /** Закрыть чат — нужно на узких экранах, чтобы вернуться к списку. */
   async function deselect(): Promise<void> {
     selectedChatId.value = null
     await hub.leaveChat()
   }
 
-  /**
-   * Открыть переписку с пользователем. Сервер сам отдаёт существующий чат,
-   * если он уже был, поэтому проверять ничего не нужно.
-   */
   async function openPrivateChat(userId: string): Promise<void> {
     const chat = await chatsApi.createPrivateChat(userId)
     upsert(chat)
     await select(chat.chatId)
   }
 
-  /* ── События хаба ── */
-
   function applyListUpdate(chatId: string, message: Message): void {
     const chat = chats.value.find((item) => item.chatId === chatId)
 
     if (!chat) {
-      // Чата нет в списке — значит он появился, пока мы были не в сети.
-      // Догружаем одну строку, а не весь список.
+      // The chat appeared while we were offline; fetch just its row.
       void chatsApi
         .getChatItem(chatId)
         .then(upsert)
@@ -106,7 +89,6 @@ export const useChatListStore = defineStore('chatList', () => {
     chat.lastMessage = message
     chat.lastActivityAt = message.createdAt
 
-    // Свои сообщения и сообщения в открытом чате непрочитанными не считаем.
     const isOwn = message.senderId === auth.user?.userId
     const isOpen = chatId === selectedChatId.value
     if (!isOwn && !isOpen) chat.unreadCount += 1
@@ -116,14 +98,13 @@ export const useChatListStore = defineStore('chatList', () => {
 
   let isSubscribed = false
 
-  /** Подписки на хаб. Вызывается один раз — при первой загрузке списка. */
   function subscribeToHub(): void {
     if (isSubscribed) return
     isSubscribed = true
 
     hub.on('ChatListUpdated', applyListUpdate)
 
-    // Payload — готовая строка списка, собранная сервером под нас.
+    // The payload is a list row already built for the current user.
     hub.on('ChatCreated', upsert)
   }
 

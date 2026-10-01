@@ -1,28 +1,13 @@
-/**
- * HTTP-клиент. Одна точка входа для всех запросов к API.
- *
- * Что он берёт на себя:
- *  - подставляет Authorization: Bearer;
- *  - при 401 один раз обновляет токен и повторяет запрос;
- *  - превращает ProblemDetails в ApiError;
- *  - разбирает пустые ответы (204).
- *
- * Базового URL нет намеренно: в деве Vite проксирует /api и /hubs на бэкенд,
- * в проде фронт лежит рядом с API. Всегда один origin — значит нет CORS
- * и нет соблазна разослать токен на чужой домен.
- */
+/* No base URL on purpose: the API is always same-origin (Vite proxy in dev, served by the API in
+   prod), so there is no CORS and the token can never be sent to another host. */
 
 import { ApiError, NetworkError, type ProblemDetails } from './problem'
 
-/**
- * Мостик к auth-стору. Стор регистрирует себя один раз при старте, а http
- * ничего про Pinia не знает — иначе получилось бы кольцо импортов
- * (стор -> api -> стор).
- */
+/** The auth store registers itself at startup; http knows nothing of Pinia (no import cycle). */
 export interface AuthBridge {
-  /** Текущий access-токен или null. Читается на каждый запрос — после refresh он другой. */
+  /** Read on every request: it changes after a refresh. */
   getAccessToken: () => string | null
-  /** Обновить пару токенов. true — получилось, можно повторять запрос. */
+  /** Resolves true when the request can be retried. */
   refreshTokens: () => Promise<boolean>
 }
 
@@ -32,7 +17,6 @@ export function setAuthBridge(bridge: AuthBridge): void {
   authBridge = bridge
 }
 
-/** Тем же мостиком пользуется SignalR-клиент — ему тоже нужен свежий токен. */
 export function getAuthBridge(): AuthBridge | null {
   return authBridge
 }
@@ -41,16 +25,15 @@ export type QueryParams = Record<string, string | number | boolean | undefined |
 
 export interface RequestOptions {
   query?: QueryParams
-  /** false — не слать токен и не пытаться обновлять его (логин, регистрация, refresh). */
+  /** false: no token is sent and a 401 does not trigger a refresh (login, register, refresh). */
   auth?: boolean
   signal?: AbortSignal
 }
 
 function buildPath(path: string, query?: QueryParams): string {
-  // Только относительные пути: так запрос физически не может уйти на чужой хост,
-  // даже если в path попадёт что-то из пользовательского ввода.
+  // Relative paths only: a request can never reach another host, even with user input in path.
   if (!path.startsWith('/')) {
-    throw new Error(`Путь должен начинаться с "/": ${path}`)
+    throw new Error(`Path must start with "/": ${path}`)
   }
 
   if (!query) return path
@@ -89,7 +72,7 @@ async function send(
   try {
     return await fetch(url, init)
   } catch (error) {
-    // fetch падает только на сетевых проблемах и отмене; HTTP-коды сюда не попадают.
+    // fetch rejects only on network failure or abort, never on HTTP status codes.
     if (error instanceof DOMException && error.name === 'AbortError') throw error
     throw new NetworkError(error)
   }
@@ -115,7 +98,6 @@ async function toError(response: Response): Promise<ApiError> {
 }
 
 async function readBody<T>(response: Response): Promise<T> {
-  // 204 и пустое тело — у вызывающего кода тип будет void.
   if (response.status === 204 || response.headers.get('Content-Length') === '0') {
     return undefined as T
   }
@@ -134,8 +116,7 @@ async function request<T>(
 
   let response = await send(method, url, body, options)
 
-  // Один повтор после обновления токена. Ровно один — иначе при сломанном
-  // refresh получим бесконечный цикл запросов.
+  // Exactly one retry after a refresh; more would loop forever if refresh is broken.
   if (response.status === 401 && options.auth !== false && authBridge) {
     const refreshed = await authBridge.refreshTokens()
     if (refreshed) {

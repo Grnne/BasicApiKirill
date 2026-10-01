@@ -1,11 +1,9 @@
 <script setup lang="ts">
-// Поле формы: подпись + input. Значение через v-model.
 const model = defineModel<string>({ required: true })
 
 defineProps<{
   label: string
   type?: string
-  /** Подсказка браузеру и менеджеру паролей: username, current-password, new-password, email. */
   autocomplete?: string
   disabled?: boolean
   required?: boolean

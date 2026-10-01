@@ -16,13 +16,11 @@ const presence = usePresenceStore()
 const found = ref<ChatListItem[]>([])
 const isSearching = ref(false)
 
-// Запрос уходит через паузу после последней буквы, а не на каждое нажатие.
 const debouncedQuery = useDebounced(() => props.query)
 
 /**
- * Прошлый поиск отменяем: ответы возвращаются не в том порядке, в каком
- * ушли запросы, и без отмены на экране может остаться выдача по «ба»,
- * когда в поле уже «банан».
+ * The previous search is aborted: responses can arrive out of order, and a stale one would
+ * otherwise overwrite the results for the current query.
  */
 let inFlight: AbortController | null = null
 
@@ -44,7 +42,6 @@ watch(debouncedQuery, async (query) => {
     const response = await chatsApi.searchChats(trimmed, controller.signal)
     found.value = response.items
   } catch {
-    // Отмена — обычное дело, показывать нечего.
     if (!controller.signal.aborted) found.value = []
   } finally {
     if (!controller.signal.aborted) isSearching.value = false
@@ -57,8 +54,7 @@ onMounted(async () => {
 
   await store.load()
 
-  // Одним запросом спрашиваем статусы всех собеседников из списка: события
-  // UserOnlineChanged, случившиеся до нашего подключения, мы не видели.
+  // UserOnlineChanged events from before we connected were missed, so fetch the current statuses.
   const companionIds = store.chats
     .map((chat) => chat.companionId)
     .filter((id): id is string => id !== null)
