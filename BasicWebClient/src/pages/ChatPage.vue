@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { defineAsyncComponent, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { defineAsyncComponent, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
 import BaseButton from '@/shared/ui/BaseButton.vue'
 import ConnectionStatus from '@/features/realtime/ui/ConnectionStatus.vue'
@@ -21,6 +21,7 @@ import { useAuthStore } from '@/features/auth/model/auth.store'
 import { useChatListStore } from '@/features/chat-list/model/chat-list.store'
 import { useMessagesStore } from '@/features/messages/model/messages.store'
 import { useAccountStore } from '@/entities/user/model/account.store'
+import { useChatsStore } from '@/entities/chat/model/chats.store'
 import AvatarCircle from '@/entities/media/ui/AvatarCircle.vue'
 
 const auth = useAuthStore()
@@ -28,6 +29,19 @@ const chatList = useChatListStore()
 const messages = useMessagesStore()
 const account = useAccountStore()
 const router = useRouter()
+const route = useRoute()
+const chats = useChatsStore()
+
+// ?open=<chatId> — from a notification: the chat opens once the list has it.
+watch(
+  () => [route.query.open, chats.loaded] as const,
+  ([open, loaded]) => {
+    if (typeof open !== 'string' || !loaded) return
+    if (chats.get(open)) void chatList.select(open)
+    void router.replace({ query: {} })
+  },
+  { immediate: true },
+)
 
 // Dynamic and dev-only: a static import would put the panel into the prod bundle.
 const EventLog = import.meta.env.DEV

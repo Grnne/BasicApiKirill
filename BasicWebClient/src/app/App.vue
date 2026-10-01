@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { watch } from 'vue'
 
+import { useRouter } from 'vue-router'
+
 import { useAuthStore } from '@/features/auth/model/auth.store'
+import { usePushStore } from '@/features/push/model/push.store'
 import { useRealtimeSession } from '@/features/realtime/lib/useRealtimeSession'
 import { useLogout } from '@/pages/lib/useLogout'
 import NoticeList from '@/shared/ui/NoticeList.vue'
@@ -18,6 +21,25 @@ watch(
     if (lost) void afterSessionLost()
   },
 )
+
+// Push: a subscription this browser holds follows whoever signs in.
+const push = usePushStore()
+watch(
+  () => auth.isAuthenticated,
+  (signedIn) => {
+    if (signedIn) void push.resync()
+  },
+  { immediate: true },
+)
+
+// A click on a notification while the client is open: the service worker asks to open the chat.
+const router = useRouter()
+navigator.serviceWorker?.addEventListener('message', (event: MessageEvent) => {
+  const data = event.data as { type?: unknown; chatId?: unknown } | null
+  if (data?.type === 'open-chat' && typeof data.chatId === 'string') {
+    void router.push({ name: 'chat', query: { open: data.chatId } })
+  }
+})
 </script>
 
 <template>

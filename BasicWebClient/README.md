@@ -50,7 +50,7 @@ origin, как и в проде. Значит нет CORS, нет cross-site coo
 src/
   app/        точка входа, роутер, тема
   pages/      экраны: LoginPage, ChatPage
-  features/   действия: auth, chat-list, chat-info, devices, groups, messages, message-search, privacy, profile, user-search, realtime
+  features/   действия: auth, chat-list, chat-info, devices, groups, messages, message-search, privacy, profile, push, user-search, realtime
   entities/   данные предметной области: user, chat, message (+ presence)
   shared/     инфраструктура: http, hub (SignalR), ui-кирпичики, утилиты
 ```

@@ -4,6 +4,7 @@ import * as authApi from '@/features/auth/api/auth.api'
 import { useAuthStore } from '@/features/auth/model/auth.store'
 import { useChatListStore } from '@/features/chat-list/model/chat-list.store'
 import { useMessagesStore } from '@/features/messages/model/messages.store'
+import { usePushStore } from '@/features/push/model/push.store'
 import { useSyncStore } from '@/features/realtime/model/sync.store'
 import { useNoticesStore } from '@/shared/ui/notices.store'
 
@@ -15,8 +16,11 @@ export function useLogout() {
   const sync = useSyncStore()
   const router = useRouter()
   const notices = useNoticesStore()
+  const push = usePushStore()
 
   async function logout(): Promise<void> {
+    // While the token still works: the next user of this browser gets nothing of this one's.
+    await push.forget()
     messages.reset()
     chatList.reset()
     sync.stop()
@@ -26,6 +30,7 @@ export function useLogout() {
 
   /** Every device; throws if the server did not take it, and then this one stays signed in too. */
   async function logoutEverywhere(): Promise<void> {
+    await push.forget()
     await authApi.logoutAll()
     await logout()
   }
@@ -33,6 +38,8 @@ export function useLogout() {
   /** The session ended elsewhere (another device, another tab): the same clean-up, and say why. */
   async function afterSessionLost(): Promise<void> {
     auth.acknowledgeSessionLost()
+    // The sign-in is gone and the server dropped its subscription; the browser keeps its own.
+    void push.forget()
     messages.reset()
     chatList.reset()
     sync.stop()

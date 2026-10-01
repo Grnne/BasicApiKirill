@@ -5,6 +5,7 @@ import DevicesSection from '@/features/devices/ui/DevicesSection.vue'
 import PasswordSection from '@/features/profile/ui/PasswordSection.vue'
 import ProfileSection from '@/features/profile/ui/ProfileSection.vue'
 import BlockedSection from '@/features/privacy/ui/BlockedSection.vue'
+import PushSection from '@/features/push/ui/PushSection.vue'
 import PrivacySection from '@/features/privacy/ui/PrivacySection.vue'
 import { describeError } from '@/shared/api/problem'
 import { useNoticesStore } from '@/shared/ui/notices.store'
@@ -33,6 +34,7 @@ async function onSignOutEverywhere(): Promise<void> {
     <main class="content">
       <ProfileSection />
       <PasswordSection />
+      <PushSection />
       <PrivacySection />
       <BlockedSection />
       <DevicesSection @sign-out-here="logout" @sign-out-everywhere="onSignOutEverywhere" />
