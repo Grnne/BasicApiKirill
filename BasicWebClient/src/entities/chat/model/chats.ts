@@ -106,7 +106,13 @@ export function applyChatEvent<K extends keyof JournaledEvents>(
       // The new preview and the unread count after a deletion are the server's to compute.
       const deleted = payload as JournaledEvents['MessageDeleted']
       const chat = state.byId[deleted.chatId]
-      if (chat && (chat.lastMessage?.id === deleted.messageId || deleted.seq > chat.lastReadSeq)) {
+      if (!chat) return
+      if (chat.lastMessage?.id === deleted.messageId) {
+        // The reloaded row carries an older last message; with this one kept, the guard against
+        // stale rows would keep the deleted message in the preview.
+        chat.lastMessage = null
+        effects.fetchChats.push(deleted.chatId)
+      } else if (deleted.seq > chat.lastReadSeq) {
         effects.fetchChats.push(deleted.chatId)
       }
       return
