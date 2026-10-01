@@ -13,3 +13,4 @@ export function searchUsers(query: string, signal?: AbortSignal): Promise<Search
 export function getUser(userId: string): Promise<UserProfile> {
   return http.get<UserProfile>(`/api/Users/${userId}`)
 }
+

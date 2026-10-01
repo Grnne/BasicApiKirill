@@ -6,10 +6,7 @@ import { MEMBER_PERMISSIONS, PERMISSION_LABELS, canDeleteGroup, canEditDefaults,
 import { useChatsStore } from '@/entities/chat/model/chats.store'
 import { useChatDetailsStore } from '@/entities/chat/model/details.store'
 import { useConfigStore } from '@/entities/config/config.store'
-import * as mediaApi from '@/entities/media/api'
-import { uploadKind } from '@/entities/media/lib'
-import { measureVideo, putFile } from '@/entities/media/transfer'
-import { uploadFile } from '@/entities/media/upload'
+import { AVATAR_ACCEPT, rejectAvatar, uploadPhoto } from '@/entities/media/photo'
 import AvatarCircle from '@/entities/media/ui/AvatarCircle.vue'
 import { describeError } from '@/shared/api/problem'
 import type { ChatUpdatedDto, PermissionsPatchDto } from '@/shared/api/schema'
@@ -50,11 +47,8 @@ function onPhotoChosen(event: Event): void {
   const file = input.files?.[0] ?? null
   input.value = ''
   if (!file) return
-  if (uploadKind(file, config.config) !== 'photo') {
-    photoError.value = 'Нужна фотография: JPEG, PNG, GIF или WebP'
-    return
-  }
-  photoError.value = null
+  photoError.value = rejectAvatar(file, config.config)
+  if (photoError.value) return
   photo.value = file
   setPreview(file)
 }
@@ -91,8 +85,6 @@ function applyUpdate(update: ChatUpdatedDto): void {
   details.apply('ChatUpdated', update, props.meId)
 }
 
-const uploadDeps = { createUpload: mediaApi.createUpload, completeUpload: mediaApi.completeUpload, putFile, measureVideo }
-
 async function save(): Promise<void> {
   if (!canSave.value) return
   busy.value = true
@@ -104,9 +96,7 @@ async function save(): Promise<void> {
     if (body.title !== undefined || body.memberPermissions) applyUpdate(await chatApi.updateGroup(props.chatId, body))
 
     if (photo.value !== undefined) {
-      const attachment = photo.value
-        ? await uploadFile(photo.value, 'photo', uploadDeps, () => {}, new AbortController().signal)
-        : null
+      const attachment = photo.value ? await uploadPhoto(photo.value) : null
       await chatApi.setChatAvatar(props.chatId, attachment?.id ?? null)
     }
     emit('done')
@@ -155,7 +145,7 @@ onUnmounted(() => {
           <img v-if="preview" :src="preview" alt="" />
           <AvatarCircle v-else :avatar-id="shownAvatarId" :initial="trimmed.charAt(0).toUpperCase() || '?'" :size="56" />
         </button>
-        <input ref="photoInput" type="file" accept="image/jpeg,image/png,image/gif,image/webp" hidden @change="onPhotoChosen" />
+        <input ref="photoInput" type="file" :accept="AVATAR_ACCEPT" hidden @change="onPhotoChosen" />
         <label class="field">
           <span class="label">Название</span>
           <input

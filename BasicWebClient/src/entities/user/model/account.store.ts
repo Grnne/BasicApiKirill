@@ -41,6 +41,11 @@ export const useAccountStore = defineStore('account', () => {
     }
   }
 
+  /** The answer to the user's own change; UserUpdated brings the same. */
+  function setMe(profile: OwnProfileResponseDto): void {
+    me.value = profile
+  }
+
   function isBlocked(userId: string | null | undefined): boolean {
     return !!userId && blocked.value.has(userId)
   }
@@ -51,5 +56,5 @@ export const useAccountStore = defineStore('account', () => {
     blocked.value = new Set()
   }
 
-  return { me, privacy, isBlocked, replaceAll, apply, reset }
+  return { me, privacy, isBlocked, setMe, replaceAll, apply, reset }
 })

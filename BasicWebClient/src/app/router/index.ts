@@ -3,6 +3,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/features/auth/model/auth.store'
 import LoginPage from '@/pages/LoginPage.vue'
 import ChatPage from '@/pages/ChatPage.vue'
+import SettingsPage from '@/pages/SettingsPage.vue'
 
 export const router = createRouter({
   // '/' in dev, '/client/' in prod (vite.config base).
@@ -13,6 +14,7 @@ export const router = createRouter({
     { path: '/login', name: 'login', component: LoginPage },
 
     { path: '/chat', name: 'chat', component: ChatPage, meta: { requiresAuth: true } },
+    { path: '/settings', name: 'settings', component: SettingsPage, meta: { requiresAuth: true } },
 
     { path: '/:pathMatch(.*)*', redirect: '/chat' },
   ],

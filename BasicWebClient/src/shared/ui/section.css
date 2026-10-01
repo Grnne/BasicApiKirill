@@ -1,0 +1,68 @@
+/* Shared look of the settings sections. */
+.section {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-solid);
+}
+.heading {
+  margin: 0;
+  font-size: 15px;
+}
+.row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+.field {
+  display: grid;
+  flex: 1;
+  gap: 4px;
+}
+.label {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+.input {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-solid);
+}
+.input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+.button {
+  padding: 7px 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: #04160b;
+  font-weight: 600;
+}
+.button:disabled {
+  opacity: 0.5;
+}
+.link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+}
+.link.danger {
+  color: var(--danger);
+}
+.error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 12px;
+}
+.hint {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 12px;
+}

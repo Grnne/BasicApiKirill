@@ -4,10 +4,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import * as chatApi from '@/entities/chat/api'
 import { useChatsStore } from '@/entities/chat/model/chats.store'
 import { useConfigStore } from '@/entities/config/config.store'
-import * as mediaApi from '@/entities/media/api'
-import { uploadKind } from '@/entities/media/lib'
-import { measureVideo, putFile } from '@/entities/media/transfer'
-import { uploadFile } from '@/entities/media/upload'
+import { AVATAR_ACCEPT, rejectAvatar, uploadPhoto } from '@/entities/media/photo'
 import type { UserSearchResult } from '@/entities/user/types'
 import { describeError } from '@/shared/api/problem'
 import { useNoticesStore } from '@/shared/ui/notices.store'
@@ -43,13 +40,8 @@ function onPhotoChosen(event: Event): void {
   const file = input.files?.[0] ?? null
   input.value = ''
   if (!file) return
-  // Only what the server decodes as a photo may become an avatar.
-  if (uploadKind(file, config.config) !== 'photo') {
-    photoError.value = 'Нужна фотография: JPEG, PNG, GIF или WebP'
-    return
-  }
-  photoError.value = null
-  setPhoto(file)
+  photoError.value = rejectAvatar(file, config.config)
+  if (!photoError.value) setPhoto(file)
 }
 
 /* ── Members ── */
@@ -65,8 +57,6 @@ const canCreate = computed(() => {
   return !busy.value && length > 0 && length <= maxTitle.value
 })
 
-const uploadDeps = { createUpload: mediaApi.createUpload, completeUpload: mediaApi.completeUpload, putFile, measureVideo }
-
 async function create(): Promise<void> {
   if (!canCreate.value) return
   busy.value = true
@@ -76,7 +66,7 @@ async function create(): Promise<void> {
       { title: title.value, memberIds: picked.value.map((u) => u.userId), photo: photo.value },
       {
         createGroup: chatApi.createGroup,
-        uploadPhoto: (file) => uploadFile(file, 'photo', uploadDeps, () => {}, new AbortController().signal),
+        uploadPhoto: (file) => uploadPhoto(file),
         setChatAvatar: chatApi.setChatAvatar,
       },
     )
@@ -114,7 +104,7 @@ onUnmounted(() => {
           <img v-if="photoPreview" :src="photoPreview" alt="" />
           <span v-else>📷</span>
         </button>
-        <input ref="photoInput" type="file" accept="image/jpeg,image/png,image/gif,image/webp" hidden @change="onPhotoChosen" />
+        <input ref="photoInput" type="file" :accept="AVATAR_ACCEPT" hidden @change="onPhotoChosen" />
         <label class="field">
           <span class="label">Название</span>
           <input ref="titleInput" v-model="title" class="input" type="text" :maxlength="maxTitle" autocomplete="off" />

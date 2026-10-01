@@ -20,6 +20,7 @@ import { useAuthStore } from '@/features/auth/model/auth.store'
 import { useChatListStore } from '@/features/chat-list/model/chat-list.store'
 import { useMessagesStore } from '@/features/messages/model/messages.store'
 import { useAccountStore } from '@/entities/user/model/account.store'
+import AvatarCircle from '@/entities/media/ui/AvatarCircle.vue'
 import { useSyncStore } from '@/features/realtime/model/sync.store'
 
 const auth = useAuthStore()
@@ -102,7 +103,14 @@ async function onLogout(): Promise<void> {
     <header class="bar">
       <span class="brand">Basic<span class="accent">Chat</span></span>
       <ConnectionStatus />
-      <span class="user">{{ account.me?.displayName ?? auth.user?.displayName }}</span>
+      <button type="button" class="user" title="Настройки" @click="router.push({ name: 'settings' })">
+        <AvatarCircle
+          :avatar-id="account.me?.avatarId ?? null"
+          :initial="(account.me?.displayName ?? auth.user?.displayName ?? '?').charAt(0).toUpperCase()"
+          :size="26"
+        />
+        {{ account.me?.displayName ?? auth.user?.displayName }}
+      </button>
       <BaseButton variant="ghost" title="Новая группа" @click="creatingGroup = true">＋</BaseButton>
       <BaseButton variant="ghost" title="Избранное" @click="chatList.openSaved()">★</BaseButton>
       <BaseButton variant="ghost" @click="onLogout">Выйти</BaseButton>
@@ -200,8 +208,19 @@ async function onLogout(): Promise<void> {
   color: var(--accent);
 }
 .user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-left: auto;
+  padding: 2px 8px 2px 2px;
+  border: none;
+  border-radius: 16px;
+  background: none;
   color: var(--text-dim);
+}
+.user:hover {
+  background: var(--surface-hover);
+  color: var(--text);
 }
 .body {
   display: grid;
