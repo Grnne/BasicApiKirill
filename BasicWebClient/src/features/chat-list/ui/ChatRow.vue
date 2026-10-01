@@ -9,10 +9,16 @@ import { STATUS_MARKS, ownStatus } from '@/entities/message/lib/status'
 import { useAuthStore } from '@/features/auth/model/auth.store'
 import { formatTime } from '@/shared/lib/date'
 
-const props = defineProps<{
-  chat: ChatListItem
-  active: boolean
-}>()
+// An absent boolean prop would be cast to false: null means "the global pin".
+const props = withDefaults(
+  defineProps<{
+    chat: ChatListItem
+    active: boolean
+    /** Pinned where the list is shown: globally, or inside the open folder. */
+    pinned?: boolean | null
+  }>(),
+  { pinned: null },
+)
 
 const presence = usePresenceStore()
 const auth = useAuthStore()
@@ -56,7 +62,7 @@ const time = computed(() =>
     <span class="middle">
       <!-- Interpolation only: names and texts come from other users. -->
       <span class="title">
-        <span v-if="chat.pinnedPosition !== null" class="pin" title="Закреплён">📌</span>{{ title }}<span
+        <span v-if="pinned ?? chat.pinnedPosition !== null" class="pin" title="Закреплён">📌</span>{{ title }}<span
           v-if="muted"
           class="muted"
           title="Без звука"

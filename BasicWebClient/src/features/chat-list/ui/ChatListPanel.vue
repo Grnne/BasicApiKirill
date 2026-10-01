@@ -127,6 +127,7 @@ watch(debouncedQuery, async (query) => {
         :key="chat.chatId"
         :chat="chat"
         :active="chat.chatId === store.selectedChatId"
+        :pinned="store.selectedFolder ? store.selectedFolder.pinnedChatIds.includes(chat.chatId) : chat.pinnedPosition !== null"
         :draggable="chat.pinnedPosition !== null && !store.selectedFolder"
         @click="store.select(chat.chatId)"
         @contextmenu.prevent="openMenu(chat, $event)"
