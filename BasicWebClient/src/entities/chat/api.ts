@@ -14,3 +14,13 @@ export function getChatDetail(chatId: string): Promise<ChatDetail> {
 export function openSavedChat(): Promise<ChatListItem> {
   return http.post<ChatListItem>('/api/chats/saved')
 }
+
+/** The caller becomes the owner; members get ChatCreated. Answers the caller's row of the group. */
+export function createGroup(title: string, memberIds: string[]): Promise<ChatListItem> {
+  return http.post<ChatListItem>('/api/chats/groups', { title, memberIds })
+}
+
+/** null removes the photo. Members learn of it through ChatUpdated. */
+export function setChatAvatar(chatId: string, attachmentId: string | null): Promise<void> {
+  return http.put<void>(`/api/chats/${chatId}/avatar`, { attachmentId })
+}

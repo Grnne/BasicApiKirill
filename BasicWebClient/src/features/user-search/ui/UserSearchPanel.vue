@@ -4,7 +4,7 @@ import { ref, watch } from 'vue'
 import AvatarCircle from '@/entities/media/ui/AvatarCircle.vue'
 import type { UserSearchResult } from '@/entities/user/types'
 import { useDebounced } from '@/shared/lib/useDebounced'
-import * as usersApi from '../api/users.api'
+import * as usersApi from '@/entities/user/api'
 
 const props = defineProps<{ query: string }>()
 const emit = defineEmits<{ select: [userId: string] }>()

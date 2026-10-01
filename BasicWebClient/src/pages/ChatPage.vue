@@ -8,6 +8,7 @@ import ChatListPanel from '@/features/chat-list/ui/ChatListPanel.vue'
 import FolderTabs from '@/features/chat-list/ui/FolderTabs.vue'
 import ChatWindow from '@/features/messages/ui/ChatWindow.vue'
 import ChatInfoPanel from '@/features/chat-info/ui/ChatInfoPanel.vue'
+import CreateGroupDialog from '@/features/group-create/ui/CreateGroupDialog.vue'
 import UserSearchPanel from '@/features/user-search/ui/UserSearchPanel.vue'
 import MessageSearchPanel from '@/features/message-search/ui/MessageSearchPanel.vue'
 import { useAuthStore } from '@/features/auth/model/auth.store'
@@ -48,6 +49,14 @@ async function onMessageFound(chatId: string, messageId: string): Promise<void> 
   await chatList.select(chatId)
 }
 
+const creatingGroup = ref(false)
+
+async function onGroupCreated(chatId: string): Promise<void> {
+  creatingGroup.value = false
+  query.value = ''
+  await chatList.select(chatId)
+}
+
 // The chat card stays open while the user goes from chat to chat.
 const infoOpen = ref(false)
 
@@ -73,6 +82,7 @@ async function onLogout(): Promise<void> {
       <span class="brand">Basic<span class="accent">Chat</span></span>
       <ConnectionStatus />
       <span class="user">{{ account.me?.displayName ?? auth.user?.displayName }}</span>
+      <BaseButton variant="ghost" title="Новая группа" @click="creatingGroup = true">＋</BaseButton>
       <BaseButton variant="ghost" title="Избранное" @click="chatList.openSaved()">★</BaseButton>
       <BaseButton variant="ghost" @click="onLogout">Выйти</BaseButton>
     </header>
@@ -110,6 +120,8 @@ async function onLogout(): Promise<void> {
 
       <component :is="EventLog" v-if="EventLog" />
     </div>
+
+    <CreateGroupDialog v-if="creatingGroup" @created="onGroupCreated" @cancel="creatingGroup = false" />
   </div>
 </template>
 
