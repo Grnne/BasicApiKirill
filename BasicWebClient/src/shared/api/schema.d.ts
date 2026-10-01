@@ -2133,6 +2133,86 @@ export interface paths {
         };
         trace?: never;
     };
+    "/api/chats/{chatId}/messages/{messageId}/context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the history around a message.
+         * @description For opening a chat at a found message or the original of a reply: up to half of `limit`
+         *     messages before it, the message itself, the rest after it — oldest first.
+         *     Older pages: `GET …/messages/cursor?cursor={nextCursor}` while `hasMore`; newer ones:
+         *     `GET …/messages/after?seq={last item's seq}` while `hasNewer`.
+         *
+         *     Errors: `403 NOT_A_MEMBER`, `404 MESSAGE_NOT_FOUND` — not in this chat, deleted
+         *     for everyone or by the caller for themselves.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Messages in the window (default 30, max 100). */
+                    limit?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description Chat ID */
+                    chatId: string;
+                    /** @description The message to open the history at. */
+                    messageId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MessageWindowDto"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/chats/{chatId}/messages/{messageId}/reactions": {
         parameters: {
             query?: never;
@@ -2293,6 +2373,74 @@ export interface paths {
                 };
             };
         };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/chats/{chatId}/messages/after": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get messages newer than a seq.
+         * @description Paging forward from history opened in the middle (`…/context`, `…/messages/at`): the
+         *     messages after `seq`, oldest first; `hasNewer` — there are more after the last item.
+         *
+         *     Errors: `403 NOT_A_MEMBER`.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Number of messages per page (default 30, max 100). */
+                    limit?: number;
+                    /** @description The seq of the newest message the client already has. */
+                    seq?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description Chat ID */
+                    chatId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MessageWindowDto"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -6231,6 +6379,17 @@ export interface components {
             /** @description The start of the text; empty when the message was deleted. */
             text: string;
         };
+        /** @description A piece of history that may sit in the middle: older pages by cursor, newer by seq. */
+        MessageWindowDto: {
+            /** @description There are older messages before the first item. */
+            hasMore: boolean;
+            /** @description There are newer messages after the last item: `GET …/messages/after?seq=` its seq. */
+            hasNewer: boolean;
+            /** @description Oldest first. */
+            items: components["schemas"]["MessageDto"][];
+            /** @description Pass as `cursor` to `GET …/messages/cursor` for the page before the first item. */
+            nextCursor: string | null;
+        };
         /**
          * @description The caller's own profile: `AuthResponseDto` minus the tokens. Unlike `UserProfileResponseDto`
          *     it includes the email, which is private to the account owner.
@@ -6723,6 +6882,7 @@ export type MessageForwardDto = components['schemas']['MessageForwardDto'];
 export type MessageLimitsDto = components['schemas']['MessageLimitsDto'];
 export type MessageReactionsDto = components['schemas']['MessageReactionsDto'];
 export type MessageReplyDto = components['schemas']['MessageReplyDto'];
+export type MessageWindowDto = components['schemas']['MessageWindowDto'];
 export type OwnProfileResponseDto = components['schemas']['OwnProfileResponseDto'];
 export type PermissionsPatchDto = components['schemas']['PermissionsPatchDto'];
 export type PinnedChatsDto = components['schemas']['PinnedChatsDto'];

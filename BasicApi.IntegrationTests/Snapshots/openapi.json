@@ -1443,6 +1443,33 @@
         },
         "type": "object"
       },
+      "MessageWindowDto": {
+        "additionalProperties": false,
+        "description": "A piece of history that may sit in the middle: older pages by cursor, newer by seq.",
+        "properties": {
+          "hasMore": {
+            "description": "There are older messages before the first item.",
+            "type": "boolean"
+          },
+          "hasNewer": {
+            "description": "There are newer messages after the last item: `GET …/messages/after?seq=` its seq.",
+            "type": "boolean"
+          },
+          "items": {
+            "description": "Oldest first.",
+            "items": {
+              "$ref": "#/components/schemas/MessageDto"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "description": "Pass as `cursor` to `GET …/messages/cursor` for the page before the first item.",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "OwnProfileResponseDto": {
         "additionalProperties": false,
         "description": "The caller's own profile: `AuthResponseDto` minus the tokens. Unlike `UserProfileResponseDto`\nit includes the email, which is private to the account owner.",
@@ -5647,6 +5674,78 @@
         ]
       }
     },
+    "/api/chats/{chatId}/messages/after": {
+      "get": {
+        "description": "Paging forward from history opened in the middle (`…/context`, `…/messages/at`): the\nmessages after `seq`, oldest first; `hasNewer` — there are more after the last item.\n            \nErrors: `403 NOT_A_MEMBER`.",
+        "parameters": [
+          {
+            "description": "Chat ID",
+            "in": "path",
+            "name": "chatId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The seq of the newest message the client already has.",
+            "in": "query",
+            "name": "seq",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Number of messages per page (default 30, max 100).",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 30,
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageWindowDto"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Forbidden"
+          }
+        },
+        "summary": "Get messages newer than a seq.",
+        "tags": [
+          "Chats"
+        ]
+      }
+    },
     "/api/chats/{chatId}/messages/at": {
       "get": {
         "description": "Returns a page of messages cursor-based, with the most recent message at or before\nthe given date as the last item in the page.\nUse the returned `nextCursor` to scroll further back.\n\nPurpose: \"Jump to March 15\", \"Open chat where I left off\", \"Go to unread messages\".",
@@ -6217,6 +6316,89 @@
           }
         },
         "summary": "Edit a message.",
+        "tags": [
+          "Chats"
+        ]
+      }
+    },
+    "/api/chats/{chatId}/messages/{messageId}/context": {
+      "get": {
+        "description": "For opening a chat at a found message or the original of a reply: up to half of `limit`\nmessages before it, the message itself, the rest after it — oldest first.\nOlder pages: `GET …/messages/cursor?cursor={nextCursor}` while `hasMore`; newer ones:\n`GET …/messages/after?seq={last item's seq}` while `hasNewer`.\n            \nErrors: `403 NOT_A_MEMBER`, `404 MESSAGE_NOT_FOUND` — not in this chat, deleted\nfor everyone or by the caller for themselves.",
+        "parameters": [
+          {
+            "description": "Chat ID",
+            "in": "path",
+            "name": "chatId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The message to open the history at.",
+            "in": "path",
+            "name": "messageId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Messages in the window (default 30, max 100).",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 30,
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageWindowDto"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "summary": "Get the history around a message.",
         "tags": [
           "Chats"
         ]

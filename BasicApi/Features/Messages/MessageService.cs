@@ -26,6 +26,18 @@ public interface IMessageService
         Guid chatId, Guid userId, DateTime date, int limit, CancellationToken ct = default);
 
     /// <summary>
+    /// The history around a message: half of <paramref name="limit"/> before it, the message, then
+    /// newer ones. Errors: 403 <c>NOT_A_MEMBER</c>, 404 <c>MESSAGE_NOT_FOUND</c> (not in the chat
+    /// or not visible to the user).
+    /// </summary>
+    Task<MessageWindowDto> GetContextAsync(
+        Guid chatId, Guid userId, Guid messageId, int limit, CancellationToken ct = default);
+
+    /// <summary>Messages after <paramref name="afterSeq"/>, oldest first. Errors: 403 <c>NOT_A_MEMBER</c>.</summary>
+    Task<MessageWindowDto> GetPageAfterAsync(
+        Guid chatId, Guid userId, long afterSeq, int limit, CancellationToken ct = default);
+
+    /// <summary>
     /// The chat's gallery, newest first: <c>media</c> (photos and videos), <c>files</c>,
     /// <c>voice</c> or <c>links</c>. Errors: 400 <c>INVALID_FILTER</c>/<c>INVALID_CURSOR</c>,
     /// 403 <c>NOT_A_MEMBER</c>.
@@ -142,6 +154,45 @@ public sealed class MessageService(
         // the date, it is simply the last page.
         var firstAfter = await messageRepository.GetFirstSeqAfterAsync(chatId, utcDate, ct);
         return await PageAsync(chatId, userId, firstAfter, limit, ct);
+    }
+
+    public async Task<MessageWindowDto> GetContextAsync(
+        Guid chatId, Guid userId, Guid messageId, int limit, CancellationToken ct = default)
+    {
+        await policy.DemandReadAsync(userId, chatId, ct);
+        var seq = await messageRepository.GetVisibleSeqAsync(chatId, userId, messageId, ct)
+            ?? throw new NotFoundException("The message is not in this chat or not visible to you", "MESSAGE_NOT_FOUND");
+
+        // Half the window before the message, the message, the rest after it.
+        var before = await messageRepository.GetMessagesWithSenderCursorAsync(
+            chatId, userId, seq + 1, limit / 2 + 1, ct);
+        // A limit of 0 still tells whether anything newer exists (the extra row).
+        var after = await messageRepository.GetMessagesWithSenderAfterAsync(
+            chatId, userId, seq, Math.Max(0, limit - before.Items.Count), ct);
+        return await WindowAsync(chatId, userId, before.Items, before.HasMore, after.Items, after.HasMore, ct);
+    }
+
+    public async Task<MessageWindowDto> GetPageAfterAsync(
+        Guid chatId, Guid userId, long afterSeq, int limit, CancellationToken ct = default)
+    {
+        await policy.DemandReadAsync(userId, chatId, ct);
+        var after = await messageRepository.GetMessagesWithSenderAfterAsync(chatId, userId, afterSeq, limit, ct);
+        return await WindowAsync(chatId, userId, [], afterSeq > 0, after.Items, after.HasMore, ct);
+    }
+
+    private async Task<MessageWindowDto> WindowAsync(
+        Guid chatId, Guid viewerId, IReadOnlyList<MessageWithSender> older, bool hasOlder,
+        IReadOnlyList<MessageWithSender> newer, bool hasNewer, CancellationToken ct)
+    {
+        var messages = await MapForViewerAsync([.. older, .. newer], chatId, viewerId, ct);
+        var ordered = messages.OrderBy(m => m.Seq).ToList();
+        return new MessageWindowDto
+        {
+            Items = ordered,
+            NextCursor = hasOlder && ordered.Count > 0 ? MessageCursor.BeforeSeqOf(ordered[0].Seq).Encode() : null,
+            HasMore = hasOlder,
+            HasNewer = hasNewer
+        };
     }
 
     private async Task<CursorPaginatedResponse<MessageDto>> PageAsync(

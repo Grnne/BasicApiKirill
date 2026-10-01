@@ -14,6 +14,13 @@ public interface IMessageRepository
         Guid chatId, Guid viewerId, long? beforeSeq, int limit, CancellationToken ct = default);
 
     /// <summary>
+    /// The same visible messages strictly after <paramref name="afterSeq"/>, oldest first: paging
+    /// forward from a message opened in the middle of the history.
+    /// </summary>
+    Task<CursorResult<MessageWithSender>> GetMessagesWithSenderAfterAsync(
+        Guid chatId, Guid viewerId, long afterSeq, int limit, CancellationToken ct = default);
+
+    /// <summary>
     /// The chat's gallery: messages the viewer sees that carry files of the given kinds, or —
     /// with <paramref name="links"/> — web links; newest first, before <paramref name="beforeSeq"/>.
     /// </summary>
@@ -29,6 +36,9 @@ public interface IMessageRepository
 
     /// <summary>Seq of a message of this chat; null when there is no such message in it.</summary>
     Task<long?> GetSeqAsync(Guid chatId, Guid messageId, CancellationToken ct = default);
+
+    /// <summary>Seq of a message of this chat the viewer can see (not deleted, not hidden by them); else null.</summary>
+    Task<long?> GetVisibleSeqAsync(Guid chatId, Guid viewerId, Guid messageId, CancellationToken ct = default);
 
     /// <summary>
     /// Full-text search within a chat, newest first by seq, before <paramref name="beforeSeq"/>
