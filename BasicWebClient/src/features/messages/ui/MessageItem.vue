@@ -43,6 +43,9 @@ const actions = computed(() =>
     now: Date.now(),
     editWindowHours: config.config.messages.editWindowHours,
     deleteWindowHours: config.config.messages.deleteWindowHours,
+    canDeleteOthers:
+      chats.get(props.message.chatId)?.type === 'group' &&
+      details.get(props.message.chatId)?.myPermissions?.deleteMessages === true,
   }),
 )
 
