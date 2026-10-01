@@ -292,6 +292,38 @@ public class ExceptionHandlingMiddlewareTests
     }
 
     [Fact]
+    public async Task TooLargeBody_Returns413_NotAnError()
+    {
+        // Before: a 500 that Kestrel could not even send — the proxy answered 502 instead.
+        var logger = new FakeLogger<ExceptionHandlingMiddleware>();
+        var middleware = CreateMiddleware(
+            new BadHttpRequestException("Request body too large. The max request body size is 65536 bytes.", 413),
+            out var bodyStream, out var context, logger: logger);
+
+        var doc = await InvokeAndParseAsync(middleware, context, bodyStream);
+
+        Assert.Equal(413, context.Response.StatusCode);
+        Assert.Equal("REQUEST_TOO_LARGE", doc.GetProperty("errorCode").GetString());
+        var record = Assert.Single(logger.Collector.GetSnapshot());
+        Assert.Equal(LogLevel.Information, record.Level);
+    }
+
+    [Fact]
+    public async Task BrokenBody_Returns400_NotAnError()
+    {
+        // A client that went away mid-body is not a server failure.
+        var logger = new FakeLogger<ExceptionHandlingMiddleware>();
+        var middleware = CreateMiddleware(new BadHttpRequestException("Unexpected end of request content.", 400),
+            out var bodyStream, out var context, logger: logger);
+
+        var doc = await InvokeAndParseAsync(middleware, context, bodyStream);
+
+        Assert.Equal(400, context.Response.StatusCode);
+        Assert.Equal("BAD_REQUEST", doc.GetProperty("errorCode").GetString());
+        Assert.Equal(LogLevel.Information, Assert.Single(logger.Collector.GetSnapshot()).Level);
+    }
+
+    [Fact]
     public async Task ResponseAlreadyStarted_LogsAndRethrows_WithoutWritingBody()
     {
         // The headers have already gone to the client — writing ProblemDetails on top is not possible,

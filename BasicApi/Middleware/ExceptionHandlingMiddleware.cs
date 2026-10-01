@@ -55,6 +55,19 @@ public class ExceptionHandlingMiddleware
                 context.Request.Method, context.Request.Path, context.TraceIdentifier);
             throw;
         }
+        catch (BadHttpRequestException ex)
+        {
+            // Kestrel refused the request itself: a body over the limit, or cut short by a client
+            // that went away. The client's doing, not a failure.
+            var tooLarge = ex.StatusCode == StatusCodes.Status413PayloadTooLarge;
+            _logger.LogInformation("{Method} {Path} -> {StatusCode}: {Detail}",
+                context.Request.Method, context.Request.Path, ex.StatusCode, ex.Message);
+
+            await WriteProblemDetailsAsync(context, ex.StatusCode,
+                tooLarge ? "Payload Too Large" : "Bad Request",
+                tooLarge ? "The request is too large." : "The request could not be read.",
+                errorCode: tooLarge ? "REQUEST_TOO_LARGE" : "BAD_REQUEST");
+        }
         catch (DomainException ex)
         {
             var (status, title) = ex switch

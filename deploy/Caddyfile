@@ -23,7 +23,12 @@
 
 	# Caddy sets X-Forwarded-For/-Proto itself and does not trust the same headers
 	# from the client, so the client IP cannot be spoofed through the proxy.
+	# The API takes only JSON, a few KB at most; files go to /media. A bigger body is refused here
+	# with 413 and never reaches the API.
 	handle {
+		request_body {
+			max_size 1MB
+		}
 		reverse_proxy basicapi:8080
 	}
 
