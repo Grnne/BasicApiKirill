@@ -33,7 +33,23 @@ export class Outbox {
     private readonly retryDelaysMs: readonly number[] = [1_000, 3_000, 10_000],
   ) {}
 
-  async deliver(pending: PendingMessage): Promise<boolean> {
+  private readonly queues = new Map<string, Promise<boolean>>()
+
+  /**
+   * One chat's messages go one after another: sent together, they would take their order from
+   * whichever request the server finished first.
+   */
+  deliver(pending: PendingMessage): Promise<boolean> {
+    const previous = this.queues.get(pending.chatId) ?? Promise.resolve(true)
+    const turn = previous.then(() => this.send(pending))
+    this.queues.set(pending.chatId, turn)
+    void turn.then(() => {
+      if (this.queues.get(pending.chatId) === turn) this.queues.delete(pending.chatId)
+    })
+    return turn
+  }
+
+  private async send(pending: PendingMessage): Promise<boolean> {
     const body: SendMessageDto = {
       text: pending.text,
       clientMessageId: pending.clientMessageId,

@@ -128,8 +128,10 @@ describe('reply and forward', () => {
     store.startReply(m1)
     store.send('answer')
 
-    expect(messagesApi.sendMessage).toHaveBeenCalledWith('chat-1', expect.objectContaining({ replyToMessageId: m1.id }))
     expect(store.replyTo).toBeNull()
+    await vi.waitFor(() =>
+      expect(messagesApi.sendMessage).toHaveBeenCalledWith('chat-1', expect.objectContaining({ replyToMessageId: m1.id })),
+    )
   })
 
   it('forwards the selected messages in the chat order with a clientMessageId each', async () => {

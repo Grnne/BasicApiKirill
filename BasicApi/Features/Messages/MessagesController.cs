@@ -334,7 +334,7 @@ public class MessagesController(
     /// <param name="dto">The draft</param>
     /// <param name="ct">Request cancellation.</param>
     [HttpPut("{chatId}/draft")]
-    [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
+    [EnableRateLimiting(ServiceExtensions.ComposerRateLimitPolicy)]
     [RequestSizeLimit(64 * 1024)]
     [ProducesResponseType(typeof(DraftDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -358,7 +358,7 @@ public class MessagesController(
     /// <param name="chatId">Chat ID</param>
     /// <param name="ct">Request cancellation.</param>
     [HttpDelete("{chatId}/draft")]
-    [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
+    [EnableRateLimiting(ServiceExtensions.ComposerRateLimitPolicy)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
@@ -381,7 +381,7 @@ public class MessagesController(
     /// <param name="dto">Typing state</param>
     /// <param name="ct">Request cancellation.</param>
     [HttpPost("{chatId}/typing")]
-    [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
+    [EnableRateLimiting(ServiceExtensions.ComposerRateLimitPolicy)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]

@@ -19,7 +19,7 @@ import { useMessagesStore } from '../model/messages.store'
 import UploadTray from './UploadTray.vue'
 
 /**
- * Typing shares the per-user command limit with sending (20 per 10 s): repeat it only while
+ * Typing has a per-user limit of its own, shared with drafts (20 per 10 s): repeat it only while
  * typing goes on; the server drops it after 6 s without a repeat.
  */
 const TYPING_THROTTLE_MS = 3_000
