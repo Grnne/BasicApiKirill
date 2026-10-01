@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
+import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 
 import { useAuthStore } from '@/features/auth/model/auth.store'
 import { formatDay, parseApiDate } from '@/shared/lib/date'
@@ -40,11 +40,20 @@ async function loadOlderKeepingPosition(): Promise<void> {
   element.scrollTop += element.scrollHeight - heightBefore
 }
 
+/** The newest messages count as read only when someone can see them. */
+function noteSeenIfVisible(): void {
+  if (document.visibilityState === 'visible' && isNearBottom()) store.seen()
+}
+
 function onScroll(): void {
   const element = viewport.value
   if (!element) return
   if (element.scrollTop < LOAD_OLDER_THRESHOLD_PX) void loadOlderKeepingPosition()
+  noteSeenIfVisible()
 }
+
+onMounted(() => document.addEventListener('visibilitychange', noteSeenIfVisible))
+onUnmounted(() => document.removeEventListener('visibilitychange', noteSeenIfVisible))
 
 // Follow new messages only when already at the bottom, not while the user reads history.
 watch(
@@ -53,7 +62,10 @@ watch(
     const isAppend = length > previousLength
     const stick = isNearBottom()
     await nextTick()
-    if (isAppend && stick) scrollToBottom()
+    if (isAppend && stick) {
+      scrollToBottom()
+      noteSeenIfVisible()
+    }
   },
 )
 

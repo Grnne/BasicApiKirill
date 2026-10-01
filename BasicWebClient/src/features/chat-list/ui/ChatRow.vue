@@ -50,7 +50,7 @@ const time = computed(() =>
 
     <span class="right">
       <span class="time">{{ time }}</span>
-      <span v-if="chat.unreadCount > 0" class="badge">{{ chat.unreadCount }}</span>
+      <span v-if="chat.unreadCount > 0 && !active" class="badge">{{ chat.unreadCount }}</span>
     </span>
   </button>
 </template>

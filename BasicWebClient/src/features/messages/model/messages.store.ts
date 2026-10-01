@@ -43,6 +43,7 @@ export const useMessagesStore = defineStore('messages', () => {
   function reset(): void {
     inFlight?.abort()
     inFlight = null
+    clearTimeout(readTimer)
     chatId.value = null
     error.value = ''
     isLoading.value = false
@@ -124,10 +125,26 @@ export const useMessagesStore = defineStore('messages', () => {
     if (chatId.value) history.removePending(chatId.value, clientMessageId)
   }
 
+  /** Pause before /read: a burst of messages on screen is one request. */
+  const READ_DELAY_MS = 500
+  let readTimer: ReturnType<typeof setTimeout> | undefined
+
+  /** The newest message is on screen (the list is at the bottom of a visible tab). */
+  function seen(): void {
+    clearTimeout(readTimer)
+    readTimer = setTimeout(() => void markReadUpToLast(), READ_DELAY_MS)
+  }
+
   async function markReadUpToLast(): Promise<void> {
     const id = chatId.value
     const last = messages.value.at(-1)
+    const chat = chats.get(id)
     if (!id || !last) return
+
+    const unread =
+      !chat || chat.unreadCount > 0 || chat.markedUnread ||
+      (last.senderId !== auth.user?.userId && last.seq > chat.lastReadSeq)
+    if (!unread) return
 
     chats.markReadLocally(id, last.seq)
     try {
@@ -151,6 +168,7 @@ export const useMessagesStore = defineStore('messages', () => {
     retry,
     discard,
     markReadUpToLast,
+    seen,
     reset,
   }
 })
