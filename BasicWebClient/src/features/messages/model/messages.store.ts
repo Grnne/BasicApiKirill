@@ -7,6 +7,7 @@ import { useChatsStore } from '@/entities/chat/model/chats.store'
 import { useHistoryStore } from '@/entities/message/model/history.store'
 import { useAuthStore } from '@/features/auth/model/auth.store'
 import type { Message } from '@/entities/message/types'
+import type { MessageEntityDto } from '@/shared/api/schema'
 import { describeError } from '@/shared/api/problem'
 import { uuid } from '@/shared/lib/uuid'
 import { useNoticesStore } from '@/shared/ui/notices.store'
@@ -116,17 +117,19 @@ export const useMessagesStore = defineStore('messages', () => {
     }
   }
 
-  /** Shows the message at once as "sending"; the stored one replaces it by clientMessageId. */
-  function send(text: string): boolean {
+  /**
+   * Shows the message at once as "sending"; the stored one replaces it by clientMessageId.
+   * The text goes as typed: the server trims it and moves the entities with it.
+   */
+  function send(text: string, entities: MessageEntityDto[] = []): boolean {
     const id = chatId.value
-    const trimmed = text.trim()
-    if (!id || trimmed.length === 0) return false
+    if (!id || text.trim().length === 0) return false
 
     const message = {
       clientMessageId: uuid(),
       chatId: id,
-      text: trimmed,
-      entities: [],
+      text,
+      entities,
       replyToMessageId: replyTo.value?.chatId === id ? replyTo.value.id : null,
       createdAt: new Date().toISOString(),
       state: 'sending' as const,
@@ -203,16 +206,16 @@ export const useMessagesStore = defineStore('messages', () => {
   }
 
   /** The server's answer is applied at once; MessageUpdated brings the same to other devices. */
-  async function saveEdit(text: string): Promise<boolean> {
+  async function saveEdit(text: string, entities: MessageEntityDto[] = []): Promise<boolean> {
     const target = editing.value
-    const trimmed = text.trim()
-    if (!target || trimmed.length === 0) return false
-    if (trimmed === target.text) {
+    if (!target || text.trim().length === 0) return false
+    if (text === target.text && JSON.stringify(entities) === JSON.stringify(target.entities)) {
       editing.value = null
       return true
     }
     try {
-      const updated = await messagesApi.editMessage(target.chatId, target.id, { text: trimmed })
+      // An edit replaces the formatting too: the entities go with the text, or it becomes plain.
+      const updated = await messagesApi.editMessage(target.chatId, target.id, { text, entities })
       history.apply('MessageUpdated', updated, ctx())
       chats.apply('MessageUpdated', updated, ctx())
       editing.value = null

@@ -1,8 +1,15 @@
 <script setup lang="ts">
-import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, shallowRef, watch } from 'vue'
 
+import * as chatApi from '@/entities/chat/api'
+import { useChatsStore } from '@/entities/chat/model/chats.store'
+import type { ChatParticipant } from '@/entities/chat/types'
 import { useConfigStore } from '@/entities/config/config.store'
+import { safeUrl } from '@/entities/message/lib/formatted'
+import FormattedText from '@/entities/message/ui/FormattedText'
+import { useAuthStore } from '@/features/auth/model/auth.store'
 import * as messagesApi from '../api/messages.api'
+import { adjustEntities, insertMention, mentionQuery, setLink, toggleEntity, type Entity } from '../lib/compose'
 import { useMessagesStore } from '../model/messages.store'
 
 /**
@@ -13,14 +20,61 @@ const TYPING_THROTTLE_MS = 3_000
 
 const TYPING_STOP_DELAY_MS = 3_000
 
+const MAX_SUGGESTIONS = 6
+
+const FORMATS = [
+  { type: 'bold', label: 'Ж', title: 'Жирный (Ctrl+B)' },
+  { type: 'italic', label: 'К', title: 'Курсив (Ctrl+I)' },
+  { type: 'underline', label: 'Ч', title: 'Подчёркнутый (Ctrl+U)' },
+  { type: 'strikethrough', label: 'З', title: 'Зачёркнутый (Ctrl+Shift+X)' },
+  { type: 'code', label: '</>', title: 'Моноширинный (Ctrl+Shift+M)' },
+  { type: 'spoiler', label: '▒', title: 'Скрытый (Ctrl+Shift+P)' },
+] as const
+
+const HOTKEYS: Record<string, string> = {
+  b: 'bold',
+  i: 'italic',
+  u: 'underline',
+  'shift+x': 'strikethrough',
+  'shift+m': 'code',
+  'shift+p': 'spoiler',
+}
+
 const store = useMessagesStore()
 const config = useConfigStore()
+const chats = useChatsStore()
+const auth = useAuthStore()
 
 const text = ref('')
+const entities = ref<Entity[]>([])
 const input = ref<HTMLTextAreaElement | null>(null)
+const hasSelection = ref(false)
 
-// Editing puts the message into the field; the draft typed before comes back after.
-let draftBeforeEdit = ''
+const maxLength = computed(() => config.config.messages.maxLength)
+const canSend = computed(() => text.value.trim().length > 0)
+
+function setContent(nextText: string, nextEntities: readonly Entity[]): void {
+  text.value = nextText
+  entities.value = [...nextEntities]
+}
+
+// Editing puts the message into the field; what was typed before comes back after.
+let draftBeforeEdit: { text: string; entities: Entity[] } | null = null
+watch(
+  () => store.editing,
+  async (message, previous) => {
+    if (message) {
+      if (!previous) draftBeforeEdit = { text: text.value, entities: entities.value }
+      setContent(message.text, message.entities)
+      await nextTick()
+      input.value?.focus()
+    } else if (previous) {
+      setContent(draftBeforeEdit?.text ?? '', draftBeforeEdit?.entities ?? [])
+      draftBeforeEdit = null
+    }
+  },
+)
+
 watch(
   () => store.replyTo,
   async (message) => {
@@ -30,22 +84,7 @@ watch(
   },
 )
 
-watch(
-  () => store.editing,
-  async (message, previous) => {
-    if (message) {
-      if (!previous) draftBeforeEdit = text.value
-      text.value = message.text
-      await nextTick()
-      input.value?.focus()
-    } else if (previous) {
-      text.value = draftBeforeEdit
-      draftBeforeEdit = ''
-    }
-  },
-)
-const maxLength = computed(() => config.config.messages.maxLength)
-const canSend = computed(() => text.value.trim().length > 0)
+/* ── Typing ── */
 
 let lastTypingSentAt = 0
 let stopTypingTimer: ReturnType<typeof setTimeout> | undefined
@@ -67,36 +106,178 @@ function stopTyping(): void {
   }
 }
 
-function onInput(): void {
+function noteTyping(): void {
   const chatId = store.chatId
-  if (!chatId) return
+  if (!chatId || store.editing) return
 
   const now = Date.now()
   if (now - lastTypingSentAt > TYPING_THROTTLE_MS) {
     lastTypingSentAt = now
     typing(chatId, true)
   }
-
   clearTimeout(stopTypingTimer)
   stopTypingTimer = setTimeout(stopTyping, TYPING_STOP_DELAY_MS)
 }
 
 onUnmounted(stopTyping)
 
+/* ── Text and formatting ── */
+
+function onInput(event: Event): void {
+  const next = (event.target as HTMLTextAreaElement).value
+  entities.value = adjustEntities(entities.value, text.value, next)
+  text.value = next
+  noteTyping()
+  updateMention()
+}
+
+function onSelect(): void {
+  const el = input.value
+  hasSelection.value = !!el && el.selectionEnd > el.selectionStart
+  updateMention()
+}
+
+async function keepSelection(from: number, to: number): Promise<void> {
+  await nextTick()
+  input.value?.focus()
+  input.value?.setSelectionRange(from, to)
+}
+
+function format(type: string): void {
+  const el = input.value
+  if (!el || el.selectionEnd <= el.selectionStart) return
+  const { selectionStart: from, selectionEnd: to } = el
+  entities.value = toggleEntity(entities.value, type, from, to)
+  void keepSelection(from, to)
+}
+
+/** The link being set: the selection it covers and the address typed so far. */
+const linkDraft = ref<{ from: number; to: number; url: string } | null>(null)
+
+function startLink(): void {
+  const el = input.value
+  if (!el || el.selectionEnd <= el.selectionStart) return
+  const { selectionStart: from, selectionEnd: to } = el
+  const existing = entities.value.find(
+    (e) => e.type === 'link' && e.offset <= from && e.offset + e.length >= to,
+  )
+  linkDraft.value = { from, to, url: existing?.url ?? '' }
+}
+
+function applyLink(): void {
+  const draft = linkDraft.value
+  if (!draft) return
+  const raw = draft.url.trim()
+  // "example.com" means the site, not a relative path.
+  const url = raw === '' ? null : (safeUrl(raw) ?? safeUrl(`https://${raw}`))
+  if (raw !== '' && !url) return
+  entities.value = setLink(entities.value, draft.from, draft.to, url)
+  linkDraft.value = null
+  void keepSelection(draft.to, draft.to)
+}
+
+/* ── Mentions ── */
+
+const members = shallowRef<ChatParticipant[]>([])
+const mention = ref<{ start: number; query: string } | null>(null)
+const activeSuggestion = ref(0)
+
+watch(
+  () => store.chatId,
+  async (chatId) => {
+    members.value = []
+    if (!chatId || chats.get(chatId)?.type !== 'group') return
+    try {
+      const detail = await chatApi.getChatDetail(chatId)
+      if (store.chatId === chatId) members.value = detail.participants
+    } catch {
+      // No suggestions then; a name can still be typed as text.
+    }
+  },
+  { immediate: true },
+)
+
+const suggestions = computed(() => {
+  const m = mention.value
+  if (!m) return []
+  const q = m.query.toLowerCase()
+  return members.value
+    .filter((p) => p.userId !== auth.user?.userId)
+    .filter((p) => p.displayName.toLowerCase().includes(q) || p.username.toLowerCase().startsWith(q))
+    .slice(0, MAX_SUGGESTIONS)
+})
+
+function updateMention(): void {
+  const el = input.value
+  const caret = el && el.selectionStart === el.selectionEnd ? el.selectionStart : -1
+  mention.value = caret >= 0 && members.value.length > 0 ? mentionQuery(text.value, caret) : null
+  activeSuggestion.value = 0
+}
+
+function pickMention(member: ChatParticipant): void {
+  const m = mention.value
+  const el = input.value
+  if (!m || !el) return
+  const result = insertMention(text.value, entities.value, m.start, el.selectionStart, member)
+  setContent(result.text, result.entities)
+  mention.value = null
+  void keepSelection(result.caret, result.caret)
+}
+
+/* ── Sending ── */
+
 async function submit(): Promise<void> {
   if (!canSend.value) return
   if (store.editing) {
-    await store.saveEdit(text.value)
+    await store.saveEdit(text.value, entities.value)
     return
   }
   // Sending failures show on the message itself, with a retry.
-  if (store.send(text.value)) {
-    text.value = ''
+  if (store.send(text.value, entities.value)) {
+    setContent('', [])
     stopTyping()
   }
 }
 
+function onSuggestionKey(event: KeyboardEvent): boolean {
+  const n = suggestions.value.length
+  if (n === 0) return false
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    activeSuggestion.value = (activeSuggestion.value + (event.key === 'ArrowDown' ? 1 : n - 1)) % n
+    return true
+  }
+  if (event.key === 'Enter' || event.key === 'Tab') {
+    const member = suggestions.value[activeSuggestion.value]
+    if (member) pickMention(member)
+    return true
+  }
+  if (event.key === 'Escape') {
+    mention.value = null
+    return true
+  }
+  return false
+}
+
+function onFormatKey(event: KeyboardEvent): boolean {
+  if (!event.ctrlKey && !event.metaKey) return false
+  const key = `${event.shiftKey ? 'shift+' : ''}${event.key.toLowerCase()}`
+  const type = HOTKEYS[key]
+  if (type) {
+    format(type)
+    return true
+  }
+  if (key === 'k') {
+    startLink()
+    return true
+  }
+  return false
+}
+
 function onKeydown(event: KeyboardEvent): void {
+  if (onSuggestionKey(event) || onFormatKey(event)) {
+    event.preventDefault()
+    return
+  }
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault()
     void submit()
@@ -119,19 +300,77 @@ function onKeydown(event: KeyboardEvent): void {
       <span class="quote">{{ store.replyTo.text }}</span>
       <button type="button" class="close" title="Отменить (Esc)" @click="store.cancelReply()">✕</button>
     </div>
+
+    <div class="tools" role="toolbar" aria-label="Форматирование">
+      <button
+        v-for="f in FORMATS"
+        :key="f.type"
+        type="button"
+        class="tool"
+        :title="f.title"
+        :disabled="!hasSelection"
+        @mousedown.prevent
+        @click="format(f.type)"
+      >
+        {{ f.label }}
+      </button>
+      <button
+        type="button"
+        class="tool"
+        title="Ссылка (Ctrl+K)"
+        :disabled="!hasSelection"
+        @mousedown.prevent
+        @click="startLink"
+      >
+        🔗
+      </button>
+    </div>
+
+    <div v-if="linkDraft" class="link">
+      <input
+        v-model="linkDraft.url"
+        class="link-input"
+        type="url"
+        placeholder="https://… (пусто — убрать ссылку)"
+        @keydown.enter.prevent="applyLink"
+        @keydown.esc.prevent="linkDraft = null"
+      />
+      <button type="button" class="tool" @click="applyLink">OK</button>
+    </div>
+
+    <ul v-if="suggestions.length > 0" class="suggestions" role="listbox">
+      <li v-for="(member, index) in suggestions" :key="member.userId">
+        <button
+          type="button"
+          :class="['suggestion', { active: index === activeSuggestion }]"
+          @mousedown.prevent
+          @click="pickMention(member)"
+        >
+          {{ member.displayName }} <span class="username">@{{ member.username }}</span>
+        </button>
+      </li>
+    </ul>
+
     <textarea
       ref="input"
-      v-model="text"
+      :value="text"
       class="input"
       rows="1"
       :maxlength="maxLength"
       placeholder="Написать сообщение"
       @input="onInput"
+      @select="onSelect"
+      @keyup="onSelect"
+      @click="onSelect"
       @keydown="onKeydown"
     />
     <button type="submit" class="send" :disabled="!canSend">
       {{ store.editing ? 'Сохранить' : 'Отправить' }}
     </button>
+
+    <p v-if="entities.length > 0" class="preview">
+      <FormattedText :text="text" :entities="entities" :me-id="auth.user?.userId ?? null" />
+    </p>
   </form>
 </template>
 
@@ -170,6 +409,67 @@ function onKeydown(event: KeyboardEvent): void {
   background: none;
   color: var(--text-dim);
 }
+.tools {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 2px;
+}
+.tool {
+  min-width: 28px;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+.tool:hover:not(:disabled) {
+  border-color: var(--border);
+  color: var(--text);
+}
+.tool:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.link {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 6px;
+}
+.link-input {
+  flex: 1;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+.suggestions {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-solid);
+  list-style: none;
+}
+.suggestion {
+  display: block;
+  width: 100%;
+  padding: 5px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+.suggestion.active,
+.suggestion:hover {
+  background: var(--surface-hover);
+}
+.username {
+  color: var(--text-dim);
+  font-size: 12px;
+}
 .input {
   min-height: 38px;
   max-height: 140px;
@@ -183,9 +483,6 @@ function onKeydown(event: KeyboardEvent): void {
   border-color: var(--accent);
   outline: none;
 }
-.input:disabled {
-  opacity: 0.5;
-}
 .send {
   padding: 0 16px;
   border: none;
@@ -198,5 +495,26 @@ function onKeydown(event: KeyboardEvent): void {
   background: var(--surface-hover);
   color: var(--text-faint);
   cursor: default;
+}
+.preview {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.preview :deep(code) {
+  padding: 0 4px;
+  background: var(--surface-hover);
+  font-family: var(--font-mono);
+}
+.preview :deep(.mention),
+.preview :deep(a) {
+  color: var(--accent);
+}
+.preview :deep(.spoiler:not(.revealed)) {
+  background: var(--text-dim);
 }
 </style>
