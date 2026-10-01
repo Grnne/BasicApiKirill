@@ -57,10 +57,15 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function clearSession(): void {
+    forgetSession()
+    removeLocal(REFRESH_TOKEN_KEY)
+  }
+
+  /** This tab's session only: the stored token may be another tab's sign-in. */
+  function forgetSession(): void {
     accessToken.value = null
     refreshToken.value = null
     user.value = null
-    removeLocal(REFRESH_TOKEN_KEY)
   }
 
   /**
@@ -93,7 +98,16 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     try {
-      applyAuth(await authApi.refresh(token))
+      const response = await authApi.refresh(token)
+      if (user.value && response.userId !== user.value.userId) {
+        // The stored token was someone else's: another tab signed out and signed in as another
+        // user. Their pair stays theirs (the old one is used up now); this tab's session ended.
+        writeLocal(REFRESH_TOKEN_KEY, response.refreshToken)
+        forgetSession()
+        sessionLost.value = true
+        return false
+      }
+      applyAuth(response)
       return true
     } catch (error) {
       // Only a 401 means the token is dead; network errors and 5xx keep the session.
