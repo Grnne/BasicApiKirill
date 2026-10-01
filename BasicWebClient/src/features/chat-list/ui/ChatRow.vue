@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 
 import type { ChatListItem } from '@/entities/chat/types'
-import { chatInitial, chatTitle } from '@/entities/chat/lib'
+import { chatInitial, chatTitle, isMutedNow } from '@/entities/chat/lib'
 import { usePresenceStore } from '@/entities/user/presence.store'
 import { messagePreview } from '@/entities/message/lib/preview'
 import { STATUS_MARKS, ownStatus } from '@/entities/message/lib/status'
@@ -22,6 +22,8 @@ const title = computed(() => chatTitle(props.chat))
 const isCompanionOnline = computed(
   () => props.chat.type === 'private' && presence.isOnline(props.chat.companionId),
 )
+
+const muted = computed(() => isMutedNow(props.chat))
 
 const isTyping = computed(() => presence.isSomeoneTyping(props.chat.chatId))
 const initial = computed(() => chatInitial(props.chat))
@@ -54,7 +56,12 @@ const time = computed(() =>
     <span class="middle">
       <!-- Interpolation only: names and texts come from other users. -->
       <span class="title">
-        <span v-if="chat.pinnedPosition !== null" class="pin" title="Закреплён">📌</span>{{ title }}
+        <span v-if="chat.pinnedPosition !== null" class="pin" title="Закреплён">📌</span>{{ title }}<span
+          v-if="muted"
+          class="muted"
+          title="Без звука"
+          >🔕</span
+        >
       </span>
       <span :class="['preview', { typing: isTyping }]">
         <span v-if="chat.draft && !active && !isTyping" class="draft">Черновик: </span>{{ preview }}
@@ -70,7 +77,7 @@ const time = computed(() =>
       </span>
       <span v-if="!active" class="badges">
         <span v-if="chat.unreadMentionCount > 0" class="badge mention" title="Вас упомянули">@</span>
-        <span v-if="chat.unreadCount > 0" class="badge">{{ chat.unreadCount }}</span>
+        <span v-if="chat.unreadCount > 0" :class="['badge', { quiet: muted }]">{{ chat.unreadCount }}</span>
         <span v-else-if="chat.markedUnread" class="badge dot" title="Помечен непрочитанным" />
       </span>
     </span>
@@ -128,6 +135,13 @@ const time = computed(() =>
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.muted {
+  margin-left: 4px;
+  font-size: 11px;
+}
+.badge.quiet {
+  background: var(--text-faint);
 }
 .pin {
   margin-right: 4px;

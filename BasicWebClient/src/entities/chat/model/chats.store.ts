@@ -26,6 +26,8 @@ export const useChatsStore = defineStore('chats', () => {
   const snapshotVersion = ref(0)
 
   const list = computed(() => sortedChats(state.value))
+  const mainList = computed(() => list.value.filter((c) => !c.archived))
+  const archivedList = computed(() => list.value.filter((c) => c.archived))
 
   function get(chatId: string | null | undefined): ChatListItem | null {
     return chatId ? state.value.byId[chatId] ?? null : null
@@ -101,5 +103,5 @@ export const useChatsStore = defineStore('chats', () => {
     loaded.value = false
   }
 
-  return { list, folders, loaded, snapshotVersion, get, replaceAll, put, apply, preview, markReadLocally, patch, reset }
+  return { list, mainList, archivedList, folders, loaded, snapshotVersion, get, replaceAll, put, apply, preview, markReadLocally, patch, reset }
 })

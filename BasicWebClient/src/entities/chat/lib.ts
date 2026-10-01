@@ -11,3 +11,9 @@ export function chatTitle(chat: ChatListItem): string {
 export function chatInitial(chat: ChatListItem): string {
   return chatTitle(chat).trim().charAt(0).toUpperCase() || '?'
 }
+
+/** Muted now: forever (no until) or until a moment still ahead. */
+export function isMutedNow(chat: ChatListItem, now = Date.now()): boolean {
+  if (!chat.isMuted) return false
+  return chat.mutedUntil === null || Date.parse(chat.mutedUntil) > now
+}

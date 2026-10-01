@@ -78,9 +78,25 @@ export const useChatListStore = defineStore('chatList', () => {
     return command(() => chatsApi.reorderPinned(chatIds))
   }
 
+  function archive(chatId: string, archived: boolean): Promise<void> {
+    // The server unpins an archived chat (PinnedChatsChanged follows).
+    if (archived) chats.patch(chatId, { pinnedPosition: null })
+    return command(async () => chats.apply('ChatStateChanged', await chatsApi.setArchived(chatId, archived), ctx()))
+  }
+
+  /** untilMs: when the mute ends; null — forever. */
+  function mute(chatId: string, untilMs: number | null): Promise<void> {
+    const until = untilMs === null ? undefined : new Date(untilMs).toISOString()
+    return command(async () => chats.apply('ChatStateChanged', await chatsApi.setMuted(chatId, true, until), ctx()))
+  }
+
+  function unmute(chatId: string): Promise<void> {
+    return command(async () => chats.apply('ChatStateChanged', await chatsApi.setMuted(chatId, false), ctx()))
+  }
+
   function reset(): void {
     selectedChatId.value = null
   }
 
-  return { selectedChatId, selectedChat, select, deselect, openPrivateChat, markUnread, markRead, pin, reorderPinned, command, reset }
+  return { selectedChatId, selectedChat, select, deselect, openPrivateChat, markUnread, markRead, pin, reorderPinned, archive, mute, unmute, command, reset }
 })

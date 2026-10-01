@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 import type { ChatListItem } from '@/entities/chat/types'
 import { useChatsStore } from '@/entities/chat/model/chats.store'
@@ -13,6 +13,10 @@ const props = defineProps<{ query: string }>()
 
 const store = useChatListStore()
 const chats = useChatsStore()
+
+const showArchive = ref(false)
+const visible = computed(() => (showArchive.value ? chats.archivedList : chats.mainList))
+const archiveUnread = computed(() => chats.archivedList.reduce((n, c) => n + c.unreadCount, 0))
 
 /** The chat whose menu is open and where (right click or long press on a row). */
 const menu = ref<{ chat: ChatListItem; x: number; y: number } | null>(null)
@@ -38,7 +42,7 @@ function onDrop(target: ChatListItem): void {
   const moving = dragged.value
   dragged.value = null
   if (!moving || moving === target.chatId) return
-  const order = chats.list.filter((c) => c.pinnedPosition !== null).map((c) => c.chatId)
+  const order = chats.mainList.filter((c) => c.pinnedPosition !== null).map((c) => c.chatId)
   const without = order.filter((id) => id !== moving)
   without.splice(without.indexOf(target.chatId), 0, moving)
   void store.reorderPinned(without)
@@ -83,7 +87,10 @@ watch(debouncedQuery, async (query) => {
 
 <template>
   <section class="panel">
-    <h2 class="heading">{{ query.trim() ? 'Найденные чаты' : 'Чаты' }}</h2>
+    <h2 class="heading">
+      <button v-if="showArchive && !query.trim()" type="button" class="back" @click="showArchive = false">←</button>
+      {{ query.trim() ? 'Найденные чаты' : showArchive ? 'Архив' : 'Чаты' }}
+    </h2>
 
     <p v-if="!chats.loaded" class="note">загрузка…</p>
 
@@ -100,9 +107,18 @@ watch(debouncedQuery, async (query) => {
     </template>
 
     <template v-else>
-      <p v-if="chats.list.length === 0" class="note">пока ни одного чата</p>
+      <button
+        v-if="!showArchive && chats.archivedList.length > 0"
+        type="button"
+        class="archive-row"
+        @click="showArchive = true"
+      >
+        🗄 Архив <span class="archive-count">{{ chats.archivedList.length }}</span>
+        <span v-if="archiveUnread > 0" class="archive-unread">{{ archiveUnread }}</span>
+      </button>
+      <p v-if="visible.length === 0" class="note">{{ showArchive ? 'архив пуст' : 'пока ни одного чата' }}</p>
       <ChatRow
-        v-for="chat in chats.list"
+        v-for="chat in visible"
         :key="chat.chatId"
         :chat="chat"
         :active="chat.chatId === store.selectedChatId"
@@ -133,6 +149,42 @@ watch(debouncedQuery, async (query) => {
   font-weight: 600;
   letter-spacing: 0.7px;
   text-transform: uppercase;
+}
+.back {
+  margin-right: 6px;
+  padding: 0 6px;
+  border: none;
+  background: none;
+  color: var(--text-dim);
+}
+.archive-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  text-align: left;
+}
+.archive-row:hover {
+  background: var(--surface-hover);
+}
+.archive-count {
+  color: var(--text-faint);
+  font-size: 12px;
+}
+.archive-unread {
+  margin-left: auto;
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 9px;
+  background: var(--text-faint);
+  color: var(--bg);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
 }
 .note {
   margin: 0;

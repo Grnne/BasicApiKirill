@@ -13,6 +13,8 @@ vi.mock('../api/chats.api', () => ({
   markRead: vi.fn(async () => {}),
   setPinned: vi.fn(),
   reorderPinned: vi.fn(async () => {}),
+  setArchived: vi.fn(),
+  setMuted: vi.fn(),
   createPrivateChat: vi.fn(),
   searchChats: vi.fn(),
 }))
@@ -76,5 +78,32 @@ describe('pinned chats', () => {
     await done
 
     expect(chatsApi.reorderPinned).toHaveBeenCalledWith(['b', 'a'])
+  })
+})
+
+describe('archive and mute', () => {
+  it('archiving moves the chat to the archive list and unpins it', async () => {
+    const chats = useChatsStore()
+    chats.replaceAll([chat({ chatId: 'a', pinnedPosition: 1 }), chat({ chatId: 'b' })], [])
+    vi.mocked(chatsApi.setArchived).mockResolvedValue({ chatId: 'a', archived: true, isMuted: false, mutedUntil: null })
+
+    await useChatListStore().archive('a', true)
+
+    expect(chats.mainList.map((c) => c.chatId)).toEqual(['b'])
+    expect(chats.archivedList.map((c) => c.chatId)).toEqual(['a'])
+    expect(chats.get('a')!.pinnedPosition).toBeNull()
+  })
+
+  it('mute sends the end moment; forever sends none', async () => {
+    const chats = useChatsStore()
+    chats.replaceAll([chat()], [])
+    vi.mocked(chatsApi.setMuted).mockResolvedValue({ chatId: 'chat-1', archived: false, isMuted: true, mutedUntil: null })
+
+    await useChatListStore().mute('chat-1', Date.UTC(2026, 9, 1, 13))
+    expect(chatsApi.setMuted).toHaveBeenLastCalledWith('chat-1', true, '2026-10-01T13:00:00.000Z')
+
+    await useChatListStore().mute('chat-1', null)
+    expect(chatsApi.setMuted).toHaveBeenLastCalledWith('chat-1', true, undefined)
+    expect(chats.get('chat-1')!.isMuted).toBe(true)
   })
 })
