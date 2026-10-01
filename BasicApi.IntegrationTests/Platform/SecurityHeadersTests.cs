@@ -47,6 +47,20 @@ public class SecurityHeadersTests(PostgresFixture db)
     }
 
     [Fact]
+    public async Task ServiceWorker_MayComeFromTheSiteOnly()
+    {
+        // The client's push notifications run in a service worker; spelled out rather than left to
+        // the fallback chain (worker-src → child-src → script-src).
+        await using var factory = new ApiFactory(db.ConnectionString);
+        using var client = factory.CreateClient();
+
+        var csp = Assert.Single((await client.GetAsync("/health/live")).Headers.GetValues("Content-Security-Policy"));
+        var directives = csp.Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Contains("worker-src 'self'", directives);
+    }
+
+    [Fact]
     public async Task FilesFromAnotherOrigin_AreAllowedOnlyFromTheStorage()
     {
         await using var factory = new ApiFactory(db.ConnectionString, new Dictionary<string, string?>

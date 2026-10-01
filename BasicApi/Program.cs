@@ -23,7 +23,22 @@ public class Program
     public const string ContentSecurityPolicy =
         "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
         "img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; connect-src 'self'; " +
-        "frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'";
+        "worker-src 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'";
+
+    /// <summary>
+    /// Cache-Control for a file of the web client. Build assets carry a content hash in the name, so
+    /// they are cached for good; index.html and the service worker keep their names, so they are
+    /// revalidated every time — otherwise users would stay on an old version. Null — the default.
+    /// </summary>
+    public static string? ClientCacheControl(string path)
+    {
+        if (path.StartsWith("/client/assets/", StringComparison.OrdinalIgnoreCase))
+            return "public,max-age=31536000,immutable";
+        if (path.EndsWith("index.html", StringComparison.OrdinalIgnoreCase) ||
+            path.Equals("/client/sw.js", StringComparison.OrdinalIgnoreCase))
+            return "no-cache";
+        return null;
+    }
 
     /// <summary>
     /// The policy with the file storage allowed for pictures, media and uploads: clients load
@@ -113,21 +128,8 @@ public class Program
         {
             OnPrepareResponse = context =>
             {
-                var path = context.Context.Request.Path.Value ?? string.Empty;
-
-                // Build file names contain a content hash: when the file changes,
-                // the name changes. So they can be cached forever.
-                if (path.StartsWith("/client/assets/", StringComparison.OrdinalIgnoreCase))
-                {
-                    context.Context.Response.Headers[HeaderNames.CacheControl] =
-                        "public,max-age=31536000,immutable";
-                }
-                // But index.html must be revalidated every time, otherwise
-                // the user would stay on an old version of the app.
-                else if (path.EndsWith("index.html", StringComparison.OrdinalIgnoreCase))
-                {
-                    context.Context.Response.Headers[HeaderNames.CacheControl] = "no-cache";
-                }
+                if (ClientCacheControl(context.Context.Request.Path.Value ?? string.Empty) is { } cacheControl)
+                    context.Context.Response.Headers[HeaderNames.CacheControl] = cacheControl;
             }
         });
 
