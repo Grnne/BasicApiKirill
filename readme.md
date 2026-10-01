@@ -18,7 +18,7 @@ docker-compose up -d
 ## Проверки
 
 ```powershell
-./scripts/test.ps1          # сборка, юнит- и интеграционные тесты, аудит пакетов (нужен Docker)
+./scripts/test.ps1          # сборка, тесты клиента, юнит- и интеграционные тесты, аудит пакетов (нужны Docker и Node.js)
 ./scripts/test.ps1 -Image   # плюс сборка прод-образа
 ```
 
@@ -33,6 +33,7 @@ CI (GitHub Actions) запускает то же на каждый push. Деп�
 | REST API | `/swagger` (в проде — с `Swagger:Enabled`) | ручки, модели, коды ответов |
 | SignalR | `/signalr-docs`, эндпоинт `/hubs/chat` | методы хаба и события |
 | Архитектура | [docs/architecture.md](docs/architecture.md) | устройство проекта, правила зависимостей, ключевые решения |
+| Веб-клиент | [BasicWebClient/README.md](BasicWebClient/README.md) | запуск в разработке, структура, синхронизация, сессии, push |
 | Изменения контракта | [docs/api-contract-changes.md](docs/api-contract-changes.md) | что поменялось для клиентов, справочник кодов ошибок |
 | Деплой | [docs/deploy.md](docs/deploy.md) | бэкап, запуск, проверка, откат, push-ключи |
 | Ручная проверка | [docs/manual-checklist.md](docs/manual-checklist.md) | чек-лист клиента, известные проблемы, журнал прогонов |
