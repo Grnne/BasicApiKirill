@@ -5,6 +5,7 @@ import { useAuthStore } from '@/features/auth/model/auth.store'
 import { useChatListStore } from '@/features/chat-list/model/chat-list.store'
 import { useMessagesStore } from '@/features/messages/model/messages.store'
 import { useSyncStore } from '@/features/realtime/model/sync.store'
+import { useNoticesStore } from '@/shared/ui/notices.store'
 
 /** Logging out from any page: nothing of the user may survive it, so stores go before the tokens. */
 export function useLogout() {
@@ -13,6 +14,7 @@ export function useLogout() {
   const messages = useMessagesStore()
   const sync = useSyncStore()
   const router = useRouter()
+  const notices = useNoticesStore()
 
   async function logout(): Promise<void> {
     messages.reset()
@@ -28,5 +30,16 @@ export function useLogout() {
     await logout()
   }
 
-  return { logout, logoutEverywhere }
+  /** The session ended elsewhere (another device, another tab): the same clean-up, and say why. */
+  async function afterSessionLost(): Promise<void> {
+    auth.acknowledgeSessionLost()
+    messages.reset()
+    chatList.reset()
+    sync.stop()
+    notices.push('Сеанс завершён — войдите снова', 'info')
+    const current = router.currentRoute.value
+    if (current.meta.requiresAuth) await router.replace({ name: 'login', query: { redirect: current.fullPath } })
+  }
+
+  return { logout, logoutEverywhere, afterSessionLost }
 }

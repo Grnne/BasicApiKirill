@@ -16,11 +16,15 @@ export function tokenExpiresAt(token: string): number | null {
   }
 }
 
-/** The access token for a hub (re)connect, refreshed first if it is missing or about to expire. */
-export async function freshAccessToken(bridge: AuthBridge, now = Date.now()): Promise<string> {
+/**
+ * The access token for a hub (re)connect, refreshed first if it is missing or about to expire.
+ * `force` — refresh anyway: after the server dropped the connection, a still valid access token
+ * says nothing about the sign-in (signed out from another device); the refresh does.
+ */
+export async function freshAccessToken(bridge: AuthBridge, now = Date.now(), force = false): Promise<string> {
   const token = bridge.getAccessToken()
   const expiresAt = token ? tokenExpiresAt(token) : null
-  if (!token || (expiresAt !== null && expiresAt - now < EXPIRY_SKEW_MS)) {
+  if (force || !token || (expiresAt !== null && expiresAt - now < EXPIRY_SKEW_MS)) {
     await bridge.refreshTokens()
   }
   return bridge.getAccessToken() ?? ''

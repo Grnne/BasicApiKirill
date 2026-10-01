@@ -93,6 +93,9 @@ export const useHubStore = defineStore('hub', () => {
     if (!(await connect())) retry.schedule()
   }
 
+  /** The connection dropped: the next connect checks the sign-in first (see freshAccessToken). */
+  let verifySession = false
+
   async function connect(): Promise<boolean> {
     if (!wanted) return true
     if (connection.value || status.value === 'connecting') return true
@@ -105,7 +108,9 @@ export const useHubStore = defineStore('hub', () => {
         // would get 401 and end the session's realtime until F5.
         accessTokenFactory: async () => {
           const bridge = getAuthBridge()
-          return bridge ? freshAccessToken(bridge) : ''
+          const force = verifySession
+          verifySession = false
+          return bridge ? freshAccessToken(bridge, Date.now(), force) : ''
         },
       })
       .withAutomaticReconnect(RECONNECT_DELAYS)
@@ -116,6 +121,7 @@ export const useHubStore = defineStore('hub', () => {
 
     hub.onreconnecting(() => {
       status.value = 'reconnecting'
+      verifySession = true
     })
 
     hub.onreconnected(() => {
@@ -126,6 +132,7 @@ export const useHubStore = defineStore('hub', () => {
 
     hub.onclose(() => {
       if (connection.value !== hub) return
+      verifySession = true
       status.value = 'disconnected'
       connection.value = null
       // SignalR's reconnect gave up (or the server closed it): keep trying while logged in.

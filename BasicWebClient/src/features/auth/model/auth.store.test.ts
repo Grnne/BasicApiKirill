@@ -2,6 +2,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { AuthResponse } from '@/entities/user/auth.types'
+import { ApiError } from '@/shared/api/problem'
 import * as authApi from '../api/auth.api'
 import { useAuthStore } from './auth.store'
 
@@ -48,5 +49,32 @@ describe('refresh across tabs', () => {
 
     expect(await auth.refreshTokens()).toBe(false)
     expect(authApi.refresh).not.toHaveBeenCalled()
+  })
+})
+
+describe('a session that ends by itself', () => {
+  it('signed out from another device: the refresh is refused and the session counts as lost', async () => {
+    localStorage.setItem(KEY, 'token-1')
+    const auth = useAuthStore()
+    await auth.restoreSession().catch(() => {})
+    vi.mocked(authApi.refresh).mockRejectedValue(new ApiError(401, { errorCode: 'SESSION_REVOKED' }))
+
+    expect(await auth.refreshTokens()).toBe(false)
+
+    expect(auth.isAuthenticated).toBe(false)
+    expect(auth.sessionLost).toBe(true)
+  })
+
+  it('an own logout is not a lost session', async () => {
+    vi.mocked(authApi.refresh).mockResolvedValue(answer('token-2'))
+    vi.mocked(authApi.logout).mockResolvedValue(undefined)
+    localStorage.setItem(KEY, 'token-1')
+    const auth = useAuthStore()
+    await auth.refreshTokens()
+
+    await auth.logout()
+
+    expect(auth.isAuthenticated).toBe(false)
+    expect(auth.sessionLost).toBe(false)
   })
 })

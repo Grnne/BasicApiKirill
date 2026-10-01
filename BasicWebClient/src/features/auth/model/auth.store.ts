@@ -41,6 +41,21 @@ export const useAuthStore = defineStore('auth', () => {
     writeLocal(REFRESH_TOKEN_KEY, response.refreshToken)
   }
 
+  /**
+   * The session ended by itself — signed out from another device or tab, the password changed
+   * elsewhere — rather than by the user's logout here. The app then takes the user to the login.
+   */
+  const sessionLost = ref(false)
+
+  function loseSession(): void {
+    clearSession()
+    sessionLost.value = true
+  }
+
+  function acknowledgeSessionLost(): void {
+    sessionLost.value = false
+  }
+
   function clearSession(): void {
     accessToken.value = null
     refreshToken.value = null
@@ -73,7 +88,7 @@ export const useAuthStore = defineStore('auth', () => {
     const token = isStorageAvailable() ? readLocal(REFRESH_TOKEN_KEY) : refreshToken.value
     if (!token) {
       // Logged out in another tab.
-      if (refreshToken.value) clearSession()
+      if (refreshToken.value) loseSession()
       return false
     }
 
@@ -82,7 +97,7 @@ export const useAuthStore = defineStore('auth', () => {
       return true
     } catch (error) {
       // Only a 401 means the token is dead; network errors and 5xx keep the session.
-      if (error instanceof ApiError && error.isUnauthorized) clearSession()
+      if (error instanceof ApiError && error.isUnauthorized) loseSession()
       return false
     }
   }
@@ -133,5 +148,7 @@ export const useAuthStore = defineStore('auth', () => {
     logout,
     refreshTokens,
     restoreSession,
+    sessionLost,
+    acknowledgeSessionLost,
   }
 })

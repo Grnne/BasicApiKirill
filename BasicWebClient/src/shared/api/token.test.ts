@@ -71,3 +71,13 @@ describe('freshAccessToken', () => {
     expect(await freshAccessToken(bridge(null, null), NOW)).toBe('')
   })
 })
+
+describe('freshAccessToken after the connection was dropped', () => {
+  it('refreshes even a live token: the refresh is what tells whether the sign-in is still open', async () => {
+    const live = jwt(NOW / 1000 + 600)
+    const b = bridge(live, 'next')
+
+    expect(await freshAccessToken(b, NOW, true)).toBe('next')
+    expect(b.refreshTokens).toHaveBeenCalledTimes(1)
+  })
+})
