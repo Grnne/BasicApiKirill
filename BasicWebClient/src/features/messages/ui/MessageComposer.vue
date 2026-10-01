@@ -331,7 +331,8 @@ const suggestions = computed(() => {
 function updateMention(): void {
   const el = input.value
   const caret = el && el.selectionStart === el.selectionEnd ? el.selectionStart : -1
-  mention.value = caret >= 0 && members.value.length > 0 ? mentionQuery(text.value, caret) : null
+  // Kept without members too: they may still be loading, the suggestions follow when they come.
+  mention.value = caret >= 0 ? mentionQuery(text.value, caret) : null
   activeSuggestion.value = 0
 }
 
