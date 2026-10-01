@@ -6,12 +6,20 @@ import { useChatsStore } from '@/entities/chat/model/chats.store'
 import { useDebounced } from '@/shared/lib/useDebounced'
 import * as chatsApi from '../api/chats.api'
 import { useChatListStore } from '../model/chat-list.store'
+import ChatMenu from './ChatMenu.vue'
 import ChatRow from './ChatRow.vue'
 
 const props = defineProps<{ query: string }>()
 
 const store = useChatListStore()
 const chats = useChatsStore()
+
+/** The chat whose menu is open and where (right click or long press on a row). */
+const menu = ref<{ chat: ChatListItem; x: number; y: number } | null>(null)
+
+function openMenu(chat: ChatListItem, event: MouseEvent): void {
+  menu.value = { chat, x: event.clientX, y: event.clientY }
+}
 
 const found = ref<ChatListItem[]>([])
 const isSearching = ref(false)
@@ -76,8 +84,11 @@ watch(debouncedQuery, async (query) => {
         :chat="chat"
         :active="chat.chatId === store.selectedChatId"
         @click="store.select(chat.chatId)"
+        @contextmenu.prevent="openMenu(chat, $event)"
       />
     </template>
+
+    <ChatMenu v-if="menu" :chat="menu.chat" :x="menu.x" :y="menu.y" @close="menu = null" />
   </section>
 </template>
 

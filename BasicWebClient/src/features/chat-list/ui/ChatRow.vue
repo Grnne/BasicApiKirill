@@ -63,7 +63,11 @@ const time = computed(() =>
         </span>
         {{ time }}
       </span>
-      <span v-if="chat.unreadCount > 0 && !active" class="badge">{{ chat.unreadCount }}</span>
+      <span v-if="!active" class="badges">
+        <span v-if="chat.unreadMentionCount > 0" class="badge mention" title="Вас упомянули">@</span>
+        <span v-if="chat.unreadCount > 0" class="badge">{{ chat.unreadCount }}</span>
+        <span v-else-if="chat.markedUnread" class="badge dot" title="Помечен непрочитанным" />
+      </span>
     </span>
   </button>
 </template>
@@ -149,6 +153,16 @@ const time = computed(() =>
   font-size: 11px;
   font-weight: 700;
   text-align: center;
+}
+.badges {
+  display: flex;
+  gap: 3px;
+}
+.badge.dot {
+  min-width: 10px;
+  height: 10px;
+  margin-top: 4px;
+  padding: 0;
 }
 .status {
   margin-right: 2px;

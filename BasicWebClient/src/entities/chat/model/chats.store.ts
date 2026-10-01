@@ -89,11 +89,17 @@ export const useChatsStore = defineStore('chats', () => {
     chat.markedUnread = false
   }
 
+  /** An optimistic change of one row; the server's event confirms or corrects it. */
+  function patch(chatId: string, change: Partial<ChatListItem>): void {
+    const chat = state.value.byId[chatId]
+    if (chat) Object.assign(chat, change)
+  }
+
   function reset(): void {
     state.value = emptyChats()
     folders.value = []
     loaded.value = false
   }
 
-  return { list, folders, loaded, snapshotVersion, get, replaceAll, put, apply, preview, markReadLocally, reset }
+  return { list, folders, loaded, snapshotVersion, get, replaceAll, put, apply, preview, markReadLocally, patch, reset }
 })
