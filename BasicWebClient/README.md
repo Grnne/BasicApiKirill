@@ -31,6 +31,8 @@ origin, как и в проде. Значит нет CORS, нет cross-site coo
 | --------------- | ------------------------------------------------- |
 | `npm run dev`   | Дев-сервер с горячей перезагрузкой                |
 | `npm run check` | Проверка типов (`vue-tsc --noEmit`)               |
+| `npm test`      | Тесты (Vitest)                                    |
+| `npm run gen:api` | Типы REST и событий хаба из снимка OpenAPI → `src/shared/api/schema.d.ts` |
 | `npm run build` | Проверка типов + сборка в `../BasicApi/wwwroot/client` |
 | `npm run preview` | Локальный просмотр собранной версии             |
 

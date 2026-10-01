@@ -25,7 +25,8 @@ CI (`.github/workflows/ci.yml`) запускает тот же `scripts/test.ps1
 - Контракт API меняется только аддитивно; каждое изменение описывается в
   [docs/api-contract-changes.md](docs/api-contract-changes.md). Снимок OpenAPI
   (`BasicApi.IntegrationTests/Snapshots/openapi.json`) обновляется осознанно:
-  `UPDATE_OPENAPI_SNAPSHOT=1`, дифф проверяется глазами.
+  `UPDATE_OPENAPI_SNAPSHOT=1`, дифф проверяется глазами. Из снимка генерируются типы клиента:
+  после обновления — `npm run gen:api` в `BasicWebClient` (тест падает, пока типы устарели).
 - Веб-клиент (`BasicWebClient`): импорт только вниз (`app → pages → features → entities →
   shared`), фича не импортирует модель другой фичи. Тесты — Vitest, рядом с кодом
   (`*.test.ts`); баг клиента тоже сначала воспроизводится тестом. Без `v-html`; ссылки из

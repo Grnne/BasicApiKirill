@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "check": "vue-tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "gen:api": "node scripts/gen-api.mjs"
   },
   "dependencies": {
     "@microsoft/signalr": "^8.0.7",
@@ -23,6 +24,7 @@
     "@vue/test-utils": "^2.5.1",
     "@vue/tsconfig": "^0.7.0",
     "happy-dom": "^20.14.5",
+    "openapi-typescript": "^7.13.0",
     "typescript": "~5.8.3",
     "vite": "^7.0.0",
     "vitest": "^5.0.3",

@@ -1,42 +1,20 @@
-/* Типы чатов. По BasicApi/Models/Dto/Chat. */
+// Chat types: generated from the backend contract (shared/api/schema.d.ts).
 
-import type { Message } from '@/entities/message/types'
+import type {
+  ChatDetailDto,
+  ChatListItemDto,
+  ChatParticipantDto,
+  SearchChatsResponseDto,
+} from '@/shared/api/schema'
 
-export type ChatType = 'private' | 'group'
+export type ChatType = 'private' | 'group' | 'saved'
 
-/**
- * Строка списка чатов. Companion-поля описывают собеседника
- * с точки зрения текущего пользователя и заполнены только для приватных чатов.
- */
-export interface ChatListItem {
-  chatId: string
-  type: string
-  title: string | null
-  companionId: string | null
-  companionName: string | null
-  companionUsername: string | null
-  lastMessage: Message | null
-  unreadCount: number
-  /** ISO-строка. Разбирать только через parseApiDate. */
-  lastActivityAt: string
-}
+/** A row of the chat list; companion* describe the other side of a private chat. */
+export type ChatListItem = ChatListItemDto
 
-export interface ChatParticipant {
-  userId: string
-  displayName: string
-  username: string
-}
+export type ChatParticipant = ChatParticipantDto
 
-/** Детали чата со списком участников. GET /api/chats/{id} */
-export interface ChatDetail {
-  chatId: string
-  type: string
-  title: string | null
-  participants: ChatParticipant[]
-}
+/** GET /api/chats/{id} */
+export type ChatDetail = ChatDetailDto
 
-export interface SearchChatsResponse {
-  items: ChatListItem[]
-  query: string
-  totalCount: number
-}
+export type SearchChatsResponse = SearchChatsResponseDto

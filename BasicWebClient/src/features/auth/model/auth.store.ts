@@ -44,6 +44,8 @@ export const useAuthStore = defineStore('auth', () => {
       username: response.username,
       email: response.email,
       displayName: response.displayName,
+      // The auth answer has no avatar; the profile comes in full with the sync snapshot.
+      avatarId: user.value?.userId === response.userId ? user.value.avatarId : null,
     }
     writeLocal(REFRESH_TOKEN_KEY, response.refreshToken)
   }

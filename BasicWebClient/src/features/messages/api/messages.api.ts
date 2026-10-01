@@ -1,7 +1,7 @@
 /* Сообщения чата. BasicApi/Features/Chats/ChatsController.cs */
 
 import { http } from '@/shared/api/http'
-import type { CursorPage, Message } from '@/entities/message/types'
+import type { MessagePage } from '@/entities/message/types'
 
 /** Сколько сообщений тянем за раз. Сервер ограничивает сотней. */
 export const PAGE_SIZE = 30
@@ -15,8 +15,8 @@ export function getMessagesPage(
   chatId: string,
   cursor: string | null,
   signal?: AbortSignal,
-): Promise<CursorPage<Message>> {
-  return http.get<CursorPage<Message>>(`/api/chats/${chatId}/messages/cursor`, {
+): Promise<MessagePage> {
+  return http.get<MessagePage>(`/api/chats/${chatId}/messages/cursor`, {
     query: { limit: PAGE_SIZE, cursor: cursor ?? undefined },
     ...(signal ? { signal } : {}),
   })
