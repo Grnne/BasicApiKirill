@@ -7,6 +7,7 @@ import type {
   MessageDto,
   MessageReactionsDto,
   SaveDraftDto,
+  SearchMessagesResponseDto,
   SendMessageDto,
 } from '@/shared/api/schema'
 
@@ -56,4 +57,17 @@ export async function saveDraft(chatId: string, body: SaveDraftDto): Promise<Dra
 
 export function removeDraft(chatId: string): Promise<void> {
   return http.delete<void>(`/api/chats/${chatId}/draft`)
+}
+
+/** Words match by their start and in other forms (Russian too); at least 2 characters. */
+export function searchInChat(
+  chatId: string,
+  query: string,
+  cursor: string | null,
+  signal?: AbortSignal,
+): Promise<SearchMessagesResponseDto> {
+  return http.get<SearchMessagesResponseDto>(`/api/chats/${chatId}/messages/search`, {
+    query: { q: query, cursor: cursor ?? undefined, limit: 20 },
+    ...(signal ? { signal } : {}),
+  })
 }

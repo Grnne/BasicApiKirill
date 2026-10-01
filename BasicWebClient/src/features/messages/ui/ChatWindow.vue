@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 import { chatTitle } from '@/entities/chat/lib'
 import { usePresenceStore } from '@/entities/user/presence.store'
 import { useChatListStore } from '@/features/chat-list/model/chat-list.store'
 import { useMessagesStore } from '../model/messages.store'
+import ChatSearch from './ChatSearch.vue'
 import MessageList from './MessageList.vue'
 import MessageComposer from './MessageComposer.vue'
 import SelectionBar from './SelectionBar.vue'
@@ -27,10 +28,13 @@ const isTyping = computed(
   () => chatList.selectedChat !== null && presence.isSomeoneTyping(chatList.selectedChat.chatId),
 )
 
+const searching = ref(false)
+
 // One-way link: the chat list knows nothing about messages, which follow the selected chatId.
 watch(
   () => chatList.selectedChatId,
   (chatId) => {
+    searching.value = false
     if (chatId) {
       void messages.openChat(chatId)
     } else {
@@ -49,7 +53,10 @@ watch(
       </button>
       <span class="title">{{ chatTitle(chatList.selectedChat) }}</span>
       <span :class="['subtitle', { typing: isTyping }]">{{ subtitle }}</span>
+      <button type="button" class="search-toggle" title="Поиск в чате" @click="searching = !searching">🔍</button>
     </header>
+
+    <ChatSearch v-if="searching" @close="searching = false" />
 
     <MessageList />
     <SelectionBar v-if="messages.selected.size > 0" />
@@ -63,9 +70,14 @@ watch(
 
 <style scoped>
 .window {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
+}
+/* The message list (a child's root gets this scope) takes the height that is left. */
+.window > .viewport {
+  flex: 1;
+  min-height: 0;
 }
 .head {
   display: flex;
@@ -87,6 +99,13 @@ watch(
   .back {
     display: block;
   }
+}
+.search-toggle {
+  margin-left: auto;
+  padding: 2px 6px;
+  border: none;
+  background: none;
+  color: var(--text-dim);
 }
 .title {
   font-weight: 600;
