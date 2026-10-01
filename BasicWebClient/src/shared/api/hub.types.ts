@@ -1,40 +1,91 @@
-/**
- * События хаба. Список — по BasicApi/Hubs/ChatHub.cs.
- *
- * Здесь описаны ровно те аргументы, что реально шлёт сервер. Это важнее, чем
- * кажется: старый клиент подписывался на ChatCreated как на (chatId, dto),
- * а сервер шлёт ОДИН аргумент — готовый элемент списка чатов. Такое
- * несовпадение TypeScript поймать не может, поэтому сверяемся с хабом руками.
- */
+// Hub events: the names as the server sends them (BasicApi/Services/Events), the payloads generated
+// from the contract. Journaled events come in GET /api/sync with the same type and payload.
 
-// Единственное место, где shared смотрит на entities: события хаба — это
-// контракт сервера, и он выражен теми же DTO, что и REST. Дублировать их
-// здесь было бы хуже, чем один осознанный импорт.
-import type { ChatListItem } from '@/entities/chat/types'
-import type { Message } from '@/entities/message/types'
+import type {
+  BlockListChangedDto,
+  ChatDeletedDto,
+  ChatListItemDto,
+  ChatStateDto,
+  ChatUpdatedDto,
+  DraftUpdatedDto,
+  FoldersDto,
+  MemberRemovedDto,
+  MembersAddedDto,
+  MemberUpdatedDto,
+  MessageDeletedDto,
+  MessageDto,
+  MessageReactionsDto,
+  PinnedChatsDto,
+  PrivacySettingsDto,
+  ReadStateDto,
+  ReceiptDto,
+  UserUpdatedDto,
+} from './schema'
 
-export interface HubEvents {
-  /** Новое сообщение в чате, куда мы вошли через JoinChat. */
-  MessageCreated: (message: Message) => void
+/** Events that are also written to the user's journal: one argument, the payload. */
+export interface JournaledEvents {
+  MessageCreated: MessageDto
+  MessageUpdated: MessageDto
+  MessageDeleted: MessageDeletedDto
+  ReactionsChanged: MessageReactionsDto
+  MessagesDelivered: ReceiptDto
+  MessagesRead: ReceiptDto
+  ReadStateChanged: ReadStateDto
+  DraftUpdated: DraftUpdatedDto
+  ChatCreated: ChatListItemDto
+  ChatUpdated: ChatUpdatedDto
+  ChatDeleted: ChatDeletedDto
+  MemberAdded: MembersAddedDto
+  MemberRemoved: MemberRemovedDto
+  MemberUpdated: MemberUpdatedDto
+  UserUpdated: UserUpdatedDto
+  PrivacyUpdated: PrivacySettingsDto
+  BlockListChanged: BlockListChangedDto
+  PinnedChatsChanged: PinnedChatsDto
+  ChatStateChanged: ChatStateDto
+  FoldersChanged: FoldersDto
+}
 
-  /** Превью последнего сообщения для списка чатов. Приходит всем участникам. */
-  ChatListUpdated: (chatId: string, message: Message) => void
+export type JournaledEventName = keyof JournaledEvents
 
-  /** Нас добавили в новый чат. Payload — готовая строка списка, собранная для нас. */
-  ChatCreated: (chat: ChatListItem) => void
-
+export type HubEvents = {
+  [K in JournaledEventName]: (payload: JournaledEvents[K]) => void
+} & {
+  /** Preview of the last message for the chat list; not journaled (MessageCreated is). */
+  ChatListUpdated: (chatId: string, message: MessageDto) => void
   UserOnlineChanged: (userId: string, isOnline: boolean) => void
-
   TypingChanged: (chatId: string, userId: string, isTyping: boolean) => void
 }
 
 export type HubEventName = keyof HubEvents
 
-/** Имена нужны и в рантайме — по ним подписываемся на соединение. */
-export const HUB_EVENT_NAMES: HubEventName[] = [
+export const JOURNALED_EVENT_NAMES: readonly JournaledEventName[] = [
   'MessageCreated',
-  'ChatListUpdated',
+  'MessageUpdated',
+  'MessageDeleted',
+  'ReactionsChanged',
+  'MessagesDelivered',
+  'MessagesRead',
+  'ReadStateChanged',
+  'DraftUpdated',
   'ChatCreated',
+  'ChatUpdated',
+  'ChatDeleted',
+  'MemberAdded',
+  'MemberRemoved',
+  'MemberUpdated',
+  'UserUpdated',
+  'PrivacyUpdated',
+  'BlockListChanged',
+  'PinnedChatsChanged',
+  'ChatStateChanged',
+  'FoldersChanged',
+]
+
+/** Names are needed at runtime too: the connection subscribes by them. */
+export const HUB_EVENT_NAMES: readonly HubEventName[] = [
+  ...JOURNALED_EVENT_NAMES,
+  'ChatListUpdated',
   'UserOnlineChanged',
   'TypingChanged',
 ]

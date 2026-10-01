@@ -1,149 +1,192 @@
-/**
- * Список чатов: загрузка, выбор, живое обновление.
- *
- * Список — единственный источник правды о том, какие чаты есть и что в них
- * последнее. Сообщения внутри чата — забота отдельного стора.
- */
+// Which chat is open, and the list actions. The chats themselves live in the chats entity.
 
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 
-import type { ChatListItem } from '@/entities/chat/types'
-import type { Message } from '@/entities/message/types'
+import * as chatApi from '@/entities/chat/api'
+import { useChatsStore } from '@/entities/chat/model/chats.store'
 import { useAuthStore } from '@/features/auth/model/auth.store'
 import { useHubStore } from '@/shared/api/hub.store'
-import { parseApiDate } from '@/shared/lib/date'
+import { describeError } from '@/shared/api/problem'
+import { useNoticesStore } from '@/shared/ui/notices.store'
+import type { FolderDto, SaveFolderDto } from '@/shared/api/schema'
 import * as chatsApi from '../api/chats.api'
+import * as foldersApi from '../api/folders.api'
+
+/** Long enough for a request to be answered; a failed one is forgotten by then. */
+const EXPECT_GONE_MS = 10_000
 
 export const useChatListStore = defineStore('chatList', () => {
-  const auth = useAuthStore()
   const hub = useHubStore()
+  const chats = useChatsStore()
+  const notices = useNoticesStore()
 
-  const chats = ref<ChatListItem[]>([])
   const selectedChatId = ref<string | null>(null)
-  const isLoading = ref(false)
-  const loadError = ref('')
+  /** The folder tab shown; null — all chats. */
+  const selectedFolderId = ref<string | null>(null)
+  const selectedFolder = computed(() => chats.folders.find((f) => f.id === selectedFolderId.value) ?? null)
+  const selectedChat = computed(() => chats.get(selectedChatId.value))
 
-  const selectedChat = computed(
-    () => chats.value.find((chat) => chat.chatId === selectedChatId.value) ?? null,
-  )
+  /**
+   * chatId -> until when its going away is the user's own doing (left or deleted the group). The
+   * hub event may come before the answer to the request, so it is marked before the request.
+   */
+  const expectedGone = new Map<string, number>()
+  function expectGone(chatId: string): void {
+    expectedGone.set(chatId, Date.now() + EXPECT_GONE_MS)
+  }
 
-  /* ── Работа со списком ── */
-
-  /** Свежие сверху — как в любом мессенджере. */
-  function sortByActivity(): void {
-    chats.value.sort(
-      (a, b) => parseApiDate(b.lastActivityAt).getTime() - parseApiDate(a.lastActivityAt).getTime(),
+  // The open chat left the list (removed from the group, the group deleted): say so and close it.
+  watch(selectedChat, (now, before) => {
+    if (now || !before || selectedChatId.value !== before.chatId) return
+    const own = (expectedGone.get(before.chatId) ?? 0) > Date.now()
+    expectedGone.delete(before.chatId)
+    void deselect()
+    if (own) return
+    notices.push(
+      before.type === 'group' ? `Вы больше не участник группы «${before.title ?? ''}»` : 'Чат больше недоступен',
+      'info',
     )
-  }
-
-  /** Добавить чат или заменить существующий. Ключ — chatId. */
-  function upsert(item: ChatListItem): void {
-    const index = chats.value.findIndex((chat) => chat.chatId === item.chatId)
-    if (index === -1) {
-      chats.value.push(item)
-    } else {
-      chats.value[index] = item
-    }
-    sortByActivity()
-  }
-
-  async function load(): Promise<void> {
-    isLoading.value = true
-    loadError.value = ''
-    try {
-      chats.value = await chatsApi.getChats()
-      sortByActivity()
-    } catch {
-      loadError.value = 'Не удалось загрузить чаты'
-    } finally {
-      isLoading.value = false
-    }
-  }
+  })
 
   async function select(chatId: string): Promise<void> {
     selectedChatId.value = chatId
-
-    // Открытый чат считаем прочитанным — счётчик гасим сразу, не дожидаясь
-    // ответа сервера (сам POST /read отправит фича сообщений).
-    const chat = chats.value.find((item) => item.chatId === chatId)
-    if (chat) chat.unreadCount = 0
-
+    // MessageCreated goes only to the connections that joined the chat's group.
     await hub.joinChat(chatId)
   }
 
-  /** Закрыть чат — нужно на узких экранах, чтобы вернуться к списку. */
   async function deselect(): Promise<void> {
     selectedChatId.value = null
     await hub.leaveChat()
   }
 
-  /**
-   * Открыть переписку с пользователем. Сервер сам отдаёт существующий чат,
-   * если он уже был, поэтому проверять ничего не нужно.
-   */
+  /** The server returns the existing private chat if there is one. */
   async function openPrivateChat(userId: string): Promise<void> {
     const chat = await chatsApi.createPrivateChat(userId)
-    upsert(chat)
+    chats.put(chat)
     await select(chat.chatId)
   }
 
-  /* ── События хаба ── */
-
-  function applyListUpdate(chatId: string, message: Message): void {
-    const chat = chats.value.find((item) => item.chatId === chatId)
-
-    if (!chat) {
-      // Чата нет в списке — значит он появился, пока мы были не в сети.
-      // Догружаем одну строку, а не весь список.
-      void chatsApi
-        .getChatItem(chatId)
-        .then(upsert)
-        .catch(() => {})
-      return
+  async function openSaved(): Promise<void> {
+    try {
+      const chat = await chatApi.openSavedChat()
+      chats.put(chat)
+      await select(chat.chatId)
+    } catch (e) {
+      notices.push(describeError(e))
     }
-
-    chat.lastMessage = message
-    chat.lastActivityAt = message.createdAt
-
-    // Свои сообщения и сообщения в открытом чате непрочитанными не считаем.
-    const isOwn = message.senderId === auth.user?.userId
-    const isOpen = chatId === selectedChatId.value
-    if (!isOwn && !isOpen) chat.unreadCount += 1
-
-    sortByActivity()
   }
 
-  let isSubscribed = false
+  /** Runs a list command; on failure the server's next event (or a reload) restores the truth. */
+  async function command(run: () => Promise<void>): Promise<void> {
+    try {
+      await run()
+    } catch (e) {
+      notices.push(describeError(e))
+    }
+  }
 
-  /** Подписки на хаб. Вызывается один раз — при первой загрузке списка. */
-  function subscribeToHub(): void {
-    if (isSubscribed) return
-    isSubscribed = true
+  function markUnread(chatId: string): Promise<void> {
+    chats.patch(chatId, { markedUnread: true })
+    return command(() => chatsApi.setMarkedUnread(chatId, true))
+  }
 
-    hub.on('ChatListUpdated', applyListUpdate)
+  function markRead(chatId: string): Promise<void> {
+    const chat = chats.get(chatId)
+    if (!chat) return Promise.resolve()
+    const last = chat.lastMessage
+    chats.markReadLocally(chatId, last?.seq ?? chat.lastReadSeq)
+    return command(() =>
+      last ? chatsApi.markRead(chatId, last.id) : chatsApi.setMarkedUnread(chatId, false),
+    )
+  }
 
-    // Payload — готовая строка списка, собранная сервером под нас.
-    hub.on('ChatCreated', upsert)
+  const auth = useAuthStore()
+  const ctx = () => ({ meId: auth.user?.userId ?? '' })
+
+  function pin(chatId: string, pinned: boolean): Promise<void> {
+    return command(async () => {
+      const result = await chatsApi.setPinned(chatId, pinned)
+      chats.apply('PinnedChatsChanged', result, ctx())
+      // Pinning takes the chat out of the archive.
+      if (pinned) chats.patch(chatId, { archived: false })
+    })
+  }
+
+  /** Drag and drop of pinned chats: shown at once, the server keeps it. */
+  function reorderPinned(chatIds: string[]): Promise<void> {
+    chats.apply('PinnedChatsChanged', { chatIds }, ctx())
+    return command(() => chatsApi.reorderPinned(chatIds))
+  }
+
+  function archive(chatId: string, archived: boolean): Promise<void> {
+    // The server unpins an archived chat (PinnedChatsChanged follows).
+    if (archived) chats.patch(chatId, { pinnedPosition: null })
+    return command(async () => chats.apply('ChatStateChanged', await chatsApi.setArchived(chatId, archived), ctx()))
+  }
+
+  /** untilMs: when the mute ends; null — forever. */
+  function mute(chatId: string, untilMs: number | null): Promise<void> {
+    const until = untilMs === null ? undefined : new Date(untilMs).toISOString()
+    return command(async () => chats.apply('ChatStateChanged', await chatsApi.setMuted(chatId, true, until), ctx()))
+  }
+
+  function unmute(chatId: string): Promise<void> {
+    return command(async () => chats.apply('ChatStateChanged', await chatsApi.setMuted(chatId, false), ctx()))
+  }
+
+  function setFolders(folders: FolderDto[]): void {
+    chats.apply('FoldersChanged', { folders }, ctx())
+    if (selectedFolderId.value && !folders.some((f) => f.id === selectedFolderId.value)) selectedFolderId.value = null
+  }
+
+  /** Saves a new folder (no id) or changes one; FoldersChanged brings the same to other devices. */
+  async function saveFolder(id: string | null, body: SaveFolderDto): Promise<boolean> {
+    try {
+      const saved = id ? await foldersApi.updateFolder(id, body) : await foldersApi.createFolder(body)
+      const others = chats.folders.filter((f) => f.id !== saved.id)
+      const index = chats.folders.findIndex((f) => f.id === saved.id)
+      setFolders(index === -1 ? [...others, saved] : chats.folders.map((f) => (f.id === saved.id ? saved : f)))
+      return true
+    } catch (e) {
+      notices.push(describeError(e))
+      return false
+    }
+  }
+
+  function deleteFolder(id: string): Promise<void> {
+    return command(async () => {
+      await foldersApi.deleteFolder(id)
+      setFolders(chats.folders.filter((f) => f.id !== id))
+    })
+  }
+
+  function reorderFolders(ids: string[]): Promise<void> {
+    setFolders(ids.map((id) => chats.folders.find((f) => f.id === id)).filter((f): f is FolderDto => !!f))
+    return command(async () => setFolders(await foldersApi.reorderFolders(ids)))
+  }
+
+  /** Pinned inside the folder (on top of it), apart from the global pins. */
+  function pinInFolder(folder: FolderDto, chatId: string, pinned: boolean): Promise<void> {
+    const pinnedChatIds = pinned
+      ? [chatId, ...folder.pinnedChatIds.filter((id) => id !== chatId)]
+      : folder.pinnedChatIds.filter((id) => id !== chatId)
+    return saveFolder(folder.id, { pinnedChatIds }).then(() => {})
   }
 
   function reset(): void {
-    chats.value = []
     selectedChatId.value = null
-    loadError.value = ''
+    selectedFolderId.value = null
   }
 
   return {
-    chats,
+    selectedFolderId,
+    selectedFolder,
+    saveFolder,
+    deleteFolder,
+    reorderFolders,
+    pinInFolder,
     selectedChatId,
     selectedChat,
-    isLoading,
-    loadError,
-    load,
-    select,
-    deselect,
-    openPrivateChat,
-    subscribeToHub,
-    reset,
-  }
+    select, deselect, expectGone, openPrivateChat, openSaved, markUnread, markRead, pin, reorderPinned, archive, mute, unmute, command, reset }
 })

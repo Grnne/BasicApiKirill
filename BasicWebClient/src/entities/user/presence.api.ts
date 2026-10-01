@@ -1,14 +1,12 @@
-/* Онлайн-статусы и «печатает». BasicApi/Features/Users/UsersController.cs */
-
 import { http } from '@/shared/api/http'
 import type { TypingStatusResponse, UserStatusResponse } from './types'
 
-/** Сервер принимает не больше 200 id за раз. */
+/** Server-side limit on ids per request. */
 export const MAX_STATUS_IDS = 200
 
 /**
- * Статусы явного списка пользователей: в ответе есть и офлайновые.
- * Тех, с кем нет общего чата, сервер молча выкидывает из ответа.
+ * The response includes offline users too; users without a shared chat are silently dropped
+ * by the server.
  */
 export function getUsersStatus(userIds: string[]): Promise<UserStatusResponse> {
   return http.post<UserStatusResponse>('/api/users/status', {
@@ -16,7 +14,7 @@ export function getUsersStatus(userIds: string[]): Promise<UserStatusResponse> {
   })
 }
 
-/** Кто сейчас печатает — по всем чатам пользователя. */
+/** Who is typing across all of the user's chats. */
 export function getTypingStatus(): Promise<TypingStatusResponse> {
   return http.get<TypingStatusResponse>('/api/users/typing')
 }

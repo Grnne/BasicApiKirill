@@ -2,34 +2,51 @@
 import { computed } from 'vue'
 
 import type { ChatListItem } from '@/entities/chat/types'
-import { chatInitial, chatTitle } from '@/entities/chat/lib'
+import { chatInitial, chatTitle, isMutedNow } from '@/entities/chat/lib'
+import AvatarCircle from '@/entities/media/ui/AvatarCircle.vue'
 import { usePresenceStore } from '@/entities/user/presence.store'
+import { messagePreview } from '@/entities/message/lib/preview'
+import { STATUS_MARKS, ownStatus } from '@/entities/message/lib/status'
+import { useAuthStore } from '@/features/auth/model/auth.store'
 import { formatTime } from '@/shared/lib/date'
 
-const props = defineProps<{
-  chat: ChatListItem
-  active: boolean
-}>()
+// An absent boolean prop would be cast to false: null means "the global pin".
+const props = withDefaults(
+  defineProps<{
+    chat: ChatListItem
+    active: boolean
+    /** Pinned where the list is shown: globally, or inside the open folder. */
+    pinned?: boolean | null
+  }>(),
+  { pinned: null },
+)
 
 const presence = usePresenceStore()
+const auth = useAuthStore()
 
 const title = computed(() => chatTitle(props.chat))
 
-// Точку показываем только у приватных чатов: у группы нет одного собеседника.
 const isCompanionOnline = computed(
   () => props.chat.type === 'private' && presence.isOnline(props.chat.companionId),
 )
+
+const muted = computed(() => isMutedNow(props.chat))
 
 const isTyping = computed(() => presence.isSomeoneTyping(props.chat.chatId))
 const initial = computed(() => chatInitial(props.chat))
 
 const preview = computed(() => {
   if (isTyping.value) return 'печатает…'
+  if (props.chat.draft && !props.active) return props.chat.draft.text
 
   const message = props.chat.lastMessage
   if (!message) return 'нет сообщений'
-  return `${message.senderName}: ${message.text}`
+  return messagePreview(message, auth.user?.userId ?? null, props.chat.type === 'group')
 })
+
+const status = computed(() =>
+  props.chat.lastMessage ? ownStatus(props.chat.lastMessage, props.chat, auth.user?.userId ?? null) : null,
+)
 
 const time = computed(() =>
   props.chat.lastMessage ? formatTime(props.chat.lastMessage.createdAt) : '',
@@ -39,19 +56,37 @@ const time = computed(() =>
 <template>
   <button type="button" :class="['row', { active }]">
     <span class="avatar">
-      {{ initial }}
+      <AvatarCircle :avatar-id="chat.avatarId" :initial="initial" />
       <span v-if="isCompanionOnline" class="online" title="в сети" />
     </span>
 
     <span class="middle">
-      <!-- Всё через интерполяцию: имена и тексты приходят от других пользователей. -->
-      <span class="title">{{ title }}</span>
-      <span :class="['preview', { typing: isTyping }]">{{ preview }}</span>
+      <!-- Interpolation only: names and texts come from other users. -->
+      <span class="title">
+        <span v-if="pinned ?? chat.pinnedPosition !== null" class="pin" title="Закреплён">📌</span>{{ title }}<span
+          v-if="muted"
+          class="muted"
+          title="Без звука"
+          >🔕</span
+        >
+      </span>
+      <span :class="['preview', { typing: isTyping }]">
+        <span v-if="chat.draft && !active && !isTyping" class="draft">Черновик: </span>{{ preview }}
+      </span>
     </span>
 
     <span class="right">
-      <span class="time">{{ time }}</span>
-      <span v-if="chat.unreadCount > 0" class="badge">{{ chat.unreadCount }}</span>
+      <span class="time">
+        <span v-if="status" :class="['status', status]" :title="STATUS_MARKS[status].title">
+          {{ STATUS_MARKS[status].mark }}
+        </span>
+        {{ time }}
+      </span>
+      <span v-if="!active" class="badges">
+        <span v-if="chat.unreadMentionCount > 0" class="badge mention" title="Вас упомянули">@</span>
+        <span v-if="chat.unreadCount > 0" :class="['badge', { quiet: muted }]">{{ chat.unreadCount }}</span>
+        <span v-else-if="chat.markedUnread" class="badge dot" title="Помечен непрочитанным" />
+      </span>
     </span>
   </button>
 </template>
@@ -78,14 +113,7 @@ const time = computed(() =>
 }
 .avatar {
   position: relative;
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: var(--surface-hover);
-  color: var(--accent);
-  font-weight: 700;
+  align-self: center;
 }
 .online {
   position: absolute;
@@ -107,6 +135,20 @@ const time = computed(() =>
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.muted {
+  margin-left: 4px;
+  font-size: 11px;
+}
+.badge.quiet {
+  background: var(--text-faint);
+}
+.pin {
+  margin-right: 4px;
+  font-size: 11px;
+}
+.draft {
+  color: var(--danger);
 }
 .preview.typing {
   color: var(--accent);
@@ -137,5 +179,22 @@ const time = computed(() =>
   font-size: 11px;
   font-weight: 700;
   text-align: center;
+}
+.badges {
+  display: flex;
+  gap: 3px;
+}
+.badge.dot {
+  min-width: 10px;
+  height: 10px;
+  margin-top: 4px;
+  padding: 0;
+}
+.status {
+  margin-right: 2px;
+  letter-spacing: -3px;
+}
+.status.read {
+  color: var(--accent);
 }
 </style>

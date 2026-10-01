@@ -1,15 +1,8 @@
-/**
- * Состояние авторизации.
- *
- * Где живут токены:
- *  - access — только в памяти. Он короткоживущий, и при перезагрузке
- *    страницы восстанавливается из refresh-токена;
- *  - refresh — в localStorage, иначе каждый F5 требовал бы пароль.
- *
- * Плата за localStorage — XSS: скрипт на странице сможет прочитать токен.
- * Поэтому в приложении нет ни одного v-html, а токен ротируется на каждом
- * обновлении (сервер отзывает всю цепочку сессий, если старый токен
- * попробуют использовать повторно).
+/*
+ * Token storage: the access token lives only in memory and is restored from the refresh token on
+ * reload; the refresh token is in localStorage so a reload does not ask for the password.
+ * The price is XSS exposure, hence: no v-html anywhere, and the refresh token rotates on every
+ * refresh (the server revokes the whole session chain if an old token is reused).
  */
 
 import { computed, ref, shallowRef } from 'vue'
@@ -18,23 +11,21 @@ import { defineStore } from 'pinia'
 import type { AuthResponse, LoginRequest, RegisterRequest } from '@/entities/user/auth.types'
 import type { OwnProfile } from '@/entities/user/types'
 import { ApiError } from '@/shared/api/problem'
-import { readLocal, removeLocal, writeLocal } from '@/shared/lib/storage'
+import { isStorageAvailable, readLocal, removeLocal, writeLocal } from '@/shared/lib/storage'
 import * as authApi from '../api/auth.api'
 
 const REFRESH_TOKEN_KEY = 'basicchat.refreshToken'
 
 export const useAuthStore = defineStore('auth', () => {
-  /** Access-токен. Намеренно не сохраняется никуда. */
+  /** Deliberately never persisted. */
   const accessToken = ref<string | null>(null)
   const refreshToken = ref<string | null>(readLocal(REFRESH_TOKEN_KEY))
   const user = shallowRef<OwnProfile | null>(null)
 
-  /** false, пока не отработала попытка восстановить сессию при старте. */
+  /** False until the startup restore attempt has finished, whatever its outcome. */
   const isSessionRestored = ref(false)
 
   const isAuthenticated = computed(() => accessToken.value !== null && user.value !== null)
-
-  /* ── Внутреннее ── */
 
   function applyAuth(response: AuthResponse): void {
     accessToken.value = response.token
@@ -44,8 +35,25 @@ export const useAuthStore = defineStore('auth', () => {
       username: response.username,
       email: response.email,
       displayName: response.displayName,
+      // The auth answer has no avatar; the profile comes in full with the sync snapshot.
+      avatarId: user.value?.userId === response.userId ? user.value.avatarId : null,
     }
     writeLocal(REFRESH_TOKEN_KEY, response.refreshToken)
+  }
+
+  /**
+   * The session ended by itself — signed out from another device or tab, the password changed
+   * elsewhere — rather than by the user's logout here. The app then takes the user to the login.
+   */
+  const sessionLost = ref(false)
+
+  function loseSession(): void {
+    clearSession()
+    sessionLost.value = true
+  }
+
+  function acknowledgeSessionLost(): void {
+    sessionLost.value = false
   }
 
   function clearSession(): void {
@@ -56,26 +64,40 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   /**
-   * Общий Promise на все параллельные обновления токена.
-   *
-   * Без него три запроса, получившие 401 одновременно, отправили бы три
-   * refresh'а с одним и тем же токеном. Сервер прощает повтор в течение 30
-   * секунд, но за этим окном считает это кражей токена и убивает все сессии
-   * пользователя. Проще не создавать гонку, чем полагаться на снисходительность.
+   * One shared refresh for all concurrent 401s. Otherwise each would send the same refresh token;
+   * the server tolerates a reuse only within a 30 s grace window and past it treats it as token
+   * theft and revokes all of the user's sessions.
    */
   const pendingRefresh = shallowRef<Promise<boolean> | null>(null)
 
+  /**
+   * Tabs of the app share the refresh token through localStorage, and every refresh rotates it:
+   * one tab must not present a token another tab already used (the server would revoke the whole
+   * sign-in). So the token is read fresh, under a lock that puts the tabs' refreshes in a row.
+   */
+  function withRefreshLock<T>(run: () => Promise<T>): Promise<T> {
+    const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined
+    return locks ? locks.request('basicchat.refresh', run) : run()
+  }
+
   async function performRefresh(): Promise<boolean> {
-    const token = refreshToken.value
-    if (!token) return false
+    return withRefreshLock(refreshOnce)
+  }
+
+  async function refreshOnce(): Promise<boolean> {
+    const token = isStorageAvailable() ? readLocal(REFRESH_TOKEN_KEY) : refreshToken.value
+    if (!token) {
+      // Logged out in another tab.
+      if (refreshToken.value) loseSession()
+      return false
+    }
 
     try {
       applyAuth(await authApi.refresh(token))
       return true
     } catch (error) {
-      // 401 — токен мёртв (истёк, отозван, уже использован): нужен пароль.
-      // Всё остальное (сеть, 500) — временное, сессию не трогаем.
-      if (error instanceof ApiError && error.isUnauthorized) clearSession()
+      // Only a 401 means the token is dead; network errors and 5xx keep the session.
+      if (error instanceof ApiError && error.isUnauthorized) loseSession()
       return false
     }
   }
@@ -90,8 +112,6 @@ export const useAuthStore = defineStore('auth', () => {
     return attempt
   }
 
-  /* ── Публичные действия ── */
-
   async function login(request: LoginRequest): Promise<void> {
     applyAuth(await authApi.login(request))
   }
@@ -100,11 +120,7 @@ export const useAuthStore = defineStore('auth', () => {
     applyAuth(await authApi.register(request))
   }
 
-  /**
-   * Восстановление сессии при загрузке страницы: access-токена в памяти нет,
-   * но refresh мог сохраниться с прошлого раза. Ответ refresh'а содержит и
-   * данные пользователя, так что отдельный запрос за профилем не нужен.
-   */
+  /** The refresh response carries the user too, so no separate profile request is needed. */
   async function restoreSession(): Promise<void> {
     if (isSessionRestored.value) return
     if (refreshToken.value) await refreshTokens()
@@ -114,10 +130,9 @@ export const useAuthStore = defineStore('auth', () => {
   async function logout(): Promise<void> {
     const token = refreshToken.value
     try {
-      // Даже если запрос не дойдёт — локально разлогиниваемся в любом случае.
       await authApi.logout(token)
     } catch {
-      // Сервер отзовёт сессию по таймауту; молчим, чтобы не блокировать выход.
+      // A failed request must not block logging out locally; the session expires on the server.
     } finally {
       clearSession()
     }
@@ -133,5 +148,7 @@ export const useAuthStore = defineStore('auth', () => {
     logout,
     refreshTokens,
     restoreSession,
+    sessionLost,
+    acknowledgeSessionLost,
   }
 })

@@ -1,27 +1,14 @@
-/* Типы сообщений. По BasicApi/Models/Dto/Message. */
+// Message types: generated from the backend contract (shared/api/schema.d.ts).
 
-export interface Message {
-  id: string
-  chatId: string
-  senderId: string
-  senderName: string
-  text: string
-  /** ISO-строка от сервера. Разбирать только через parseApiDate. */
-  createdAt: string
-  isRead: boolean
-}
+import type {
+  MessageDto,
+  MessageDtoCursorPaginatedResponse,
+  SearchMessagesResponseDto,
+} from '@/shared/api/schema'
 
-/**
- * Постраничный ответ с курсором. Страницы идут «назад по времени»:
- * nextCursor ведёт к более старым сообщениям.
- */
-export interface CursorPage<T> {
-  items: T[]
-  nextCursor: string | null
-  hasMore: boolean
-}
+export type Message = MessageDto
 
-export interface SearchMessagesResponse extends CursorPage<Message> {
-  query: string
-  totalCount: number
-}
+/** A page going back in time: nextCursor leads to older messages. */
+export type MessagePage = MessageDtoCursorPaginatedResponse
+
+export type SearchMessagesResponse = SearchMessagesResponseDto

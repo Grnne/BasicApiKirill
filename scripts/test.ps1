@@ -4,10 +4,11 @@
 
 .DESCRIPTION
     1. Solution build (Release).
-    2. Unit tests (BasicApi.Tests).
-    3. Integration tests (BasicApi.IntegrationTests) — Docker must be running.
-    4. Audit of NuGet packages for known vulnerabilities, transitive ones included.
-    5. With -Image — the docker image build, as in production.
+    2. Web client (BasicWebClient): type check and Vitest tests — Node.js must be installed.
+    3. Unit tests (BasicApi.Tests).
+    4. Integration tests (BasicApi.IntegrationTests) — Docker must be running.
+    5. Audit of NuGet packages and the client's runtime npm packages for known vulnerabilities.
+    6. With -Image — the docker image build, as in production.
 
     Prints a summary line at the end: paste it into the PR or commit description.
     Exit code 0 — everything passed; otherwise — the first failed stage.
@@ -15,17 +16,20 @@
 .EXAMPLE
     ./scripts/test.ps1
     ./scripts/test.ps1 -SkipIntegration     # quick run without Docker
+    ./scripts/test.ps1 -SkipClient          # backend only, without Node.js
     ./scripts/test.ps1 -Image               # plus the docker image build
 #>
 [CmdletBinding()]
 param(
     [switch]$SkipIntegration,
+    [switch]$SkipClient,
     [switch]$Image
 )
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $results = Join-Path $root 'TestResults'
+$client = Join-Path $root 'BasicWebClient'
 $summary = [ordered]@{}
 
 # In GitHub Actions the result also goes to the summary page of the run.
@@ -36,6 +40,9 @@ function Report([string]$text) {
 function Step([string]$name, [scriptblock]$action) {
     Write-Host ""
     Write-Host "=== $name ===" -ForegroundColor Cyan
+    # A step fails by its exit code. Windows PowerShell 5.1 turns any stderr line of a native
+    # command (docker and npm progress) into an error, and 'Stop' would end the run on it.
+    $ErrorActionPreference = 'Continue'
     & $action
     if ($LASTEXITCODE -ne 0) {
         Write-Host ""
@@ -71,6 +78,42 @@ try {
         dotnet build BasicApi.sln -c Release -nologo -v q
     }
 
+    if ($SkipClient) {
+        $summary['client'] = 'SKIPPED'
+    } else {
+        Push-Location $client
+        try {
+            Step 'Client dependencies' {
+                # npm ci wipes node_modules: locally only when the lock file changed since the last install.
+                $installed = Join-Path $client 'node_modules/.package-lock.json'
+                $lock = Join-Path $client 'package-lock.json'
+                if ($env:CI -or -not (Test-Path $installed) -or
+                    (Get-Item $lock).LastWriteTime -gt (Get-Item $installed).LastWriteTime) {
+                    npm ci --no-audit --no-fund
+                } else {
+                    Write-Host '  up to date'
+                    $global:LASTEXITCODE = 0
+                }
+            }
+            Step 'Client type check' { npm run check }
+            Step 'Client tests' {
+                $out = Join-Path $results 'client'
+                if (Test-Path $out) { Remove-Item $out -Recurse -Force }
+                $json = Join-Path $out 'vitest.json'
+                npx vitest run --reporter=default --reporter=json "--outputFile.json=$json"
+                $code = $LASTEXITCODE
+                $summary['client'] = if (Test-Path $json) {
+                    $r = Get-Content $json -Raw | ConvertFrom-Json
+                    "$($r.numPassedTests)/$($r.numTotalTests)"
+                } else { 'no results' }
+                $global:LASTEXITCODE = $code
+            }
+        }
+        finally {
+            Pop-Location
+        }
+    }
+
     Step 'Unit tests' { RunTests 'BasicApi.Tests' 'unit' }
 
     if ($SkipIntegration) {
@@ -99,6 +142,15 @@ try {
                     if ($pkg -and $pkg.vulnerabilities) {
                         $found += "$($pkg.id) $($pkg.resolvedVersion) ($(Split-Path -Leaf $p.path))"
                     }
+                }
+            }
+        }
+        # Client: runtime packages only — dev tooling does not reach the browser or the image.
+        if (-not $SkipClient) {
+            $audit = npm audit --omit=dev --json --prefix $client | Out-String | ConvertFrom-Json
+            if ($audit.vulnerabilities) {
+                foreach ($v in $audit.vulnerabilities.PSObject.Properties) {
+                    $found += "$($v.Name) ($($v.Value.severity), BasicWebClient)"
                 }
             }
         }

@@ -1,19 +1,22 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 
+import { useChatsStore } from '@/entities/chat/model/chats.store'
 import { useAuthStore } from '@/features/auth/model/auth.store'
 import { formatDay, parseApiDate } from '@/shared/lib/date'
+import { closesRun } from '../lib/runs'
 import { useMessagesStore } from '../model/messages.store'
-import MessageBubble from './MessageBubble.vue'
+import MessageItem from './MessageItem.vue'
+import PendingBubble from './PendingBubble.vue'
 
-/** Насколько близко к низу пользователь должен быть, чтобы лента доскроллилась сама. */
 const STICK_THRESHOLD_PX = 120
 
-/** За сколько пикселей до верха начинаем подгружать старые сообщения. */
 const LOAD_OLDER_THRESHOLD_PX = 150
 
 const auth = useAuthStore()
 const store = useMessagesStore()
+const chats = useChatsStore()
+const isGroup = computed(() => chats.get(store.chatId)?.type === 'group')
 
 const viewport = ref<HTMLElement | null>(null)
 
@@ -29,13 +32,8 @@ function scrollToBottom(): void {
   if (element) element.scrollTop = element.scrollHeight
 }
 
-/**
- * Подгрузка вверх с сохранением позиции.
- *
- * Если просто добавить сообщения в начало, содержимое уедет вниз и
- * пользователь потеряет место, где читал. Поэтому запоминаем высоту до
- * вставки и после неё сдвигаем прокрутку ровно на прирост.
- */
+// Prepending pushes the content down; shifting the scroll by the height growth keeps the
+// reading position.
 async function loadOlderKeepingPosition(): Promise<void> {
   const element = viewport.value
   if (!element || store.isLoadingOlder || !store.hasMore) return
@@ -46,31 +44,41 @@ async function loadOlderKeepingPosition(): Promise<void> {
   element.scrollTop += element.scrollHeight - heightBefore
 }
 
+/** The newest messages count as read only when someone can see them. */
+function noteSeenIfVisible(): void {
+  if (document.visibilityState === 'visible' && isNearBottom()) store.seen()
+}
+
 function onScroll(): void {
   const element = viewport.value
   if (!element) return
   if (element.scrollTop < LOAD_OLDER_THRESHOLD_PX) void loadOlderKeepingPosition()
+  if (store.hasNewer && isNearBottom()) void store.loadNewer()
+  noteSeenIfVisible()
 }
 
-// Новое сообщение доскроллит ленту, только если пользователь и так внизу.
-// Иначе он читает историю — дёргать его нельзя.
+onMounted(() => document.addEventListener('visibilitychange', noteSeenIfVisible))
+onUnmounted(() => document.removeEventListener('visibilitychange', noteSeenIfVisible))
+
+// Follow new messages only when already at the bottom, not while the user reads history.
+// Only a list that already reached the newest message sticks to the bottom: in a window in the
+// middle, sticking would load every newer page one after another.
 watch(
-  () => store.messages.length,
-  async (length, previousLength) => {
-    const isAppend = length > previousLength
+  () => ({ length: store.messages.length + store.pending.length, window: store.hasNewer }),
+  async (now, before) => {
+    const isAppend = now.length > before.length
     const stick = isNearBottom()
     await nextTick()
-    if (isAppend && stick) scrollToBottom()
+    if (isAppend && stick && !before.window) {
+      scrollToBottom()
+      noteSeenIfVisible()
+    }
   },
 )
 
 /**
- * Открытый чат — всегда в самый низ.
- *
- * Следим именно за окончанием загрузки, а не за сменой chatId: пока
- * isLoading === true, в ленте висит заглушка, и сообщения появляются в DOM
- * только после её снятия. Прокрутка по chatId срабатывала на пустом списке
- * и не давала ничего.
+ * Scroll to the bottom when loading ends, not on chatId change: while loading, a placeholder is
+ * shown and the messages are not in the DOM yet.
  */
 watch(
   () => store.isLoading,
@@ -81,7 +89,22 @@ watch(
   },
 )
 
-/** Разделитель дат: показываем, когда следующее сообщение уже из другого дня. */
+// A reply quote or search asked for a message: bring it to the middle and flash it.
+watch(
+  () => store.jumpTarget,
+  async (messageId) => {
+    if (!messageId) return
+    await nextTick()
+    const element = viewport.value?.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(messageId)}"]`)
+    store.jumpTarget = null
+    if (!element) return
+    element.scrollIntoView({ block: 'center' })
+    element.classList.remove('jump-highlight')
+    void element.offsetWidth
+    element.classList.add('jump-highlight')
+  },
+)
+
 function startsNewDay(index: number): boolean {
   const current = store.messages[index]
   if (!current) return false
@@ -107,13 +130,42 @@ function startsNewDay(index: number): boolean {
 
       <template v-for="(message, index) in store.messages" :key="message.id">
         <p v-if="startsNewDay(index)" class="day">{{ formatDay(message.createdAt) }}</p>
-        <MessageBubble :message="message" :own="message.senderId === auth.user?.userId" />
+        <MessageItem
+          :message="message"
+          :me-id="auth.user?.userId ?? null"
+          :avatar="isGroup ? (closesRun(store.messages, index) ? 'show' : 'space') : null"
+        />
       </template>
+
+      <PendingBubble
+        v-for="message in store.pending"
+        :key="message.clientMessageId"
+        :message="message"
+        @retry="store.retry(message.clientMessageId)"
+        @discard="store.discard(message.clientMessageId)"
+      />
+
+      <p v-if="store.isLoadingNewer" class="note">грузим новые…</p>
+      <button v-if="store.hasNewer" type="button" class="to-latest" title="К последним сообщениям" @click="store.backToLatest()">
+        ↓
+      </button>
     </template>
   </div>
 </template>
 
 <style scoped>
+.to-latest {
+  position: sticky;
+  bottom: 8px;
+  align-self: flex-end;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface-solid);
+  color: var(--text);
+  box-shadow: 0 2px 8px #0008;
+}
 .viewport {
   display: flex;
   flex-direction: column;

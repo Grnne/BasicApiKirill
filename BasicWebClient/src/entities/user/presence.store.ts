@@ -1,10 +1,4 @@
-/**
- * Присутствие: кто в сети и кто печатает.
- *
- * Лежит в entities, а не в features, потому что этим пользуются сразу
- * несколько фич — список чатов и окно переписки. Фича не должна лезть
- * в модель другой фичи, а вот в entities можно всем.
- */
+/* Online and typing state; in entities because both the chat list and the chat window use it. */
 
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
@@ -13,22 +7,20 @@ import { useHubStore } from '@/shared/api/hub.store'
 import * as presenceApi from './presence.api'
 
 /**
- * Сколько считаем человека печатающим, если не пришло явное «перестал».
- * Вкладка собеседника может закрыться посреди набора — без срока
- * «печатает…» осталось бы на экране навсегда.
+ * Typing expires without an explicit "stopped": the other tab may close mid-typing, and the
+ * indicator would otherwise stay forever.
  */
 const TYPING_TTL_MS = 6_000
 
-/** Как часто убираем протухшие отметки. */
 const PRUNE_INTERVAL_MS = 2_000
 
 export const usePresenceStore = defineStore('presence', () => {
   const hub = useHubStore()
 
-  /** userId -> в сети. */
+  /** userId -> is online. */
   const online = ref<Record<string, boolean>>({})
 
-  /** chatId -> userId -> до какого момента считаем, что он печатает. */
+  /** chatId -> userId -> typing expiry timestamp (ms). */
   const typingUntil = ref<Record<string, Record<string, number>>>({})
 
   function isOnline(userId: string | null | undefined): boolean {
@@ -36,7 +28,7 @@ export const usePresenceStore = defineStore('presence', () => {
     return online.value[userId] === true
   }
 
-  /** Печатает ли кто-нибудь в этом чате (кроме нас — себя сервер не присылает). */
+  /** The server never reports our own typing, so this means someone else. */
   function isSomeoneTyping(chatId: string): boolean {
     const inChat = typingUntil.value[chatId]
     if (!inChat) return false
@@ -44,8 +36,6 @@ export const usePresenceStore = defineStore('presence', () => {
     const now = Date.now()
     return Object.values(inChat).some((until) => until > now)
   }
-
-  /* ── Загрузка ── */
 
   async function loadStatuses(userIds: string[]): Promise<void> {
     const unique = [...new Set(userIds.filter(Boolean))]
@@ -57,11 +47,11 @@ export const usePresenceStore = defineStore('presence', () => {
       for (const status of response.items) next[status.userId] = status.isOnline
       online.value = next
     } catch {
-      // Присутствие — украшение, а не функциональность. Молчим.
+      // Presence is cosmetic; failures are ignored.
     }
   }
 
-  /** Стартовое состояние «печатает»: события, случившиеся до нашего подключения. */
+  /** Initial typing state: events that happened before we connected. */
   async function loadTyping(): Promise<void> {
     try {
       const response = await presenceApi.getTypingStatus()
@@ -69,11 +59,9 @@ export const usePresenceStore = defineStore('presence', () => {
         if (item.isTyping) setTyping(item.chatId, item.userId, true)
       }
     } catch {
-      // см. выше
+      // Presence is cosmetic; failures are ignored.
     }
   }
-
-  /* ── События хаба ── */
 
   function setTyping(chatId: string, userId: string, isTyping: boolean): void {
     const inChat = { ...(typingUntil.value[chatId] ?? {}) }
@@ -87,7 +75,6 @@ export const usePresenceStore = defineStore('presence', () => {
     typingUntil.value = { ...typingUntil.value, [chatId]: inChat }
   }
 
-  /** Убираем отметки, по которым не пришло «перестал печатать». */
   function pruneTyping(): void {
     const now = Date.now()
     const next: Record<string, Record<string, number>> = {}
@@ -102,20 +89,20 @@ export const usePresenceStore = defineStore('presence', () => {
     if (changed) typingUntil.value = next
   }
 
-  let isSubscribed = false
+  let unsubscribe: (() => void)[] = []
   let pruneTimer: ReturnType<typeof setInterval> | undefined
 
   function subscribeToHub(): void {
-    if (isSubscribed) return
-    isSubscribed = true
+    if (unsubscribe.length > 0) return
 
-    hub.on('UserOnlineChanged', (userId, isOnlineNow) => {
-      online.value = { ...online.value, [userId]: isOnlineNow }
-    })
-
-    hub.on('TypingChanged', (chatId, userId, isTyping) => {
-      setTyping(chatId, userId, isTyping)
-    })
+    unsubscribe = [
+      hub.on('UserOnlineChanged', (userId, isOnlineNow) => {
+        online.value = { ...online.value, [userId]: isOnlineNow }
+      }),
+      hub.on('TypingChanged', (chatId, userId, isTyping) => {
+        setTyping(chatId, userId, isTyping)
+      }),
+    ]
 
     pruneTimer = setInterval(pruneTyping, PRUNE_INTERVAL_MS)
   }
@@ -123,7 +110,8 @@ export const usePresenceStore = defineStore('presence', () => {
   function reset(): void {
     clearInterval(pruneTimer)
     pruneTimer = undefined
-    isSubscribed = false
+    for (const off of unsubscribe) off()
+    unsubscribe = []
     online.value = {}
     typingUntil.value = {}
   }

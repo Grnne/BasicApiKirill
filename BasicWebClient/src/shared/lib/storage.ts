@@ -1,10 +1,5 @@
-/**
- * Обёртка над localStorage.
- *
- * Прямой доступ к localStorage бросает исключение в приватном режиме и при
- * запрете сторонних данных в браузере. Одно необработанное исключение на
- * старте — и приложение не загрузится вообще, поэтому читаем и пишем только так.
- */
+/* localStorage throws in private mode or when site data is blocked; an unhandled throw at startup
+   would keep the app from loading, so all access goes through these wrappers. */
 
 export function readLocal(key: string): string | null {
   try {
@@ -18,7 +13,7 @@ export function writeLocal(key: string, value: string): void {
   try {
     localStorage.setItem(key, value)
   } catch {
-    // Хранилище недоступно — работаем в пределах вкладки, это не повод падать.
+    // Storage unavailable: the value lives only for this tab.
   }
 }
 
@@ -26,6 +21,18 @@ export function removeLocal(key: string): void {
   try {
     localStorage.removeItem(key)
   } catch {
-    // см. выше
+    // Storage unavailable.
+  }
+}
+
+/** Whether localStorage works at all (it throws in some private modes and with site data blocked). */
+export function isStorageAvailable(): boolean {
+  try {
+    const probe = '__storage_probe__'
+    localStorage.setItem(probe, probe)
+    localStorage.removeItem(probe)
+    return true
+  } catch {
+    return false
   }
 }

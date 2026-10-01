@@ -29,6 +29,9 @@
 | 15 | План 2, Ф4: файлы — загрузка, сообщения с вложениями и альбомы, медиа-галерея, аватары | additive |
 | 16 | План 2, Ф5: приватность, блокировки, профиль, смена пароля | additive |
 | 17 | План 2, Ф6: закрепление, архив, mute, папки, глобальный поиск | additive |
+| 18 | План 2, Ф7: устройства и push | additive |
+| 19 | План 2, Ф8: полная история на новом устройстве | additive |
+| 20 | План 4: OpenAPI точнее описывает nullable-поля и события хаба; `GET /api/config`; история вокруг сообщения и вперёд; CSP для превью и service worker | additive |
 | — | [Справочник кодов ошибок](#справочник-кодов-ошибок) | — |
 
 ---
@@ -1675,6 +1678,94 @@ service worker'ом, даже когда вкладка закрыта.
 - Сообщение о создании группы теперь есть в журнале участников как `MessageCreated` (после
   `ChatCreated`); раньше его знала только карточка, и устройство, которое ведёт историю по
   журналу, теряло `action` и разметку. Живьём по хабу оно по-прежнему не приходит.
+
+---
+
+## 20. План 4: контракт для генерации клиентов
+
+### 20.1. OpenAPI: nullable-поля и события хаба
+
+Формат запросов и ответов не изменился — изменилось только описание
+(`/swagger/v1/swagger.json`), из которого веб-клиент генерирует свои типы.
+
+- **Nullable — как в коде.** Раньше описание помечало `nullable` все строки и массивы, а
+  вложенные объекты (`lastMessage`, `draft`, `replyTo`, …) — нет. Теперь `null` разрешён ровно
+  там, где сервер может его прислать: `text`, `senderName`, `type`, массивы `entities`,
+  `reactions`, `attachments` — всегда значение; `lastMessage`, `draft`, `replyTo`,
+  `forwardFrom`, `action`, `myPermissions` — объект или `null` (`allOf` + `nullable: true`).
+- **Схемы событий хаба.** В `components.schemas` появились полезные нагрузки событий, которые
+  не встречаются в REST: `MessageDeletedDto`, `ReceiptDto`, `ReadStateDto`, `DraftUpdatedDto`,
+  `MembersAddedDto`, `MemberRemovedDto`, `MemberUpdatedDto`, `ChatDeletedDto`,
+  `UserUpdatedDto`, `BlockListChangedDto`, `FoldersDto`. Какое событие что несёт — в разделах
+  12–19 выше; те же объекты приходят в `payload` записей `GET /api/sync`.
+- Все поля ответа присутствуют в JSON всегда (в том числе со значением `null`), кроме
+  помеченных `x-omitted-when-null: true` — их при `null` в JSON нет: `url`, `userId` и `language`
+  у сущностей разметки, поля `PermissionsPatchDto` и необязательные поля ProblemDetails.
+  `required` в описании по-прежнему не указывается.
+
+### 20.2. `GET /api/config` (новая)
+
+Лимиты и переключатели экземпляра — чтобы клиент проверял ввод до отправки, а не узнавал о
+лимите из ошибки. Читать один раз после входа. Нужен вход.
+
+```json
+{
+  "messages": { "maxLength": 4096, "maxAttachments": 10,
+                "reactions": ["👍", "❤️", "😂", "😮", "😢", "🙏", "👎", "🔥", "🎉"],
+                "editWindowHours": 48, "deleteWindowHours": 48 },
+  "media":    { "enabled": true, "maxFileSize": 104857600, "maxPhotoSize": 20971520, "retentionDays": 0 },
+  "groups":   { "maxMembers": 500, "maxTitleLength": 128 },
+  "push":     { "enabled": false }
+}
+```
+
+- `reactions` — набор `Messages:Reactions` в порядке показа; другие реакции сервер не примет.
+  Исправлено попутно: набор из настроек, короче стандартного, раньше молча дополнялся
+  стандартными реакциями (список из `appsettings.json` склеивался с заданным).
+- `editWindowHours` / `deleteWindowHours` — сколько часов автор может править и удалять у всех;
+  `0` — без срока.
+- `media.enabled: false` — хранилище не настроено, ручки медиа отвечают `503 MEDIA_UNAVAILABLE`.
+  Размеры — в байтах; `maxPhotoSize` — для файлов с `kind: photo`.
+- `push.enabled` — то же, что в `GET /api/push/config`; ключ для подписки — там.
+
+### 20.3. История вокруг сообщения и вперёд (новые)
+
+Раньше историю можно было листать только назад от свежих сообщений (`…/messages/cursor`) или
+от даты (`…/messages/at`). Открыть чат на найденном сообщении или на оригинале ответа и
+листать оттуда вниз было нечем.
+
+**`GET /api/chats/{chatId}/messages/{messageId}/context?limit=30`** — окно вокруг сообщения:
+половина `limit` до него, само сообщение, остальное после. **`GET
+/api/chats/{chatId}/messages/after?seq={seq}&limit=30`** — сообщения новее `seq`.
+
+```json
+// MessageWindowDto
+{
+  "items": [ /* MessageDto, от старых к новым */ ],
+  "nextCursor": "…",   // к странице до первого — в …/messages/cursor?cursor=
+  "hasMore": true,     // есть сообщения старше первого
+  "hasNewer": true     // есть новее последнего — …/messages/after?seq={seq последнего}
+}
+```
+
+- Видимость — как в истории: удалённые у всех и скрытые у себя не приходят.
+- `limit` — 1…100. Ошибки: `403 NOT_A_MEMBER`; для `context` — `404 MESSAGE_NOT_FOUND` (не
+  этот чат, удалено у всех или у себя).
+
+### 20.4. CSP: `blob:` для картинок и видео
+
+Заголовок `Content-Security-Policy` разрешает `blob:` в `img-src` и `media-src` (только там):
+веб-клиент показывает превью выбранных файлов и измеряет видео до загрузки по адресам
+`blob:`, которые создаёт сама страница. Скрипты и запросы (`script-src`, `connect-src`) — как
+были, `'self'`.
+
+### 20.5. Service worker веб-клиента: `worker-src` и кеш `sw.js`
+
+- В заголовке `Content-Security-Policy` явно указан `worker-src 'self'`: push-уведомления
+  веб-клиента обрабатывает service worker (`/client/sw.js`). Раньше то же разрешалось неявно —
+  через `script-src 'self'`; чужие воркеры по-прежнему запрещены.
+- `/client/sw.js` отдаётся с `Cache-Control: no-cache`, как `index.html`: имя у воркера постоянное,
+  и из кеша браузер держал бы старую версию. Файлы из `/client/assets/` — как были, навсегда.
 
 ---
 

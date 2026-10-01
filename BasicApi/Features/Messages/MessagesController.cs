@@ -74,6 +74,58 @@ public class MessagesController(
         => Ok(await messages.GetPageAtAsync(chatId, User.GetUserId(), date, Math.Clamp(limit, 1, 100), ct));
 
     /// <summary>
+    /// Get the history around a message.
+    /// </summary>
+    /// <remarks>
+    /// For opening a chat at a found message or the original of a reply: up to half of `limit`
+    /// messages before it, the message itself, the rest after it — oldest first.
+    /// Older pages: `GET …/messages/cursor?cursor={nextCursor}` while `hasMore`; newer ones:
+    /// `GET …/messages/after?seq={last item's seq}` while `hasNewer`.
+    ///
+    /// Errors: <c>403 NOT_A_MEMBER</c>, <c>404 MESSAGE_NOT_FOUND</c> — not in this chat, deleted
+    /// for everyone or by the caller for themselves.
+    /// </remarks>
+    /// <param name="chatId">Chat ID</param>
+    /// <param name="messageId">The message to open the history at.</param>
+    /// <param name="limit">Messages in the window (default 30, max 100).</param>
+    /// <param name="ct">Request cancellation.</param>
+    [HttpGet("{chatId}/messages/{messageId:guid}/context")]
+    [ProducesResponseType(typeof(MessageWindowDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetMessageContext(
+        Guid chatId,
+        Guid messageId,
+        [FromQuery] int limit = 30,
+        CancellationToken ct = default)
+        => Ok(await messages.GetContextAsync(chatId, User.GetUserId(), messageId, Math.Clamp(limit, 1, 100), ct));
+
+    /// <summary>
+    /// Get messages newer than a seq.
+    /// </summary>
+    /// <remarks>
+    /// Paging forward from history opened in the middle (`…/context`, `…/messages/at`): the
+    /// messages after `seq`, oldest first; `hasNewer` — there are more after the last item.
+    ///
+    /// Errors: <c>403 NOT_A_MEMBER</c>.
+    /// </remarks>
+    /// <param name="chatId">Chat ID</param>
+    /// <param name="seq">The seq of the newest message the client already has.</param>
+    /// <param name="limit">Number of messages per page (default 30, max 100).</param>
+    /// <param name="ct">Request cancellation.</param>
+    [HttpGet("{chatId}/messages/after")]
+    [ProducesResponseType(typeof(MessageWindowDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetMessagesAfter(
+        Guid chatId,
+        [FromQuery] long seq,
+        [FromQuery] int limit = 30,
+        CancellationToken ct = default)
+        => Ok(await messages.GetPageAfterAsync(chatId, User.GetUserId(), Math.Max(0, seq), Math.Clamp(limit, 1, 100), ct));
+
+    /// <summary>
     /// Send a message.
     /// </summary>
     /// <remarks>

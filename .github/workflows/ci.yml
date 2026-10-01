@@ -33,6 +33,13 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      # The web client is type-checked and tested by the same script; the version matches the Dockerfile.
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: BasicWebClient/package-lock.json
+
       - name: scripts/test.ps1
         shell: pwsh
         run: ./scripts/test.ps1

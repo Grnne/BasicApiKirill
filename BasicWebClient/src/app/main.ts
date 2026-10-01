@@ -9,13 +9,11 @@ import './styles/theme.css'
 
 const app = createApp(App)
 
-// Порядок важен: Pinia до роутера, иначе навигационные guard'ы
-// не смогут прочитать сторы (их ещё не будет).
+// Pinia must be installed before the router: navigation guards read stores.
 const pinia = createPinia()
 app.use(pinia)
 
-// Связываем HTTP-клиент с auth-стором. Функции, а не значения: токен
-// читается в момент запроса, поэтому после обновления берётся уже новый.
+// Getters, not values: the token is read per request, so a refreshed token is picked up.
 const auth = useAuthStore(pinia)
 setAuthBridge({
   getAccessToken: () => auth.accessToken,

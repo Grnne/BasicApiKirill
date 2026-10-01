@@ -1,12 +1,8 @@
-/**
- * Соединение с SignalR-хабом.
- *
- * Стор держит одно соединение на всё приложение и берёт на себя три вещи,
- * в которых легко ошибиться:
- *  1) токен запрашивается в момент подключения, а не захватывается заранее;
- *  2) после реконнекта чат перезаходится сам — группы на сервере не переживают
- *     разрыв, и без этого сообщения молча перестают приходить;
- *  3) подписки переживают пересоздание соединения.
+/*
+ * The single SignalR connection. The token is fetched (and refreshed if stale) on each (re)connect;
+ * the open chat is rejoined after a reconnect, because server groups do not survive a dropped
+ * connection; subscriptions survive connection re-creation. When SignalR's own reconnect gives up,
+ * a retry loop keeps trying for as long as the user is logged in.
  */
 
 import { ref, shallowRef } from 'vue'
@@ -18,7 +14,9 @@ import {
   LogLevel,
 } from '@microsoft/signalr'
 
+import { RetryLoop } from '@/shared/lib/retry'
 import { getAuthBridge } from './http'
+import { freshAccessToken } from './token'
 import {
   HUB_EVENT_NAMES,
   type ConnectionStatus,
@@ -28,8 +26,8 @@ import {
 
 const HUB_URL = '/hubs/chat'
 
-/** Паузы перед попытками переподключения, мс. Дальше — сдаёмся и ждём действий пользователя. */
-const RECONNECT_DELAYS = [0, 2_000, 5_000, 10_000, 30_000]
+/** SignalR's own reconnect; after it gives up, RetryLoop takes over. */
+const RECONNECT_DELAYS = [0, 2_000, 5_000, 10_000]
 
 type AnyHandler = (...args: never[]) => void
 
@@ -37,10 +35,10 @@ export const useHubStore = defineStore('hub', () => {
   const status = ref<ConnectionStatus>('disconnected')
   const connection = shallowRef<HubConnection | null>(null)
 
-  /** Чат, в группу которого мы вошли. Нужен, чтобы вернуться в неё после разрыва. */
+  /** Kept to rejoin the group after a reconnect. */
   const joinedChatId = ref<string | null>(null)
 
-  /** Подписки фич. Хранятся отдельно от соединения, чтобы пережить его пересоздание. */
+  /** Kept apart from the connection so they survive its re-creation. */
   const listeners = new Map<HubEventName, Set<AnyHandler>>()
 
   function listenersFor(event: HubEventName): Set<AnyHandler> {
@@ -52,10 +50,7 @@ export const useHubStore = defineStore('hub', () => {
     return set
   }
 
-  /**
-   * Подписка на событие хаба. Возвращает функцию отписки — её удобно вызвать
-   * в onUnmounted компонента.
-   */
+  /** Works before connecting and across reconnects; returns an unsubscribe function. */
   function on<K extends HubEventName>(event: K, handler: HubEvents[K]): () => void {
     listenersFor(event).add(handler as AnyHandler)
     return () => {
@@ -63,11 +58,6 @@ export const useHubStore = defineStore('hub', () => {
     }
   }
 
-  /**
-   * Соединение вызывает подписчиков через эту прослойку, а не напрямую.
-   * Поэтому on() работает и до подключения, и после реконнекта, и не надо
-   * ничего переподписывать вручную.
-   */
   function attachEvents(hub: HubConnection): void {
     for (const event of HUB_EVENT_NAMES) {
       hub.on(event, (...args: never[]) => {
@@ -75,32 +65,52 @@ export const useHubStore = defineStore('hub', () => {
           try {
             handler(...args)
           } catch (error) {
-            // Ошибка одного подписчика не должна ронять остальных.
-            console.error(`Обработчик ${event} упал:`, error)
+            // One failing handler must not break the others.
+            console.error(`Hub handler ${event} failed:`, error)
           }
         }
       })
     }
   }
 
+  /** true between start() and stop(): the connection should be up. */
+  let wanted = false
+  const retry = new RetryLoop(connect)
+
+  function retryNow(): void {
+    if (wanted && !connection.value && status.value !== 'connecting') retry.now()
+  }
+
+  function onBrowserBack(): void {
+    if (document.visibilityState === 'visible') retryNow()
+  }
+
   async function start(): Promise<void> {
-    if (connection.value || status.value === 'connecting') return
+    if (wanted) return
+    wanted = true
+    window.addEventListener('online', retryNow)
+    document.addEventListener('visibilitychange', onBrowserBack)
+    if (!(await connect())) retry.schedule()
+  }
+
+  /** The connection dropped: the next connect checks the sign-in first (see freshAccessToken). */
+  let verifySession = false
+
+  async function connect(): Promise<boolean> {
+    if (!wanted) return true
+    if (connection.value || status.value === 'connecting') return true
 
     status.value = 'connecting'
 
     const hub = new HubConnectionBuilder()
       .withUrl(HUB_URL, {
-        /**
-         * Вызывается на каждом подключении и переподключении — поэтому здесь
-         * функция, а не готовая строка. Если access-токен уже истёк (например,
-         * вкладка была свёрнута), сначала обновляем пару.
-         */
+        // Called on every connect and reconnect: a token that expired while the tab was idle
+        // would get 401 and end the session's realtime until F5.
         accessTokenFactory: async () => {
           const bridge = getAuthBridge()
-          if (!bridge) return ''
-
-          if (!bridge.getAccessToken()) await bridge.refreshTokens()
-          return bridge.getAccessToken() ?? ''
+          const force = verifySession
+          verifySession = false
+          return bridge ? freshAccessToken(bridge, Date.now(), force) : ''
         },
       })
       .withAutomaticReconnect(RECONNECT_DELAYS)
@@ -111,32 +121,46 @@ export const useHubStore = defineStore('hub', () => {
 
     hub.onreconnecting(() => {
       status.value = 'reconnecting'
+      verifySession = true
     })
 
     hub.onreconnected(() => {
       status.value = 'connected'
-      // Группы чатов живут на конкретном соединении и после разрыва теряются.
+      // Groups belong to a connection and are lost when it drops.
       if (joinedChatId.value) void invokeSafe('JoinChat', joinedChatId.value)
     })
 
     hub.onclose(() => {
+      if (connection.value !== hub) return
+      verifySession = true
       status.value = 'disconnected'
       connection.value = null
+      // SignalR's reconnect gave up (or the server closed it): keep trying while logged in.
+      if (wanted) retry.schedule()
     })
 
     try {
       await hub.start()
+      if (!wanted) {
+        await hub.stop()
+        return true
+      }
       connection.value = hub
       status.value = 'connected'
       if (joinedChatId.value) await invokeSafe('JoinChat', joinedChatId.value)
+      return true
     } catch (error) {
       status.value = 'disconnected'
-      connection.value = null
-      console.error('Не удалось подключиться к хабу:', error)
+      console.warn('Hub connection failed:', error)
+      return false
     }
   }
 
   async function stop(): Promise<void> {
+    wanted = false
+    retry.cancel()
+    window.removeEventListener('online', retryNow)
+    document.removeEventListener('visibilitychange', onBrowserBack)
     const hub = connection.value
     connection.value = null
     joinedChatId.value = null
@@ -144,11 +168,7 @@ export const useHubStore = defineStore('hub', () => {
     if (hub) await hub.stop()
   }
 
-  /**
-   * Вызов метода хаба. Ошибки не пробрасываем: сервер может ответить
-   * HubException (например, при превышении лимита вызовов), и валить на этом
-   * интерфейс незачем — возвращаем false.
-   */
+  /** Never throws: a HubException (e.g. rate limit) becomes false instead of breaking the UI. */
   async function invokeSafe(method: string, ...args: unknown[]): Promise<boolean> {
     const hub = connection.value
     if (!hub || hub.state !== HubConnectionState.Connected) return false
@@ -157,18 +177,16 @@ export const useHubStore = defineStore('hub', () => {
       await hub.invoke(method, ...args)
       return true
     } catch (error) {
-      console.error(`Вызов ${method} не прошёл:`, error)
+      console.error(`Hub call ${method} failed:`, error)
       return false
     }
   }
-
-  /* ── Методы хаба ── */
 
   async function joinChat(chatId: string): Promise<void> {
     if (joinedChatId.value === chatId) return
     if (joinedChatId.value) await invokeSafe('LeaveChat', joinedChatId.value)
 
-    // Запоминаем до вызова: если соединение сейчас лежит, зайдём при реконнекте.
+    // Recorded before the call: if the connection is down, the chat is joined on reconnect.
     joinedChatId.value = chatId
     await invokeSafe('JoinChat', chatId)
   }
@@ -179,23 +197,14 @@ export const useHubStore = defineStore('hub', () => {
     if (chatId) await invokeSafe('LeaveChat', chatId)
   }
 
-  function sendMessage(chatId: string, text: string): Promise<boolean> {
-    return invokeSafe('SendMessage', chatId, text)
-  }
-
-  function sendTyping(chatId: string, isTyping: boolean): Promise<boolean> {
-    return invokeSafe('Typing', chatId, isTyping)
-  }
-
   return {
     status,
     joinedChatId,
     on,
     start,
     stop,
+    retryNow,
     joinChat,
     leaveChat,
-    sendMessage,
-    sendTyping,
   }
 })

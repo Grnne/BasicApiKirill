@@ -25,7 +25,6 @@
             "type": "integer"
           },
           "fileName": {
-            "nullable": true,
             "type": "string"
           },
           "hasThumbnail": {
@@ -43,12 +42,10 @@
           },
           "kind": {
             "description": "`photo`, `video`, `file` or `voice`.",
-            "nullable": true,
             "type": "string"
           },
           "mimeType": {
             "description": "The type the server found in the file; `application/octet-stream` — unknown.",
-            "nullable": true,
             "type": "string"
           },
           "size": {
@@ -57,7 +54,6 @@
           },
           "state": {
             "description": "`stored`; `expired` — the original was removed by the server's retention policy,\n            only the preview is left.",
-            "nullable": true,
             "type": "string"
           },
           "waveform": {
@@ -83,7 +79,6 @@
         "properties": {
           "action": {
             "description": "`group_created`, `title_changed`, `member_permissions_changed`,\n            `members_added`, `member_removed`, `member_left`, `role_changed`,\n            `permissions_changed`, `ownership_transferred`, `message_deleted`.",
-            "nullable": true,
             "type": "string"
           },
           "actorId": {
@@ -123,7 +118,6 @@
             "items": {
               "$ref": "#/components/schemas/AuditEntryDto"
             },
-            "nullable": true,
             "type": "array"
           },
           "nextCursor": {
@@ -138,11 +132,9 @@
         "additionalProperties": false,
         "properties": {
           "displayName": {
-            "nullable": true,
             "type": "string"
           },
           "email": {
-            "nullable": true,
             "type": "string"
           },
           "expiresAt": {
@@ -152,7 +144,6 @@
           },
           "refreshToken": {
             "description": "Long-lived opaque token used to obtain a new access token via\n`POST /api/auth/refresh`. Rotated on every refresh — always store the\nlatest value and never send it anywhere except the refresh endpoint.",
-            "nullable": true,
             "type": "string"
           },
           "refreshTokenExpiresAt": {
@@ -162,7 +153,6 @@
           },
           "token": {
             "description": "Short-lived JWT for API and hub calls. Send as `Authorization: Bearer`.",
-            "nullable": true,
             "type": "string"
           },
           "userId": {
@@ -170,7 +160,20 @@
             "type": "string"
           },
           "username": {
-            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "BlockListChangedDto": {
+        "additionalProperties": false,
+        "description": "`BlockListChanged`: the user blocked or unblocked someone — to the user's devices.",
+        "properties": {
+          "blocked": {
+            "type": "boolean"
+          },
+          "userId": {
+            "format": "uuid",
             "type": "string"
           }
         },
@@ -195,6 +198,17 @@
         ],
         "type": "object"
       },
+      "ChatDeletedDto": {
+        "additionalProperties": false,
+        "description": "`ChatDeleted`: the group is gone for everyone.",
+        "properties": {
+          "chatId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "ChatDetailDto": {
         "additionalProperties": false,
         "properties": {
@@ -215,21 +229,31 @@
             "type": "string"
           },
           "memberPermissions": {
-            "$ref": "#/components/schemas/GroupPermissionsDto"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GroupPermissionsDto"
+              }
+            ],
+            "description": "What members may do by default in the group; null for other chats.",
+            "nullable": true
           },
           "myPermissions": {
-            "$ref": "#/components/schemas/GroupPermissionsDto"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GroupPermissionsDto"
+              }
+            ],
+            "description": "What the caller may do in the group; null for other chats.",
+            "nullable": true
           },
           "myRole": {
             "description": "The caller's role: `owner`, `admin` or `member`.",
-            "nullable": true,
             "type": "string"
           },
           "participants": {
             "items": {
               "$ref": "#/components/schemas/ChatParticipantDto"
             },
-            "nullable": true,
             "type": "array"
           },
           "title": {
@@ -237,7 +261,6 @@
             "type": "string"
           },
           "type": {
-            "nullable": true,
             "type": "string"
           }
         },
@@ -275,7 +298,13 @@
             "type": "string"
           },
           "draft": {
-            "$ref": "#/components/schemas/DraftDto"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DraftDto"
+              }
+            ],
+            "description": "The user's unsent message in this chat; null — none.",
+            "nullable": true
           },
           "isMuted": {
             "description": "Muted now: no notifications; the unread counter works as usual.",
@@ -286,7 +315,12 @@
             "type": "string"
           },
           "lastMessage": {
-            "$ref": "#/components/schemas/MessageDto"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MessageDto"
+              }
+            ],
+            "nullable": true
           },
           "lastReadSeq": {
             "description": "Seq of the last message the user has read.",
@@ -324,7 +358,6 @@
             "type": "string"
           },
           "type": {
-            "nullable": true,
             "type": "string"
           },
           "unreadCount": {
@@ -352,7 +385,6 @@
             "items": {
               "$ref": "#/components/schemas/ChatListItemDto"
             },
-            "nullable": true,
             "type": "array"
           },
           "nextCursor": {
@@ -373,12 +405,10 @@
             "type": "string"
           },
           "displayName": {
-            "nullable": true,
             "type": "string"
           },
           "role": {
             "description": "`owner`, `admin` or `member`; outside groups everyone is a member.",
-            "nullable": true,
             "type": "string"
           },
           "userId": {
@@ -386,7 +416,6 @@
             "type": "string"
           },
           "username": {
-            "nullable": true,
             "type": "string"
           }
         },
@@ -430,11 +459,51 @@
             "type": "string"
           },
           "memberPermissions": {
-            "$ref": "#/components/schemas/GroupPermissionsDto"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GroupPermissionsDto"
+              }
+            ],
+            "description": "What a member of a group may do. In answers — all fields are set."
           },
           "title": {
             "nullable": true,
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ClientConfigDto": {
+        "additionalProperties": false,
+        "description": "The instance's limits and switches a client needs before the server rejects a request.",
+        "properties": {
+          "groups": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GroupLimitsDto"
+              }
+            ]
+          },
+          "media": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MediaLimitsDto"
+              }
+            ]
+          },
+          "messages": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MessageLimitsDto"
+              }
+            ]
+          },
+          "push": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PushSwitchDto"
+              }
+            ]
           }
         },
         "type": "object"
@@ -558,7 +627,6 @@
             "items": {
               "$ref": "#/components/schemas/DeviceDto"
             },
-            "nullable": true,
             "type": "array"
           }
         },
@@ -572,7 +640,6 @@
             "items": {
               "$ref": "#/components/schemas/MessageEntityDto"
             },
-            "nullable": true,
             "type": "array"
           },
           "replyToMessageId": {
@@ -583,13 +650,32 @@
           },
           "text": {
             "description": "The text as typed, not trimmed.",
-            "nullable": true,
             "type": "string"
           },
           "updatedAt": {
             "description": "When the draft was last saved (server time).",
             "format": "date-time",
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "DraftUpdatedDto": {
+        "additionalProperties": false,
+        "description": "`DraftUpdated`: the draft of a chat changed on one of the user's devices.",
+        "properties": {
+          "chatId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "draft": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DraftDto"
+              }
+            ],
+            "description": "The draft now; null — removed (cleared or sent).",
+            "nullable": true
           }
         },
         "type": "object"
@@ -623,7 +709,6 @@
               "format": "uuid",
               "type": "string"
             },
-            "nullable": true,
             "type": "array"
           },
           "id": {
@@ -648,11 +733,9 @@
               "format": "uuid",
               "type": "string"
             },
-            "nullable": true,
             "type": "array"
           },
           "title": {
-            "nullable": true,
             "type": "string"
           }
         },
@@ -666,7 +749,19 @@
               "format": "uuid",
               "type": "string"
             },
-            "nullable": true,
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "FoldersDto": {
+        "additionalProperties": false,
+        "description": "`FoldersChanged`: all the user's folders, in order — to the user's devices.",
+        "properties": {
+          "folders": {
+            "items": {
+              "$ref": "#/components/schemas/FolderDto"
+            },
             "type": "array"
           }
         },
@@ -695,7 +790,6 @@
               "format": "uuid",
               "type": "string"
             },
-            "nullable": true,
             "type": "array"
           }
         },
@@ -709,7 +803,6 @@
             "items": {
               "$ref": "#/components/schemas/MessageDto"
             },
-            "nullable": true,
             "type": "array"
           }
         },
@@ -719,10 +812,19 @@
         "additionalProperties": false,
         "properties": {
           "chat": {
-            "$ref": "#/components/schemas/SearchChatDto"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SearchChatDto"
+              }
+            ],
+            "description": "The chat a found message is in — enough to show it in the results."
           },
           "message": {
-            "$ref": "#/components/schemas/MessageDto"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MessageDto"
+              }
+            ]
           }
         },
         "type": "object"
@@ -738,7 +840,6 @@
             "items": {
               "$ref": "#/components/schemas/GlobalSearchHitDto"
             },
-            "nullable": true,
             "type": "array"
           },
           "nextCursor": {
@@ -746,8 +847,22 @@
             "type": "string"
           },
           "query": {
-            "nullable": true,
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "GroupLimitsDto": {
+        "additionalProperties": false,
+        "properties": {
+          "maxMembers": {
+            "description": "Most members of a group, the owner included.",
+            "format": "int32",
+            "type": "integer"
+          },
+          "maxTitleLength": {
+            "format": "int32",
+            "type": "integer"
           }
         },
         "type": "object"
@@ -763,14 +878,17 @@
             "type": "string"
           },
           "displayName": {
-            "nullable": true,
             "type": "string"
           },
           "permissions": {
-            "$ref": "#/components/schemas/GroupPermissionsDto"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GroupPermissionsDto"
+              }
+            ],
+            "description": "What the member may do now: the role, the group's defaults and their own overrides."
           },
           "role": {
-            "nullable": true,
             "type": "string"
           },
           "userId": {
@@ -778,7 +896,6 @@
             "type": "string"
           },
           "username": {
-            "nullable": true,
             "type": "string"
           }
         },
@@ -867,6 +984,31 @@
         },
         "type": "object"
       },
+      "MediaLimitsDto": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "description": "false — file storage is not set up: media endpoints answer 503 `MEDIA_UNAVAILABLE`.",
+            "type": "boolean"
+          },
+          "maxFileSize": {
+            "description": "Largest file, in bytes.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "maxPhotoSize": {
+            "description": "Largest photo (sent with kind `photo`), in bytes: the server decodes it for the preview.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "retentionDays": {
+            "description": "How many days files are kept; 0 — forever.",
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
       "MediaLinkDto": {
         "additionalProperties": false,
         "properties": {
@@ -899,7 +1041,6 @@
             "items": {
               "$ref": "#/components/schemas/MediaLinkDto"
             },
-            "nullable": true,
             "type": "array"
           }
         },
@@ -913,7 +1054,67 @@
               "format": "uuid",
               "type": "string"
             },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "MemberRemovedDto": {
+        "additionalProperties": false,
+        "description": "`MemberRemoved`: someone left the group or was removed.",
+        "properties": {
+          "chatId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "removedBy": {
+            "description": "Who removed them; null — they left.",
+            "format": "uuid",
             "nullable": true,
+            "type": "string"
+          },
+          "userId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "MemberUpdatedDto": {
+        "additionalProperties": false,
+        "description": "`MemberUpdated`: a member's role or permissions changed.",
+        "properties": {
+          "chatId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "member": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GroupMemberDto"
+              }
+            ],
+            "description": "A member of a group as others see them."
+          }
+        },
+        "type": "object"
+      },
+      "MembersAddedDto": {
+        "additionalProperties": false,
+        "description": "`MemberAdded`: new members of a group.",
+        "properties": {
+          "addedBy": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "chatId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/GroupMemberDto"
+            },
             "type": "array"
           }
         },
@@ -930,7 +1131,6 @@
           },
           "type": {
             "description": "`group_created`, `title_changed`, `members_added`, `member_removed`, `member_left`, `photo_changed`, `photo_removed`.",
-            "nullable": true,
             "type": "string"
           },
           "userIds": {
@@ -939,8 +1139,30 @@
               "format": "uuid",
               "type": "string"
             },
-            "nullable": true,
             "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "MessageDeletedDto": {
+        "additionalProperties": false,
+        "description": "Payload of the `MessageDeleted` event.",
+        "properties": {
+          "chatId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "forEveryone": {
+            "description": "true — deleted for everyone, all members get the event; false — the user deleted it\nfor themselves, only their own devices get the event.",
+            "type": "boolean"
+          },
+          "messageId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "seq": {
+            "format": "int64",
+            "type": "integer"
           }
         },
         "type": "object"
@@ -949,14 +1171,19 @@
         "additionalProperties": false,
         "properties": {
           "action": {
-            "$ref": "#/components/schemas/MessageActionDto"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MessageActionDto"
+              }
+            ],
+            "description": "For a system message (BasicApi.Models.Dto.Message.MessageDto.Type`system`) — what happened; the sender is who did\nit, and BasicApi.Models.Dto.Message.MessageDto.Text says the same in words for clients that do not know the action.\nNull for other messages.",
+            "nullable": true
           },
           "attachments": {
             "description": "The files, in album order; empty — none. The bytes are fetched by `POST /api/media/links`.",
             "items": {
               "$ref": "#/components/schemas/AttachmentDto"
             },
-            "nullable": true,
             "type": "array"
           },
           "chatId": {
@@ -984,11 +1211,16 @@
             "items": {
               "$ref": "#/components/schemas/MessageEntityDto"
             },
-            "nullable": true,
             "type": "array"
           },
           "forwardFrom": {
-            "$ref": "#/components/schemas/MessageForwardDto"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MessageForwardDto"
+              }
+            ],
+            "description": "For a forwarded message — its original author; null — not a forward.",
+            "nullable": true
           },
           "id": {
             "format": "uuid",
@@ -1008,18 +1240,22 @@
             "items": {
               "$ref": "#/components/schemas/ReactionCountDto"
             },
-            "nullable": true,
             "type": "array"
           },
           "replyTo": {
-            "$ref": "#/components/schemas/MessageReplyDto"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MessageReplyDto"
+              }
+            ],
+            "description": "The message this one answers; null — not a reply.",
+            "nullable": true
           },
           "senderId": {
             "format": "uuid",
             "type": "string"
           },
           "senderName": {
-            "nullable": true,
             "type": "string"
           },
           "seq": {
@@ -1033,12 +1269,10 @@
             "type": "string"
           },
           "text": {
-            "nullable": true,
             "type": "string"
           },
           "type": {
             "description": "Kind of message: `text`, `media` (files in BasicApi.Models.Dto.Message.MessageDto.Attachments, the text is the\ncaption and may be empty) or `system` (see BasicApi.Models.Dto.Message.MessageDto.Action); more kinds will come —\nshow an unknown one as a stub.",
-            "nullable": true,
             "type": "string"
           }
         },
@@ -1057,7 +1291,6 @@
             "items": {
               "$ref": "#/components/schemas/MessageDto"
             },
-            "nullable": true,
             "type": "array"
           },
           "nextCursor": {
@@ -1075,7 +1308,8 @@
           "language": {
             "description": "`pre`: language for highlighting, optional.",
             "nullable": true,
-            "type": "string"
+            "type": "string",
+            "x-omitted-when-null": true
           },
           "length": {
             "format": "int32",
@@ -1087,19 +1321,20 @@
           },
           "type": {
             "description": "`bold`, `italic`, `underline`, `strikethrough`, `spoiler`,\n            `code`, `pre` (a code block, with BasicApi.Models.Dto.Message.MessageEntityDto.Language), `link`\n            (with BasicApi.Models.Dto.Message.MessageEntityDto.Url), `mention` (with BasicApi.Models.Dto.Message.MessageEntityDto.UserId).",
-            "nullable": true,
             "type": "string"
           },
           "url": {
             "description": "`link`: http, https or mailto.",
             "nullable": true,
-            "type": "string"
+            "type": "string",
+            "x-omitted-when-null": true
           },
           "userId": {
             "description": "`mention`: the mentioned member of the chat.",
             "format": "uuid",
             "nullable": true,
-            "type": "string"
+            "type": "string",
+            "x-omitted-when-null": true
           }
         },
         "type": "object"
@@ -1112,8 +1347,40 @@
             "type": "string"
           },
           "senderName": {
-            "nullable": true,
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "MessageLimitsDto": {
+        "additionalProperties": false,
+        "properties": {
+          "deleteWindowHours": {
+            "description": "How long the author may delete a message for everyone, in hours; 0 — no limit.",
+            "format": "int32",
+            "type": "integer"
+          },
+          "editWindowHours": {
+            "description": "How long the author may edit a message, in hours; 0 — no limit.",
+            "format": "int32",
+            "type": "integer"
+          },
+          "maxAttachments": {
+            "description": "Most files in one message (an album).",
+            "format": "int32",
+            "type": "integer"
+          },
+          "maxLength": {
+            "description": "Longest text of a message, caption or draft, in UTF-16 code units.",
+            "format": "int32",
+            "type": "integer"
+          },
+          "reactions": {
+            "description": "The reactions users may put, in the order to show them.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           }
         },
         "type": "object"
@@ -1140,7 +1407,6 @@
             "items": {
               "$ref": "#/components/schemas/ReactionCountDto"
             },
-            "nullable": true,
             "type": "array"
           },
           "userId": {
@@ -1168,11 +1434,36 @@
             "type": "string"
           },
           "senderName": {
-            "nullable": true,
             "type": "string"
           },
           "text": {
             "description": "The start of the text; empty when the message was deleted.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "MessageWindowDto": {
+        "additionalProperties": false,
+        "description": "A piece of history that may sit in the middle: older pages by cursor, newer by seq.",
+        "properties": {
+          "hasMore": {
+            "description": "There are older messages before the first item.",
+            "type": "boolean"
+          },
+          "hasNewer": {
+            "description": "There are newer messages after the last item: `GET …/messages/after?seq=` its seq.",
+            "type": "boolean"
+          },
+          "items": {
+            "description": "Oldest first.",
+            "items": {
+              "$ref": "#/components/schemas/MessageDto"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "description": "Pass as `cursor` to `GET …/messages/cursor` for the page before the first item.",
             "nullable": true,
             "type": "string"
           }
@@ -1190,11 +1481,9 @@
             "type": "string"
           },
           "displayName": {
-            "nullable": true,
             "type": "string"
           },
           "email": {
-            "nullable": true,
             "type": "string"
           },
           "userId": {
@@ -1202,7 +1491,6 @@
             "type": "string"
           },
           "username": {
-            "nullable": true,
             "type": "string"
           }
         },
@@ -1214,31 +1502,38 @@
         "properties": {
           "addAdmins": {
             "nullable": true,
-            "type": "boolean"
+            "type": "boolean",
+            "x-omitted-when-null": true
           },
           "addMembers": {
             "nullable": true,
-            "type": "boolean"
+            "type": "boolean",
+            "x-omitted-when-null": true
           },
           "changeInfo": {
             "nullable": true,
-            "type": "boolean"
+            "type": "boolean",
+            "x-omitted-when-null": true
           },
           "deleteMessages": {
             "nullable": true,
-            "type": "boolean"
+            "type": "boolean",
+            "x-omitted-when-null": true
           },
           "removeMembers": {
             "nullable": true,
-            "type": "boolean"
+            "type": "boolean",
+            "x-omitted-when-null": true
           },
           "sendMedia": {
             "nullable": true,
-            "type": "boolean"
+            "type": "boolean",
+            "x-omitted-when-null": true
           },
           "sendMessages": {
             "nullable": true,
-            "type": "boolean"
+            "type": "boolean",
+            "x-omitted-when-null": true
           }
         },
         "type": "object"
@@ -1252,7 +1547,6 @@
               "format": "uuid",
               "type": "string"
             },
-            "nullable": true,
             "type": "array"
           }
         },
@@ -1285,24 +1579,29 @@
         "properties": {
           "detail": {
             "nullable": true,
-            "type": "string"
+            "type": "string",
+            "x-omitted-when-null": true
           },
           "instance": {
             "nullable": true,
-            "type": "string"
+            "type": "string",
+            "x-omitted-when-null": true
           },
           "status": {
             "format": "int32",
             "nullable": true,
-            "type": "integer"
+            "type": "integer",
+            "x-omitted-when-null": true
           },
           "title": {
             "nullable": true,
-            "type": "string"
+            "type": "string",
+            "x-omitted-when-null": true
           },
           "type": {
             "nullable": true,
-            "type": "string"
+            "type": "string",
+            "x-omitted-when-null": true
           }
         },
         "type": "object"
@@ -1332,7 +1631,12 @@
             "type": "string"
           },
           "keys": {
-            "$ref": "#/components/schemas/PushSubscriptionKeysDto"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PushSubscriptionKeysDto"
+              }
+            ],
+            "nullable": true
           }
         },
         "type": "object"
@@ -1353,6 +1657,16 @@
         },
         "type": "object"
       },
+      "PushSwitchDto": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "description": "Whether the server sends push notifications; the key is in `GET /api/push/config`.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
       "ReactionCountDto": {
         "additionalProperties": false,
         "properties": {
@@ -1361,7 +1675,53 @@
             "type": "integer"
           },
           "emoji": {
-            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ReadStateDto": {
+        "additionalProperties": false,
+        "description": "`ReadStateChanged`: the user's reading of a chat changed on one of their devices —\n            the others update the counters and the mark from it.",
+        "properties": {
+          "chatId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "lastReadSeq": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "markedUnread": {
+            "type": "boolean"
+          },
+          "unreadCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "unreadMentionCount": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "ReceiptDto": {
+        "additionalProperties": false,
+        "description": "`MessagesDelivered` / `MessagesRead`: a member's device received, or the member read,\n            the chat up to BasicApi.Models.Dto.Message.ReceiptDto.Seq. Goes to the authors whose messages first got that status.",
+        "properties": {
+          "chatId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "seq": {
+            "description": "Everything up to this seq, the recipient's own messages included.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "userId": {
+            "description": "Who received or read.",
+            "format": "uuid",
             "type": "string"
           }
         },
@@ -1501,7 +1861,6 @@
             "type": "string"
           },
           "type": {
-            "nullable": true,
             "type": "string"
           }
         },
@@ -1516,12 +1875,10 @@
             "items": {
               "$ref": "#/components/schemas/ChatListItemDto"
             },
-            "nullable": true,
             "type": "array"
           },
           "query": {
             "description": "The original search query.",
-            "nullable": true,
             "type": "string"
           },
           "totalCount": {
@@ -1545,7 +1902,6 @@
             "items": {
               "$ref": "#/components/schemas/MessageDto"
             },
-            "nullable": true,
             "type": "array"
           },
           "nextCursor": {
@@ -1555,7 +1911,6 @@
           },
           "query": {
             "description": "The original search query.",
-            "nullable": true,
             "type": "string"
           },
           "totalCount": {
@@ -1575,12 +1930,10 @@
             "items": {
               "$ref": "#/components/schemas/UserSearchResultDto"
             },
-            "nullable": true,
             "type": "array"
           },
           "query": {
             "description": "The original search query.",
-            "nullable": true,
             "type": "string"
           },
           "totalCount": {
@@ -1731,7 +2084,6 @@
             "items": {
               "$ref": "#/components/schemas/SyncUpdateDto"
             },
-            "nullable": true,
             "type": "array"
           }
         },
@@ -1747,7 +2099,6 @@
               "format": "uuid",
               "type": "string"
             },
-            "nullable": true,
             "type": "array"
           },
           "chats": {
@@ -1755,7 +2106,6 @@
             "items": {
               "$ref": "#/components/schemas/ChatListItemDto"
             },
-            "nullable": true,
             "type": "array"
           },
           "folders": {
@@ -1763,14 +2113,23 @@
             "items": {
               "$ref": "#/components/schemas/FolderDto"
             },
-            "nullable": true,
             "type": "array"
           },
           "me": {
-            "$ref": "#/components/schemas/OwnProfileResponseDto"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/OwnProfileResponseDto"
+              }
+            ],
+            "description": "The user's own profile — like `GET /api/users/me`."
           },
           "privacy": {
-            "$ref": "#/components/schemas/PrivacySettingsDto"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PrivacySettingsDto"
+              }
+            ],
+            "description": "Privacy settings — like `GET /api/users/me/privacy`."
           },
           "pts": {
             "description": "Number of the last change included in the snapshot. From it — `GET /api/sync?since=`.",
@@ -1796,7 +2155,6 @@
           },
           "type": {
             "description": "Hub event name: `MessageCreated`, `MessageUpdated`, `MessageDeleted`, `ReactionsChanged`, `MessagesDelivered`, `MessagesRead`, `ReadStateChanged`, `DraftUpdated`, `ChatCreated`, `ChatUpdated`,\n            `ChatDeleted`, `MemberAdded`, `MemberRemoved`, `MemberUpdated`, `UserUpdated`, `PrivacyUpdated`,\n            `BlockListChanged`, `PinnedChatsChanged`, `ChatStateChanged`,\n            `FoldersChanged`.",
-            "nullable": true,
             "type": "string"
           }
         },
@@ -1836,7 +2194,6 @@
             "items": {
               "$ref": "#/components/schemas/TypingStatusDto"
             },
-            "nullable": true,
             "type": "array"
           }
         },
@@ -1846,7 +2203,13 @@
         "additionalProperties": false,
         "properties": {
           "memberPermissions": {
-            "$ref": "#/components/schemas/PermissionsPatchDto"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PermissionsPatchDto"
+              }
+            ],
+            "description": "Changes to the permissions members have by default; null — unchanged.",
+            "nullable": true
           },
           "title": {
             "description": "New title, 1–128 characters after trimming; null — unchanged.",
@@ -1876,7 +2239,6 @@
             "type": "string"
           },
           "contentType": {
-            "nullable": true,
             "type": "string"
           },
           "expiresAt": {
@@ -1896,7 +2258,6 @@
           },
           "uploadUrl": {
             "description": "A signed link; the request must carry exactly BasicApi.Features.Media.UploadTicketDto.ContentType.",
-            "nullable": true,
             "type": "string"
           }
         },
@@ -1924,7 +2285,6 @@
             "type": "string"
           },
           "displayName": {
-            "nullable": true,
             "type": "string"
           },
           "userId": {
@@ -1932,7 +2292,6 @@
             "type": "string"
           },
           "username": {
-            "nullable": true,
             "type": "string"
           }
         },
@@ -1953,7 +2312,6 @@
             "type": "string"
           },
           "displayName": {
-            "nullable": true,
             "type": "string"
           },
           "userId": {
@@ -1961,7 +2319,6 @@
             "type": "string"
           },
           "username": {
-            "nullable": true,
             "type": "string"
           }
         },
@@ -1977,7 +2334,6 @@
               "format": "uuid",
               "type": "string"
             },
-            "nullable": true,
             "type": "array"
           }
         },
@@ -2009,8 +2365,30 @@
             "items": {
               "$ref": "#/components/schemas/UserStatusDto"
             },
-            "nullable": true,
             "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "UserUpdatedDto": {
+        "additionalProperties": false,
+        "description": "`UserUpdated`: a user's public profile changed — to the user's devices and everyone who\n            shares a chat with them.",
+        "properties": {
+          "avatarId": {
+            "description": "The photo; null — none. Fetched by `POST /api/media/links`.",
+            "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "userId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
           }
         },
         "type": "object"
@@ -2026,7 +2404,6 @@
             "type": "string"
           },
           "username": {
-            "nullable": true,
             "type": "string"
           }
         },
@@ -2061,17 +2438,29 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/LoginRequestDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/LoginRequestDto"
+                  }
+                ]
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/LoginRequestDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/LoginRequestDto"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/LoginRequestDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/LoginRequestDto"
+                  }
+                ]
               }
             }
           }
@@ -2131,17 +2520,29 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/LogoutRequestDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/LogoutRequestDto"
+                  }
+                ]
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/LogoutRequestDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/LogoutRequestDto"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/LogoutRequestDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/LogoutRequestDto"
+                  }
+                ]
               }
             }
           }
@@ -2198,17 +2599,29 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/ChangePasswordDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/ChangePasswordDto"
+                  }
+                ]
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ChangePasswordDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/ChangePasswordDto"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/ChangePasswordDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/ChangePasswordDto"
+                  }
+                ]
               }
             }
           }
@@ -2261,17 +2674,29 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/RefreshTokenRequestDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/RefreshTokenRequestDto"
+                  }
+                ]
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RefreshTokenRequestDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/RefreshTokenRequestDto"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/RefreshTokenRequestDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/RefreshTokenRequestDto"
+                  }
+                ]
               }
             }
           }
@@ -2321,17 +2746,29 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/RegisterRequestDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/RegisterRequestDto"
+                  }
+                ]
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RegisterRequestDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/RegisterRequestDto"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/RegisterRequestDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/RegisterRequestDto"
+                  }
+                ]
               }
             }
           }
@@ -2502,17 +2939,29 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateProfileDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpdateProfileDto"
+                  }
+                ]
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateProfileDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpdateProfileDto"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateProfileDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpdateProfileDto"
+                  }
+                ]
               }
             }
           }
@@ -2591,17 +3040,29 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/SetAvatarDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SetAvatarDto"
+                  }
+                ]
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SetAvatarDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SetAvatarDto"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/SetAvatarDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SetAvatarDto"
+                  }
+                ]
               }
             }
           }
@@ -2723,17 +3184,32 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/PrivacySettingsDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/PrivacySettingsDto"
+                  }
+                ],
+                "description": "Privacy settings: `everybody`, `contacts` (those who share a chat with the user) or\n`nobody`. In a request a null field is left as it is."
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PrivacySettingsDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/PrivacySettingsDto"
+                  }
+                ],
+                "description": "Privacy settings: `everybody`, `contacts` (those who share a chat with the user) or\n`nobody`. In a request a null field is left as it is."
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/PrivacySettingsDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/PrivacySettingsDto"
+                  }
+                ],
+                "description": "Privacy settings: `everybody`, `contacts` (those who share a chat with the user) or\n`nobody`. In a request a null field is left as it is."
               }
             }
           }
@@ -2873,17 +3349,32 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/UserStatusBatchRequestDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UserStatusBatchRequestDto"
+                  }
+                ],
+                "description": "Request body for POST /api/users/status — online status for an explicit set of users."
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UserStatusBatchRequestDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UserStatusBatchRequestDto"
+                  }
+                ],
+                "description": "Request body for POST /api/users/status — online status for an explicit set of users."
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/UserStatusBatchRequestDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UserStatusBatchRequestDto"
+                  }
+                ],
+                "description": "Request body for POST /api/users/status — online status for an explicit set of users."
               }
             }
           }
@@ -3200,17 +3691,29 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateGroupDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/CreateGroupDto"
+                  }
+                ]
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateGroupDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/CreateGroupDto"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateGroupDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/CreateGroupDto"
+                  }
+                ]
               }
             }
           },
@@ -3351,17 +3854,29 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/PinnedChatsDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/PinnedChatsDto"
+                  }
+                ]
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PinnedChatsDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/PinnedChatsDto"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/PinnedChatsDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/PinnedChatsDto"
+                  }
+                ]
               }
             }
           }
@@ -3708,17 +4223,29 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateGroupDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpdateGroupDto"
+                  }
+                ]
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateGroupDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpdateGroupDto"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateGroupDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpdateGroupDto"
+                  }
+                ]
               }
             }
           },
@@ -3800,17 +4327,29 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/SetArchivedDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SetArchivedDto"
+                  }
+                ]
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SetArchivedDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SetArchivedDto"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/SetArchivedDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SetArchivedDto"
+                  }
+                ]
               }
             }
           }
@@ -4002,17 +4541,29 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/SetAvatarDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SetAvatarDto"
+                  }
+                ]
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SetAvatarDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SetAvatarDto"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/SetAvatarDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SetAvatarDto"
+                  }
+                ]
               }
             }
           }
@@ -4148,17 +4699,29 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/SaveDraftDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SaveDraftDto"
+                  }
+                ]
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SaveDraftDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SaveDraftDto"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/SaveDraftDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SaveDraftDto"
+                  }
+                ]
               }
             }
           },
@@ -4307,17 +4870,29 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/MarkUnreadDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/MarkUnreadDto"
+                  }
+                ]
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MarkUnreadDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/MarkUnreadDto"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/MarkUnreadDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/MarkUnreadDto"
+                  }
+                ]
               }
             }
           },
@@ -4536,17 +5111,29 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/AddMembersDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/AddMembersDto"
+                  }
+                ]
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AddMembersDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/AddMembersDto"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/AddMembersDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/AddMembersDto"
+                  }
+                ]
               }
             }
           },
@@ -4738,17 +5325,32 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/PermissionsPatchDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/PermissionsPatchDto"
+                  }
+                ],
+                "description": "A change of permissions: only the given fields change, the others stay as they are."
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PermissionsPatchDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/PermissionsPatchDto"
+                  }
+                ],
+                "description": "A change of permissions: only the given fields change, the others stay as they are."
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/PermissionsPatchDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/PermissionsPatchDto"
+                  }
+                ],
+                "description": "A change of permissions: only the given fields change, the others stay as they are."
               }
             }
           },
@@ -4851,17 +5453,29 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/SetRoleDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SetRoleDto"
+                  }
+                ]
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SetRoleDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SetRoleDto"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/SetRoleDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SetRoleDto"
+                  }
+                ]
               }
             }
           },
@@ -4954,17 +5568,29 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/SendMessageDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SendMessageDto"
+                  }
+                ]
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SendMessageDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SendMessageDto"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/SendMessageDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SendMessageDto"
+                  }
+                ]
               }
             }
           },
@@ -5043,6 +5669,78 @@
           }
         },
         "summary": "Send a message.",
+        "tags": [
+          "Chats"
+        ]
+      }
+    },
+    "/api/chats/{chatId}/messages/after": {
+      "get": {
+        "description": "Paging forward from history opened in the middle (`…/context`, `…/messages/at`): the\nmessages after `seq`, oldest first; `hasNewer` — there are more after the last item.\n            \nErrors: `403 NOT_A_MEMBER`.",
+        "parameters": [
+          {
+            "description": "Chat ID",
+            "in": "path",
+            "name": "chatId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The seq of the newest message the client already has.",
+            "in": "query",
+            "name": "seq",
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Number of messages per page (default 30, max 100).",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 30,
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageWindowDto"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Forbidden"
+          }
+        },
+        "summary": "Get messages newer than a seq.",
         "tags": [
           "Chats"
         ]
@@ -5210,17 +5908,29 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/ForwardMessagesDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/ForwardMessagesDto"
+                  }
+                ]
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ForwardMessagesDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/ForwardMessagesDto"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/ForwardMessagesDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/ForwardMessagesDto"
+                  }
+                ]
               }
             }
           },
@@ -5515,17 +6225,29 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/EditMessageDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/EditMessageDto"
+                  }
+                ]
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/EditMessageDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/EditMessageDto"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/EditMessageDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/EditMessageDto"
+                  }
+                ]
               }
             }
           },
@@ -5594,6 +6316,89 @@
           }
         },
         "summary": "Edit a message.",
+        "tags": [
+          "Chats"
+        ]
+      }
+    },
+    "/api/chats/{chatId}/messages/{messageId}/context": {
+      "get": {
+        "description": "For opening a chat at a found message or the original of a reply: up to half of `limit`\nmessages before it, the message itself, the rest after it — oldest first.\nOlder pages: `GET …/messages/cursor?cursor={nextCursor}` while `hasMore`; newer ones:\n`GET …/messages/after?seq={last item's seq}` while `hasNewer`.\n            \nErrors: `403 NOT_A_MEMBER`, `404 MESSAGE_NOT_FOUND` — not in this chat, deleted\nfor everyone or by the caller for themselves.",
+        "parameters": [
+          {
+            "description": "Chat ID",
+            "in": "path",
+            "name": "chatId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The message to open the history at.",
+            "in": "path",
+            "name": "messageId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Messages in the window (default 30, max 100).",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 30,
+              "format": "int32",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageWindowDto"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "summary": "Get the history around a message.",
         "tags": [
           "Chats"
         ]
@@ -5702,17 +6507,29 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/SetReactionDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SetReactionDto"
+                  }
+                ]
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SetReactionDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SetReactionDto"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/SetReactionDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SetReactionDto"
+                  }
+                ]
               }
             }
           },
@@ -5804,17 +6621,29 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/SetMutedDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SetMutedDto"
+                  }
+                ]
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SetMutedDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SetMutedDto"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/SetMutedDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SetMutedDto"
+                  }
+                ]
               }
             }
           }
@@ -5875,17 +6704,29 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/SetPinnedDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SetPinnedDto"
+                  }
+                ]
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SetPinnedDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SetPinnedDto"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/SetPinnedDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SetPinnedDto"
+                  }
+                ]
               }
             }
           }
@@ -5946,17 +6787,29 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/MarkMessageReadDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/MarkMessageReadDto"
+                  }
+                ]
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MarkMessageReadDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/MarkMessageReadDto"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/MarkMessageReadDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/MarkMessageReadDto"
+                  }
+                ]
               }
             }
           }
@@ -6011,17 +6864,29 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/TypingDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/TypingDto"
+                  }
+                ]
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/TypingDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/TypingDto"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/TypingDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/TypingDto"
+                  }
+                ]
               }
             }
           },
@@ -6065,6 +6930,37 @@
         "summary": "Report typing.",
         "tags": [
           "Chats"
+        ]
+      }
+    },
+    "/api/config": {
+      "get": {
+        "description": "What a client checks before sending, so a user learns about a limit before the server rejects\nthe request: message length, files per album, file sizes, the reaction set, group size, and\nwhether files and push are available. Set by the server's configuration; read once after login.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientConfigDto"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "The instance's limits and switches.",
+        "tags": [
+          "Config"
         ]
       }
     },
@@ -6183,17 +7079,32 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/SaveFolderDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SaveFolderDto"
+                  }
+                ],
+                "description": "A new folder, or changes to one: a null field stays as it is."
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SaveFolderDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SaveFolderDto"
+                  }
+                ],
+                "description": "A new folder, or changes to one: a null field stays as it is."
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/SaveFolderDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SaveFolderDto"
+                  }
+                ],
+                "description": "A new folder, or changes to one: a null field stays as it is."
               }
             }
           }
@@ -6242,17 +7153,29 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/FolderOrderDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/FolderOrderDto"
+                  }
+                ]
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/FolderOrderDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/FolderOrderDto"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/FolderOrderDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/FolderOrderDto"
+                  }
+                ]
               }
             }
           }
@@ -6358,17 +7281,32 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/SaveFolderDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SaveFolderDto"
+                  }
+                ],
+                "description": "A new folder, or changes to one: a null field stays as it is."
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SaveFolderDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SaveFolderDto"
+                  }
+                ],
+                "description": "A new folder, or changes to one: a null field stays as it is."
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/SaveFolderDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SaveFolderDto"
+                  }
+                ],
+                "description": "A new folder, or changes to one: a null field stays as it is."
               }
             }
           }
@@ -6506,17 +7444,29 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/MediaLinksRequestDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/MediaLinksRequestDto"
+                  }
+                ]
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MediaLinksRequestDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/MediaLinksRequestDto"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/MediaLinksRequestDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/MediaLinksRequestDto"
+                  }
+                ]
               }
             }
           }
@@ -6576,17 +7526,32 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateUploadDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/CreateUploadDto"
+                  }
+                ],
+                "description": "What the client is about to upload."
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateUploadDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/CreateUploadDto"
+                  }
+                ],
+                "description": "What the client is about to upload."
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateUploadDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/CreateUploadDto"
+                  }
+                ],
+                "description": "What the client is about to upload."
               }
             }
           }
@@ -6846,17 +7811,32 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/PushSubscriptionDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/PushSubscriptionDto"
+                  }
+                ],
+                "description": "A browser push subscription, as `PushSubscription.toJSON()` gives it."
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PushSubscriptionDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/PushSubscriptionDto"
+                  }
+                ],
+                "description": "A browser push subscription, as `PushSubscription.toJSON()` gives it."
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/PushSubscriptionDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/PushSubscriptionDto"
+                  }
+                ],
+                "description": "A browser push subscription, as `PushSubscription.toJSON()` gives it."
               }
             }
           }
@@ -7096,17 +8076,29 @@
           "content": {
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/SyncAckDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SyncAckDto"
+                  }
+                ]
               }
             },
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SyncAckDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SyncAckDto"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/SyncAckDto"
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/SyncAckDto"
+                  }
+                ]
               }
             }
           },
@@ -7189,6 +8181,9 @@
     },
     {
       "name": "Groups"
+    },
+    {
+      "name": "Config"
     },
     {
       "name": "Devices"

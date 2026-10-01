@@ -1,7 +1,12 @@
 ﻿using System.Reflection;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
+using BasicApi.Services.Events;
 using Microsoft.OpenApi;
+using Swashbuckle.AspNetCore.SwaggerGen;
 
 namespace BasicApi.Extensions;
 
@@ -44,6 +49,12 @@ public static class SwaggerExtensions
                 [new OpenApiSecuritySchemeReference(JwtBearerDefaults.AuthenticationScheme, document)] = []
             });
 
+            // Nullability as declared in C#: generated clients get string, not string | null, where null never comes.
+            c.SupportNonNullableReferenceTypes();
+            c.UseAllOfToExtendReferenceSchemas();
+            c.DocumentFilter<HubEventSchemasFilter>();
+            c.SchemaFilter<OmittedWhenNullSchemaFilter>();
+
             var xmlFile = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
             var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
             if (File.Exists(xmlPath))
@@ -67,5 +78,49 @@ public static class SwaggerExtensions
         });
 
         return app;
+    }
+}
+
+/// <summary>
+/// Adds the payloads of hub events to the document's schemas: SignalR is not described by OpenAPI, but
+/// clients generate their types from this document, events included.
+/// </summary>
+internal sealed class HubEventSchemasFilter : IDocumentFilter
+{
+    public void Apply(OpenApiDocument swaggerDoc, DocumentFilterContext context)
+    {
+        var payloads = typeof(IChatEventPublisher).GetMethods()
+            .SelectMany(m => m.GetParameters())
+            .Select(p => p.ParameterType)
+            .Where(t => t.IsClass && t.Namespace?.StartsWith("BasicApi.Models", StringComparison.Ordinal) == true)
+            .Distinct();
+
+        foreach (var type in payloads)
+            context.SchemaGenerator.GenerateSchema(type, context.SchemaRepository);
+    }
+}
+
+/// <summary>
+/// Marks properties left out of the JSON when null (<c>x-omitted-when-null</c>): every other property of
+/// an answer is always written, so generated clients may treat it as present.
+/// </summary>
+internal sealed class OmittedWhenNullSchemaFilter : ISchemaFilter
+{
+    public void Apply(IOpenApiSchema schema, SchemaFilterContext context)
+    {
+        if (schema.Properties is null)
+            return;
+
+        foreach (var property in context.Type.GetProperties())
+        {
+            if (property.GetCustomAttribute<JsonIgnoreAttribute>()?.Condition != JsonIgnoreCondition.WhenWritingNull)
+                continue;
+            if (schema.Properties.TryGetValue(JsonNamingPolicy.CamelCase.ConvertName(property.Name), out var target)
+                && target is OpenApiSchema concrete)
+            {
+                concrete.Extensions ??= new Dictionary<string, IOpenApiExtension>();
+                concrete.Extensions["x-omitted-when-null"] = new JsonNodeExtension(JsonValue.Create(true));
+            }
+        }
     }
 }

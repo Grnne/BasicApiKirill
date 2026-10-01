@@ -1,28 +1,73 @@
-/* Сообщения чата. BasicApi/Features/Chats/ChatsController.cs */
-
 import { http } from '@/shared/api/http'
-import type { CursorPage, Message } from '@/entities/message/types'
+import type {
+  DraftDto,
+  EditMessageDto,
+  ForwardMessagesDto,
+  ForwardMessagesResponseDto,
+  MessageDto,
+  MessageReactionsDto,
+  SaveDraftDto,
+  SearchMessagesResponseDto,
+  SendMessageDto,
+} from '@/shared/api/schema'
 
-/** Сколько сообщений тянем за раз. Сервер ограничивает сотней. */
-export const PAGE_SIZE = 30
-
-/**
- * Страница сообщений. Внутри страницы они идут от старых к новым, а сама
- * следующая страница — старее текущей: cursor ведёт назад по времени.
- * Без cursor отдаются самые свежие.
- */
-export function getMessagesPage(
-  chatId: string,
-  cursor: string | null,
-  signal?: AbortSignal,
-): Promise<CursorPage<Message>> {
-  return http.get<CursorPage<Message>>(`/api/chats/${chatId}/messages/cursor`, {
-    query: { limit: PAGE_SIZE, cursor: cursor ?? undefined },
-    ...(signal ? { signal } : {}),
-  })
+/** 201 — stored now, 200 — a repeat of the same clientMessageId: the message stored before. */
+export function sendMessage(chatId: string, body: SendMessageDto): Promise<MessageDto> {
+  return http.post<MessageDto>(`/api/chats/${chatId}/messages`, body)
 }
 
-/** Отметить прочитанным всё до указанного сообщения включительно. */
+/** "Typing" fades on the server after 6 s without a repeat. */
+export function sendTyping(chatId: string, isTyping: boolean): Promise<void> {
+  return http.post<void>(`/api/chats/${chatId}/typing`, { isTyping })
+}
+
+/** Marks everything up to and including the given message as read. */
 export function markRead(chatId: string, lastMessageId: string): Promise<void> {
   return http.post<void>(`/api/chats/${chatId}/read`, { lastMessageId })
+}
+
+/** Replaces text and formatting; the same text again is a no-op (200 without an event). */
+export function editMessage(chatId: string, messageId: string, body: EditMessageDto): Promise<MessageDto> {
+  return http.patch<MessageDto>(`/api/chats/${chatId}/messages/${messageId}`, body)
+}
+
+/** forEveryone: for all members (the author, within the window); otherwise only for the caller. */
+export function deleteMessage(chatId: string, messageId: string, forEveryone: boolean): Promise<void> {
+  return http.delete<void>(`/api/chats/${chatId}/messages/${messageId}`, forEveryone ? { query: { forEveryone } } : {})
+}
+
+/** Copies into chatId, in the source order; repeating with the same clientMessageIds creates nothing. */
+export function forwardMessages(chatId: string, body: ForwardMessagesDto): Promise<ForwardMessagesResponseDto> {
+  return http.post<ForwardMessagesResponseDto>(`/api/chats/${chatId}/messages/forward`, body)
+}
+
+/** One reaction per user: a new one replaces the old. Answers the summary after the change. */
+export function setReaction(chatId: string, messageId: string, emoji: string): Promise<MessageReactionsDto> {
+  return http.put<MessageReactionsDto>(`/api/chats/${chatId}/messages/${messageId}/reactions`, { emoji })
+}
+
+export function removeReaction(chatId: string, messageId: string): Promise<void> {
+  return http.delete<void>(`/api/chats/${chatId}/messages/${messageId}/reactions`)
+}
+
+/** 200 with the draft, or 204 when the text is empty without a reply (the draft is removed). */
+export async function saveDraft(chatId: string, body: SaveDraftDto): Promise<DraftDto | null> {
+  return (await http.put<DraftDto | undefined>(`/api/chats/${chatId}/draft`, body)) ?? null
+}
+
+export function removeDraft(chatId: string): Promise<void> {
+  return http.delete<void>(`/api/chats/${chatId}/draft`)
+}
+
+/** Words match by their start and in other forms (Russian too); at least 2 characters. */
+export function searchInChat(
+  chatId: string,
+  query: string,
+  cursor: string | null,
+  signal?: AbortSignal,
+): Promise<SearchMessagesResponseDto> {
+  return http.get<SearchMessagesResponseDto>(`/api/chats/${chatId}/messages/search`, {
+    query: { q: query, cursor: cursor ?? undefined, limit: 20 },
+    ...(signal ? { signal } : {}),
+  })
 }

@@ -23,6 +23,9 @@ const label = computed(() => {
   <span class="status" :data-state="hub.status" :title="`SignalR: ${hub.status}`">
     <span class="dot" />
     {{ label }}
+    <button v-if="hub.status === 'disconnected'" type="button" class="retry" @click="hub.retryNow()">
+      Повторить
+    </button>
   </span>
 </template>
 
@@ -51,6 +54,17 @@ const label = computed(() => {
 }
 .status[data-state='disconnected'] .dot {
   background: var(--danger);
+}
+.retry {
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+}
+.retry:hover {
+  border-color: var(--accent);
 }
 @keyframes pulse {
   50% {

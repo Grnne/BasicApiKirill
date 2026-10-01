@@ -69,6 +69,24 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
         return Page(rows, limit);
     }
 
+    public async Task<CursorResult<MessageWithSender>> GetMessagesWithSenderAfterAsync(
+        Guid chatId, Guid viewerId, long afterSeq, int limit, CancellationToken ct = default)
+    {
+        var sql = $@"
+            SELECT {SelectColumns}{MyReactionColumn}
+            FROM messages m
+            {Joins}
+            WHERE m.chat_id = @chatId
+              AND {VisibleToViewer}
+              AND m.seq > @afterSeq
+            ORDER BY m.seq
+            LIMIT @fetchSize";
+
+        var rows = await db.QueryAsync<MessageWithSender>(
+            sql, new { chatId, viewerId, afterSeq, fetchSize = limit + 1 }, ct);
+        return Page(rows, limit);
+    }
+
     public async Task<CursorResult<MessageWithSender>> GetGalleryPageAsync(
         Guid chatId, Guid viewerId, IReadOnlyCollection<string> kinds, bool links, long? beforeSeq, int limit,
         CancellationToken ct = default)
@@ -230,6 +248,12 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
     public Task<long?> GetSeqAsync(Guid chatId, Guid messageId, CancellationToken ct = default) =>
         db.QueryFirstOrDefaultAsync<long?>(
             "SELECT seq FROM messages WHERE id = @messageId AND chat_id = @chatId", new { chatId, messageId }, ct);
+
+    public Task<long?> GetVisibleSeqAsync(Guid chatId, Guid viewerId, Guid messageId, CancellationToken ct = default) =>
+        db.QueryFirstOrDefaultAsync<long?>($@"
+            SELECT m.seq FROM messages m
+            WHERE m.id = @messageId AND m.chat_id = @chatId AND {VisibleToViewer}",
+            new { chatId, viewerId, messageId }, ct);
 
     public Task<ReadPointerMove> MarkReadAsync(
         Guid chatId, Guid userId, Guid messageId, CancellationToken ct = default) =>

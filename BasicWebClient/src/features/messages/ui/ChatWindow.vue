@@ -1,23 +1,35 @@
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 
-import { chatTitle } from '@/entities/chat/lib'
+import { chatInitial, chatTitle } from '@/entities/chat/lib'
+import { useChatDetailsStore } from '@/entities/chat/model/details.store'
+import AvatarCircle from '@/entities/media/ui/AvatarCircle.vue'
 import { usePresenceStore } from '@/entities/user/presence.store'
+import { plural } from '@/shared/lib/plural'
 import { useChatListStore } from '@/features/chat-list/model/chat-list.store'
 import { useMessagesStore } from '../model/messages.store'
+import ChatSearch from './ChatSearch.vue'
 import MessageList from './MessageList.vue'
 import MessageComposer from './MessageComposer.vue'
+import SelectionBar from './SelectionBar.vue'
+
+const emit = defineEmits<{ info: [] }>()
 
 const chatList = useChatListStore()
 const messages = useMessagesStore()
 const presence = usePresenceStore()
+const details = useChatDetailsStore()
 
-/** Подпись под названием чата: «печатает…» важнее, чем «в сети». */
+// Typing takes precedence over the online status.
 const subtitle = computed(() => {
   const chat = chatList.selectedChat
   if (!chat) return ''
 
   if (presence.isSomeoneTyping(chat.chatId)) return 'печатает…'
+  if (chat.type === 'group') {
+    const count = details.get(chat.chatId)?.participants.length
+    return count ? `${count} ${plural(count, ['участник', 'участника', 'участников'])}` : ''
+  }
   if (chat.type !== 'private') return ''
   return presence.isOnline(chat.companionId) ? 'в сети' : 'не в сети'
 })
@@ -26,17 +38,13 @@ const isTyping = computed(
   () => chatList.selectedChat !== null && presence.isSomeoneTyping(chatList.selectedChat.chatId),
 )
 
-onMounted(() => {
-  messages.subscribeToHub()
-})
+const searching = ref(false)
 
-/**
- * Лента следует за выбором в списке чатов. Связь односторонняя: список ничего
- * не знает про сообщения, а сообщения только читают выбранный chatId.
- */
+// One-way link: the chat list knows nothing about messages, which follow the selected chatId.
 watch(
   () => chatList.selectedChatId,
   (chatId) => {
+    searching.value = false
     if (chatId) {
       void messages.openChat(chatId)
     } else {
@@ -50,16 +58,22 @@ watch(
 <template>
   <section v-if="chatList.selectedChat" class="window">
     <header class="head">
-      <!-- Видна только на узких экранах: там список и переписка не помещаются рядом. -->
       <button type="button" class="back" title="К списку чатов" @click="chatList.deselect()">
         ←
       </button>
-      <span class="title">{{ chatTitle(chatList.selectedChat) }}</span>
-      <span :class="['subtitle', { typing: isTyping }]">{{ subtitle }}</span>
+      <button type="button" class="about" title="О чате" @click="emit('info')">
+        <AvatarCircle :avatar-id="chatList.selectedChat.avatarId" :initial="chatInitial(chatList.selectedChat)" :size="32" />
+        <span class="title">{{ chatTitle(chatList.selectedChat) }}</span>
+        <span :class="['subtitle', { typing: isTyping }]">{{ subtitle }}</span>
+      </button>
+      <button type="button" class="search-toggle" title="Поиск в чате" @click="searching = !searching">🔍</button>
     </header>
 
+    <ChatSearch v-if="searching" @close="searching = false" />
+
     <MessageList />
-    <MessageComposer />
+    <SelectionBar v-if="messages.selected.size > 0" />
+    <MessageComposer v-else />
   </section>
 
   <section v-else class="empty">
@@ -69,9 +83,14 @@ watch(
 
 <style scoped>
 .window {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
+}
+/* The message list (a child's root gets this scope) takes the height that is left. */
+.window > .viewport {
+  flex: 1;
+  min-height: 0;
 }
 .head {
   display: flex;
@@ -94,8 +113,29 @@ watch(
     display: block;
   }
 }
+.search-toggle {
+  margin-left: auto;
+  padding: 2px 6px;
+  border: none;
+  background: none;
+  color: var(--text-dim);
+}
+.about {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  text-align: left;
+}
 .title {
+  overflow: hidden;
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .subtitle {
   color: var(--text-dim);
