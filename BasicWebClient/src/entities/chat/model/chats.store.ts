@@ -11,6 +11,7 @@ import {
   emptyChats,
   fromSnapshot,
   messageArrived,
+  previewArrived,
   putChat,
   sortedChats,
   type ChatsContext,
@@ -75,7 +76,15 @@ export const useChatsStore = defineStore('chats', () => {
   }
 
   /** The ChatListUpdated preview: the full MessageCreated comes with the next catch-up. */
-  function preview(message: Message, ctx: ChatsContext): void {
+  /** A ChatListUpdated preview: moves the row; the counters come with the journal. */
+  function preview(message: Message): void {
+    const effects: ChatsEffects = { fetchChats: [] }
+    previewArrived(state.value, message, effects)
+    run(effects)
+  }
+
+  /** A full message this client sent or forwarded, from the server's answer. */
+  function messageStored(message: Message, ctx: ChatsContext): void {
     const effects: ChatsEffects = { fetchChats: [] }
     messageArrived(state.value, message, ctx, effects)
     run(effects)
@@ -103,5 +112,5 @@ export const useChatsStore = defineStore('chats', () => {
     loaded.value = false
   }
 
-  return { list, mainList, archivedList, folders, loaded, snapshotVersion, get, replaceAll, put, apply, preview, markReadLocally, patch, reset }
+  return { list, mainList, archivedList, folders, loaded, snapshotVersion, get, replaceAll, put, apply, preview, messageStored, markReadLocally, patch, reset }
 })

@@ -55,6 +55,26 @@ public class SignalRChatEventPublisherTests
     }
 
     [Fact]
+    public async Task MessageCreated_PreviewCarriesWhatTheChatRowShows()
+    {
+        // The contract promised seq, and the client could not place a preview without it: it
+        // dropped every one, and the rows of chats not open waited for the catch-up.
+        var message = Message("");
+        message.Seq = 42;
+        message.Type = "system";
+        message.Action = new MessageActionDto { Type = "title_changed" };
+        message.Attachments = [new AttachmentDto { Id = Guid.NewGuid(), Kind = "photo" }];
+
+        await _publisher.MessageCreatedAsync(message, [message.SenderId]);
+
+        var preview = Assert.IsType<MessageDto>(Assert.Single(_hub.Recorder.Of("ChatListUpdated")).Args[1]);
+        Assert.Equal(42, preview.Seq);
+        Assert.Equal("system", preview.Type);
+        Assert.Equal("title_changed", preview.Action?.Type);
+        Assert.Single(preview.Attachments);
+    }
+
+    [Fact]
     public async Task MessageCreated_ShortText_PreviewIsTheSame()
     {
         var message = Message("short");

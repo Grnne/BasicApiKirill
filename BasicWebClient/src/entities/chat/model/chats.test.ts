@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { BOB, ME, chat, message } from '@/testing/fixtures'
 import type { JournaledEventName, JournaledEvents } from '@/shared/api/hub.types'
-import { applyChatEvent, fromSnapshot, sortedChats, type ChatsEffects, type ChatsState } from './chats'
+import { applyChatEvent, fromSnapshot, previewArrived, sortedChats, type ChatsEffects, type ChatsState } from './chats'
 
 const ctx = { meId: ME }
 
@@ -59,6 +59,27 @@ describe('messages and unread counters', () => {
       entities: [{ type: 'mention', offset: 0, length: 3, userId: ME, url: null, language: null }],
     }))
 
+    expect(state.byId['chat-1']!.unreadMentionCount).toBe(1)
+  })
+
+  it('a ChatListUpdated preview moves the row; the counters and the full message come from the journal', () => {
+    // The preview is cut and carries no formatting: counted from it, a mention past its end was
+    // lost for good, and the full message, with the same seq, never replaced the cut text.
+    const state = fromSnapshot([chat({ lastMessage: message({ seq: 1 }), lastReadSeq: 1 })])
+    const full = message({
+      seq: 2,
+      text: '@me hi',
+      entities: [{ type: 'mention', offset: 0, length: 3, userId: ME, url: null, language: null }],
+    })
+    const effects: ChatsEffects = { fetchChats: [] }
+
+    previewArrived(state, { ...full, text: '@me…', entities: [] }, effects)
+    expect(state.byId['chat-1']!.lastMessage!.text).toBe('@me…')
+    expect(state.byId['chat-1']!.unreadCount).toBe(0)
+
+    apply(state, 'MessageCreated', full)
+    expect(state.byId['chat-1']!.lastMessage!.text).toBe('@me hi')
+    expect(state.byId['chat-1']!.unreadCount).toBe(1)
     expect(state.byId['chat-1']!.unreadMentionCount).toBe(1)
   })
 

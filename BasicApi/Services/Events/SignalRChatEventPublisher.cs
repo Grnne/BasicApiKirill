@@ -118,7 +118,10 @@ public sealed class SignalRChatEventPublisher(IHubContext<ChatHub> hub, HubConne
             ? Task.CompletedTask
             : hub.Clients.Users(ToStrings(recipientIds)).SendAsync("TypingChanged", chatId, userId, isTyping, ct);
 
-    /// <summary>Message for a chat list row: the text is truncated.</summary>
+    /// <summary>
+    /// Message for a chat list row: the text is truncated, formatting, replies and reactions are
+    /// left out. Not a full message — clients take counters and mentions from the journal.
+    /// </summary>
     public static MessageDto Preview(MessageDto message) => new()
     {
         Id = message.Id,
@@ -127,7 +130,11 @@ public sealed class SignalRChatEventPublisher(IHubContext<ChatHub> hub, HubConne
         SenderName = message.SenderName,
         Text = message.Text.Length > PreviewLength ? message.Text[..PreviewLength] + "…" : message.Text,
         CreatedAt = message.CreatedAt,
-        IsRead = message.IsRead
+        IsRead = message.IsRead,
+        Seq = message.Seq,
+        Type = message.Type,
+        Action = message.Action,
+        Attachments = message.Attachments
     };
 
     private Task ToUsers(IReadOnlyCollection<Guid> userIds, string method, object payload, CancellationToken ct) =>

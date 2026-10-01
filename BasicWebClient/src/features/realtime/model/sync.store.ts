@@ -67,7 +67,7 @@ export const useSyncStore = defineStore('sync', () => {
     unsubscribe.push(
       hub.on('ChatListUpdated', (_chatId, message) => {
         if (!engine.hasSnapshot) return
-        chats.preview(message, ctx())
+        chats.preview(message)
         engine.scheduleCatchUp()
       }),
     )

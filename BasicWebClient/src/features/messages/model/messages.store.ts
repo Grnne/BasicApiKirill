@@ -41,7 +41,7 @@ export const useMessagesStore = defineStore('messages', () => {
     {
       stored: (message) => {
         history.stored(message)
-        chats.preview(message, ctx())
+        chats.messageStored(message, ctx())
         setRestricted(message.chatId, false)
       },
       sending: (chatId, id) => history.updatePending(chatId, id, { state: 'sending', error: null }),
@@ -239,7 +239,7 @@ export const useMessagesStore = defineStore('messages', () => {
       })
       for (const message of response.items) {
         history.stored(message)
-        chats.preview(message, ctx())
+        chats.messageStored(message, ctx())
       }
       clearSelection()
       return response.items.length

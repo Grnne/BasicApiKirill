@@ -53,7 +53,28 @@ export function fromSnapshot(chats: ChatListItem[]): ChatsState {
 const mentions = (message: MessageDto, meId: string) =>
   message.entities.some((e) => e.type === 'mention' && e.userId === meId)
 
-/** A new message in a chat: MessageCreated, or the ChatListUpdated preview of it. */
+/** Puts the message in the row if it is newer; the full message replaces its own preview. */
+function showLast(chat: ChatListItem, message: MessageDto): void {
+  if (message.seq > (chat.lastMessage?.seq ?? 0) || message.id === chat.lastMessage?.id) {
+    chat.lastMessage = message
+    chat.lastActivityAt = message.createdAt
+  }
+}
+
+/**
+ * The ChatListUpdated preview of a new message: it moves the row at once, the counters wait for
+ * the full message from the journal (the preview is cut and has no mentions).
+ */
+export function previewArrived(state: ChatsState, message: MessageDto, effects: ChatsEffects): void {
+  const chat = state.byId[message.chatId]
+  if (!chat) {
+    effects.fetchChats.push(message.chatId)
+    return
+  }
+  showLast(chat, message)
+}
+
+/** A new message in a chat (MessageCreated). */
 export function messageArrived(
   state: ChatsState,
   message: MessageDto,
@@ -66,10 +87,7 @@ export function messageArrived(
     return
   }
 
-  if (message.seq > (chat.lastMessage?.seq ?? 0)) {
-    chat.lastMessage = message
-    chat.lastActivityAt = message.createdAt
-  }
+  showLast(chat, message)
 
   const counted = state.countedUpTo[chat.chatId] ?? 0
   if (message.seq <= counted) return
