@@ -3,6 +3,7 @@ import { ref, watch } from 'vue'
 
 import type { GlobalSearchHitDto } from '@/shared/api/schema'
 import { describeError } from '@/shared/api/problem'
+import { hideSpoilers } from '@/entities/message/lib/preview'
 import { formatDay } from '@/shared/lib/date'
 import { useDebounced } from '@/shared/lib/useDebounced'
 import * as searchApi from '../api/search.api'
@@ -69,7 +70,7 @@ function chatName(hit: GlobalSearchHitDto): string {
     >
       <span class="chat">{{ chatName(hit) }}</span>
       <span class="when">{{ formatDay(hit.message.createdAt) }}</span>
-      <span class="text">{{ hit.message.senderName }}: {{ hit.message.text }}</span>
+      <span class="text">{{ hit.message.senderName }}: {{ hideSpoilers(hit.message.text, hit.message.entities) }}</span>
     </button>
     <button v-if="cursor" type="button" class="more" :disabled="busy" @click="search(debounced, true)">Ещё</button>
   </section>

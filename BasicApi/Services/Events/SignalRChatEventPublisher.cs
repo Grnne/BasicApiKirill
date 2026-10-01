@@ -1,4 +1,5 @@
 using BasicApi.Hubs;
+using BasicApi.Models;
 using BasicApi.Models.Dto.Chat;
 using BasicApi.Models.Dto.Users;
 using BasicApi.Models.Dto.Message;
@@ -128,7 +129,7 @@ public sealed class SignalRChatEventPublisher(IHubContext<ChatHub> hub, HubConne
         ChatId = message.ChatId,
         SenderId = message.SenderId,
         SenderName = message.SenderName,
-        Text = message.Text.Length > PreviewLength ? message.Text[..PreviewLength] + "…" : message.Text,
+        Text = Truncate(MessageEntities.HideSpoilers(message.Text, message.Entities)),
         CreatedAt = message.CreatedAt,
         IsRead = message.IsRead,
         Seq = message.Seq,
@@ -136,6 +137,9 @@ public sealed class SignalRChatEventPublisher(IHubContext<ChatHub> hub, HubConne
         Action = message.Action,
         Attachments = message.Attachments
     };
+
+    private static string Truncate(string text) =>
+        text.Length > PreviewLength ? text[..PreviewLength] + "…" : text;
 
     private Task ToUsers(IReadOnlyCollection<Guid> userIds, string method, object payload, CancellationToken ct) =>
         userIds.Count == 0 ? Task.CompletedTask : hub.Clients.Users(ToStrings(userIds)).SendAsync(method, payload, ct);

@@ -205,6 +205,7 @@ public class ChatRepository(IDbSession db) : IChatRepository
             lm.seq AS LastMessageSeq,
             lm.sender_id AS LastMessageSenderId,
             lm.text AS LastMessageText,
+            lm.entities::text AS LastMessageEntitiesJson,
             lm.type AS LastMessageType,
             lm.attachments AS LastMessageAttachmentsJson,
             lm.created_at AS LastMessageCreatedAt,
@@ -223,7 +224,7 @@ public class ChatRepository(IDbSession db) : IChatRepository
         ) comp ON c.type = 'private'
 
         LEFT JOIN LATERAL (
-            SELECT m.id, m.seq, m.sender_id, m.text, m.created_at, m.type,
+            SELECT m.id, m.seq, m.sender_id, m.text, m.entities, m.created_at, m.type,
                    " + AttachmentRepository.AttachmentsJsonOf + @"m.id)::text AS attachments
             FROM messages m
             WHERE m.chat_id = c.id

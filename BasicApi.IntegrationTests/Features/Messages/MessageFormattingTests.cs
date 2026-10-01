@@ -41,6 +41,34 @@ public class MessageFormattingTests(PostgresFixture db) : DbTest(db)
     }
 
     [Fact]
+    public async Task Spoiler_StaysCovered_WhereTheTextIsShownWithoutFormatting()
+    {
+        // The chat row and a reply's quote have no formatting: the hidden part showed in plain text.
+        await using var t = await ArrangeAsync();
+        using var aliceApi = t.Factory.CreateClient(t.Alice.Token);
+        using var bobApi = t.Factory.CreateClient(t.Bob.Token);
+        var sent = await ReadJsonAsync(await aliceApi.PostAsJsonAsync($"/api/chats/{t.Group}/messages", new
+        {
+            text = "the killer is the butler",
+            entities = new object[] { new { type = "spoiler", offset = 14, length = 10 } }
+        }));
+
+        var row = await GetJsonAsync(bobApi, $"/api/chats/{t.Group}/item");
+        Assert.Equal("the killer is ▒▒▒▒", row.GetProperty("lastMessage").GetProperty("text").GetString());
+
+        var reply = await ReadJsonAsync(await bobApi.PostAsJsonAsync($"/api/chats/{t.Group}/messages", new
+        {
+            text = "no way",
+            replyToMessageId = sent.GetProperty("id").GetGuid()
+        }));
+        Assert.Equal("the killer is ▒▒▒▒", reply.GetProperty("replyTo").GetProperty("text").GetString());
+
+        // The message itself keeps its text: the client covers the spoiler while drawing it.
+        var history = await GetJsonAsync(bobApi, $"/api/chats/{t.Group}/messages/cursor");
+        Assert.Contains(history.GetProperty("items").EnumerateArray(), m => m.GetProperty("text").GetString() == "the killer is the butler");
+    }
+
+    [Fact]
     public async Task Formatting_IsStoredAgainstTheTrimmedText_AndComesBackInHistory()
     {
         await using var t = await ArrangeAsync();

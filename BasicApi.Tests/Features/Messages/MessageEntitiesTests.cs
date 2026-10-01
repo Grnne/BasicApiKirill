@@ -154,4 +154,15 @@ public class MessageEntitiesTests
 
         Assert.Equal(entities, MessageEntities.Deserialize(MessageEntities.Serialize(entities)));
     }
+
+    [Theory]
+    [InlineData("the killer is the butler", 14, 10, "the killer is ▒▒▒▒")]
+    [InlineData("secret", 0, 6, "▒▒▒▒")]
+    [InlineData("abc", 1, 99, "a▒▒▒▒")]
+    public void HideSpoilers_CoversEachSpoiler_WithoutTellingItsLength(string text, int offset, int length, string expected) =>
+        Assert.Equal(expected, MessageEntities.HideSpoilers(text, [E("spoiler", offset, length), E("bold", 0, 1)]));
+
+    [Fact]
+    public void HideSpoilers_OverlappingOrTouchingSpoilers_AreOneCover() =>
+        Assert.Equal("▒▒▒▒ x ▒▒▒▒", MessageEntities.HideSpoilers("ab cd x ef", [E("spoiler", 0, 3), E("spoiler", 2, 3), E("spoiler", 8, 2)]));
 }

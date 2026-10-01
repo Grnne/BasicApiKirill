@@ -43,7 +43,8 @@ public static class ChatListItemMapper
             ChatId = r.ChatId,
             SenderId = r.LastMessageSenderId!.Value,
             SenderName = r.LastMessageSenderName ?? "Unknown",
-            Text = r.LastMessageText ?? string.Empty,
+            // The row shows the text without formatting: a spoiler would be in plain sight.
+            Text = MessageEntities.HideSpoilers(r.LastMessageText ?? string.Empty, MessageEntities.Deserialize(r.LastMessageEntitiesJson)),
             Type = r.LastMessageType ?? Storage.Entities.MessageTypes.Text,
             Attachments = MessageAttachments.Read(r.LastMessageAttachmentsJson),
             CreatedAt = r.LastMessageCreatedAt!.Value,

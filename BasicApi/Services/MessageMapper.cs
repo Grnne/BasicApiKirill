@@ -31,7 +31,9 @@ public static class MessageMapper
                 MessageId = replyId,
                 SenderId = m.ReplyToSenderId ?? Guid.Empty,
                 SenderName = m.ReplyToSenderName ?? "Unknown",
-                Text = m.ReplyToDeleted ? string.Empty : Preview(m.ReplyToText),
+                Text = m.ReplyToDeleted
+                    ? string.Empty
+                    : Preview(MessageEntities.HideSpoilers(m.ReplyToText ?? string.Empty, MessageEntities.Deserialize(m.ReplyToEntitiesJson))),
                 Deleted = m.ReplyToDeleted
             }
             : null,

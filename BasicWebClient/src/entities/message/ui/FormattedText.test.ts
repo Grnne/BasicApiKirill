@@ -57,6 +57,19 @@ describe('FormattedText', () => {
     expect(wrapper.findAll('.mention.me')).toHaveLength(1)
   })
 
+  it('a spoiler can be revealed from the keyboard too', async () => {
+    const wrapper = mount(FormattedText, {
+      props: { text: 'secret', entities: [{ type: 'spoiler', offset: 0, length: 6 }] },
+    })
+    const spoiler = wrapper.get('.spoiler')
+    expect(spoiler.attributes('tabindex')).toBe('0')
+    expect(spoiler.attributes('role')).toBe('button')
+
+    await spoiler.trigger('keydown', { key: 'Enter' })
+
+    expect(spoiler.classes()).toContain('revealed')
+  })
+
   it('a spoiler is revealed by a click', async () => {
     const wrapper = mount(FormattedText, {
       props: { text: 'secret', entities: [{ type: 'spoiler', offset: 0, length: 6 }] },

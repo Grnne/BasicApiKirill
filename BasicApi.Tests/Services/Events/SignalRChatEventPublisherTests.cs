@@ -75,6 +75,18 @@ public class SignalRChatEventPublisherTests
     }
 
     [Fact]
+    public async Task MessageCreated_PreviewCoversSpoilers_ItHasNoFormattingToHideThem()
+    {
+        var message = Message("the killer is the butler");
+        message.Entities = [new MessageEntityDto { Type = "spoiler", Offset = 14, Length = 10 }];
+
+        await _publisher.MessageCreatedAsync(message, [message.SenderId]);
+
+        var preview = Assert.IsType<MessageDto>(Assert.Single(_hub.Recorder.Of("ChatListUpdated")).Args[1]);
+        Assert.Equal("the killer is ▒▒▒▒", preview.Text);
+    }
+
+    [Fact]
     public async Task MessageCreated_ShortText_PreviewIsTheSame()
     {
         var message = Message("short");

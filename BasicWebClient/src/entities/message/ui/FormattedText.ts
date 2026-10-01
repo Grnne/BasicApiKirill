@@ -14,8 +14,14 @@ const TAGS: Record<string, string> = {
   code: 'code',
 }
 
-function reveal(event: MouseEvent): void {
+function reveal(event: Event): void {
   (event.currentTarget as HTMLElement).classList.add('revealed')
+}
+
+function revealByKey(event: KeyboardEvent): void {
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  event.preventDefault()
+  reveal(event)
 }
 
 function renderNode(node: FormattedNode, mentionClass: (userId: string | null | undefined) => string): VNodeChild {
@@ -30,7 +36,11 @@ function renderNode(node: FormattedNode, mentionClass: (userId: string | null | 
     case 'pre':
       return h('pre', h('code', entity.language ? { 'data-language': entity.language } : {}, children))
     case 'spoiler':
-      return h('span', { class: 'spoiler', title: 'Показать', onClick: reveal }, children)
+      return h(
+        'span',
+        { class: 'spoiler', title: 'Показать', role: 'button', tabindex: 0, onClick: reveal, onKeydown: revealByKey },
+        children,
+      )
     case 'mention':
       return h('span', { class: mentionClass(entity.userId) }, children)
     case 'link': {

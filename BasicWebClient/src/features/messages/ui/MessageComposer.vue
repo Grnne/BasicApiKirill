@@ -6,6 +6,7 @@ import { useChatDetailsStore } from '@/entities/chat/model/details.store'
 import type { ChatParticipant } from '@/entities/chat/types'
 import { useConfigStore } from '@/entities/config/config.store'
 import { safeUrl } from '@/entities/message/lib/formatted'
+import { hideSpoilers } from '@/entities/message/lib/preview'
 import FormattedText from '@/entities/message/ui/FormattedText'
 import * as usersApi from '@/entities/user/api'
 import { useAccountStore } from '@/entities/user/model/account.store'
@@ -437,7 +438,7 @@ function onKeydown(event: KeyboardEvent): void {
     </div>
     <div v-else-if="store.replyTo" class="context">
       <span class="label">Ответ {{ store.replyTo.senderName }}</span>
-      <span class="quote">{{ store.replyTo.text }}</span>
+      <span class="quote">{{ hideSpoilers(store.replyTo.text, store.replyTo.entities) }}</span>
       <button type="button" class="close" title="Отменить (Esc)" @click="store.cancelReply()">✕</button>
     </div>
 

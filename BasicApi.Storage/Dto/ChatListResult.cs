@@ -37,6 +37,7 @@ public class ChatListResult
     public Guid? ChatAvatarId { get; set; }
 
     public string? LastMessageText { get; set; }
+    public string? LastMessageEntitiesJson { get; set; }
     public string? LastMessageType { get; set; }
 
     /// <summary>The last message's files as a JSON array; null — none.</summary>
