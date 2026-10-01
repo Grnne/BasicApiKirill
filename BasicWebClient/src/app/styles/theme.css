@@ -78,3 +78,13 @@ textarea {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--accent-dim);
 }
+
+/* A message the list jumped to (a reply quote, search) flashes once. */
+.jump-highlight .bubble {
+  animation: jump-flash 1.5s ease-out;
+}
+@keyframes jump-flash {
+  from {
+    box-shadow: 0 0 0 3px var(--accent);
+  }
+}

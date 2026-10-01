@@ -1,5 +1,11 @@
 import { http } from '@/shared/api/http'
-import type { EditMessageDto, MessageDto, SendMessageDto } from '@/shared/api/schema'
+import type {
+  EditMessageDto,
+  ForwardMessagesDto,
+  ForwardMessagesResponseDto,
+  MessageDto,
+  SendMessageDto,
+} from '@/shared/api/schema'
 
 /** 201 — stored now, 200 — a repeat of the same clientMessageId: the message stored before. */
 export function sendMessage(chatId: string, body: SendMessageDto): Promise<MessageDto> {
@@ -24,4 +30,9 @@ export function editMessage(chatId: string, messageId: string, body: EditMessage
 /** forEveryone: for all members (the author, within the window); otherwise only for the caller. */
 export function deleteMessage(chatId: string, messageId: string, forEveryone: boolean): Promise<void> {
   return http.delete<void>(`/api/chats/${chatId}/messages/${messageId}`, forEveryone ? { query: { forEveryone } } : {})
+}
+
+/** Copies into chatId, in the source order; repeating with the same clientMessageIds creates nothing. */
+export function forwardMessages(chatId: string, body: ForwardMessagesDto): Promise<ForwardMessagesResponseDto> {
+  return http.post<ForwardMessagesResponseDto>(`/api/chats/${chatId}/messages/forward`, body)
 }

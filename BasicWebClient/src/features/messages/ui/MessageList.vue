@@ -82,6 +82,22 @@ watch(
   },
 )
 
+// A reply quote or search asked for a message: bring it to the middle and flash it.
+watch(
+  () => store.jumpTarget,
+  async (messageId) => {
+    if (!messageId) return
+    await nextTick()
+    const element = viewport.value?.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(messageId)}"]`)
+    store.jumpTarget = null
+    if (!element) return
+    element.scrollIntoView({ block: 'center' })
+    element.classList.remove('jump-highlight')
+    void element.offsetWidth
+    element.classList.add('jump-highlight')
+  },
+)
+
 function startsNewDay(index: number): boolean {
   const current = store.messages[index]
   if (!current) return false

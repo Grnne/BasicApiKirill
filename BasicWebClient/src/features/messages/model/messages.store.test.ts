@@ -13,6 +13,7 @@ import { useMessagesStore } from './messages.store'
 vi.mock('../api/messages.api', () => ({
   markRead: vi.fn(async () => {}),
   editMessage: vi.fn(),
+  forwardMessages: vi.fn(),
   deleteMessage: vi.fn(async () => {}),
   sendMessage: vi.fn(),
   sendTyping: vi.fn(async () => {}),
@@ -106,5 +107,37 @@ describe('edit and delete', () => {
 
     expect(messagesApi.deleteMessage).toHaveBeenCalledWith('chat-1', m1.id, true)
     expect(store.messages).toEqual([])
+  })
+})
+
+describe('reply and forward', () => {
+  it('a reply carries replyToMessageId and the reply context is cleared', async () => {
+    const { store } = await openChatWithUnread()
+    vi.mocked(messagesApi.sendMessage).mockReturnValue(new Promise(() => {}))
+
+    store.startReply(m1)
+    store.send('answer')
+
+    expect(messagesApi.sendMessage).toHaveBeenCalledWith('chat-1', expect.objectContaining({ replyToMessageId: m1.id }))
+    expect(store.replyTo).toBeNull()
+  })
+
+  it('forwards the selected messages in the chat order with a clientMessageId each', async () => {
+    const { store } = await openChatWithUnread()
+    const m2 = message({ seq: 2 })
+    const { useHistoryStore } = await import('@/entities/message/model/history.store')
+    useHistoryStore().apply('MessageCreated', m2, { meId: ME })
+    const copy = (m: typeof m1, seq: number) => ({ ...m, id: `copy-${seq}`, chatId: 'chat-2', seq, forwardFrom: { senderId: m.senderId, senderName: m.senderName } })
+    vi.mocked(messagesApi.forwardMessages).mockResolvedValue({ items: [copy(m1, 1), copy(m2, 2)] })
+
+    store.toggleSelected(m2.id)
+    store.toggleSelected(m1.id)
+    const count = await store.forward('chat-2', [...store.selected])
+
+    const body = vi.mocked(messagesApi.forwardMessages).mock.calls[0]![1]
+    expect(body.messageIds).toEqual([m1.id, m2.id])
+    expect(body.clientMessageIds).toHaveLength(2)
+    expect(count).toBe(2)
+    expect(store.selected.size).toBe(0)
   })
 })

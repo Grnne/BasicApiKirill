@@ -7,6 +7,7 @@ import { useChatListStore } from '@/features/chat-list/model/chat-list.store'
 import { useMessagesStore } from '../model/messages.store'
 import MessageList from './MessageList.vue'
 import MessageComposer from './MessageComposer.vue'
+import SelectionBar from './SelectionBar.vue'
 
 const chatList = useChatListStore()
 const messages = useMessagesStore()
@@ -51,7 +52,8 @@ watch(
     </header>
 
     <MessageList />
-    <MessageComposer />
+    <SelectionBar v-if="messages.selected.size > 0" />
+    <MessageComposer v-else />
   </section>
 
   <section v-else class="empty">

@@ -38,6 +38,12 @@ export const useMessagesStore = defineStore('messages', () => {
   const error = ref('')
   /** The message being edited in the composer. */
   const editing = shallowRef<Message | null>(null)
+  /** The message the next one answers. */
+  const replyTo = shallowRef<Message | null>(null)
+  /** Messages picked for forwarding; non-empty means selection mode. */
+  const selected = ref<Set<string>>(new Set())
+  /** A message the list should scroll to and highlight. */
+  const jumpTarget = ref<string | null>(null)
 
   const current = computed(() => history.get(chatId.value))
   const messages = computed(() => current.value?.messages ?? [])
@@ -52,6 +58,8 @@ export const useMessagesStore = defineStore('messages', () => {
     inFlight = null
     clearTimeout(readTimer)
     editing.value = null
+    replyTo.value = null
+    selected.value = new Set()
     chatId.value = null
     error.value = ''
     isLoading.value = false
@@ -77,7 +85,11 @@ export const useMessagesStore = defineStore('messages', () => {
   }
 
   async function openChat(id: string): Promise<void> {
-    if (chatId.value !== id) editing.value = null
+    if (chatId.value !== id) {
+      editing.value = null
+      replyTo.value = null
+      selected.value = new Set()
+    }
     chatId.value = id
     await loadLatest(id)
   }
@@ -115,17 +127,74 @@ export const useMessagesStore = defineStore('messages', () => {
       chatId: id,
       text: trimmed,
       entities: [],
-      replyToMessageId: null,
+      replyToMessageId: replyTo.value?.chatId === id ? replyTo.value.id : null,
       createdAt: new Date().toISOString(),
       state: 'sending' as const,
       error: null,
     }
     history.addPending(message)
+    replyTo.value = null
     void outbox.deliver(message)
     return true
   }
 
+  function startReply(message: Message): void {
+    editing.value = null
+    replyTo.value = message
+  }
+
+  function cancelReply(): void {
+    replyTo.value = null
+  }
+
+  function toggleSelected(id: string): void {
+    const next = new Set(selected.value)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    selected.value = next
+  }
+
+  function clearSelection(): void {
+    selected.value = new Set()
+  }
+
+  /** Forwards the given messages of the open chat; returns how many arrived. */
+  async function forward(targetChatId: string, ids: readonly string[]): Promise<number> {
+    const fromChatId = chatId.value
+    if (!fromChatId || ids.length === 0) return 0
+    // The server keeps the source order (by seq) whatever the order here; clientMessageIds go with it.
+    const ordered = messages.value.filter((m) => ids.includes(m.id)).map((m) => m.id)
+    try {
+      const response = await messagesApi.forwardMessages(targetChatId, {
+        fromChatId,
+        messageIds: ordered,
+        clientMessageIds: ordered.map(() => uuid()),
+      })
+      for (const message of response.items) {
+        history.stored(message)
+        chats.preview(message, ctx())
+      }
+      clearSelection()
+      return response.items.length
+    } catch (e) {
+      notices.push(describeError(e))
+      return 0
+    }
+  }
+
+  /** Scroll to a message; older pages are loaded until it is found (or the history ends). */
+  async function jumpTo(messageId: string): Promise<void> {
+    const MAX_PAGES = 10
+    for (let page = 0; page < MAX_PAGES && !messages.value.some((m) => m.id === messageId); page++) {
+      if (!hasMore.value) break
+      await loadOlder()
+    }
+    if (messages.value.some((m) => m.id === messageId)) jumpTarget.value = messageId
+    else notices.push('Исходное сообщение не найдено', 'info')
+  }
+
   function startEdit(message: Message): void {
+    replyTo.value = null
     editing.value = message
   }
 
@@ -210,6 +279,9 @@ export const useMessagesStore = defineStore('messages', () => {
     hasMore,
     pending,
     editing,
+    replyTo,
+    selected,
+    jumpTarget,
     isLoading,
     isLoadingOlder,
     error,
@@ -219,6 +291,12 @@ export const useMessagesStore = defineStore('messages', () => {
     retry,
     discard,
     startEdit,
+    startReply,
+    cancelReply,
+    toggleSelected,
+    clearSelection,
+    forward,
+    jumpTo,
     cancelEdit,
     saveEdit,
     remove,

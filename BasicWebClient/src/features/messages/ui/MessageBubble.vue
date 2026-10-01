@@ -10,6 +10,7 @@ const props = defineProps<{
   own: boolean
   meId: string | null
 }>()
+defineEmits<{ jump: [messageId: string] }>()
 
 const files = computed(() => props.message.attachments.length)
 </script>
@@ -20,6 +21,18 @@ const files = computed(() => props.message.attachments.length)
 
   <article v-else :class="['bubble', { own }]">
     <span v-if="!own" class="sender">{{ message.senderName }}</span>
+    <span v-if="message.forwardFrom" class="forwarded">Переслано от {{ message.forwardFrom.senderName }}</span>
+    <button
+      v-if="message.replyTo"
+      type="button"
+      class="reply"
+      title="К исходному сообщению"
+      :disabled="message.replyTo.deleted"
+      @click="$emit('jump', message.replyTo.messageId)"
+    >
+      <span class="reply-sender">{{ message.replyTo.senderName }}</span>
+      <span class="reply-text">{{ message.replyTo.deleted ? 'Сообщение удалено' : message.replyTo.text }}</span>
+    </button>
     <p v-if="files > 0" class="files">📎 Файлов: {{ files }}</p>
     <p v-if="message.text" class="text">
       <FormattedText :text="message.text" :entities="message.entities" :me-id="meId" />
@@ -59,6 +72,40 @@ const files = computed(() => props.message.attachments.length)
   margin: 0;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+.forwarded {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--text-dim);
+  font-size: 12px;
+  font-style: italic;
+}
+.reply {
+  display: grid;
+  width: 100%;
+  margin: 2px 0 4px;
+  padding: 3px 8px;
+  border: none;
+  border-left: 2px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--surface-hover);
+  color: var(--text);
+  text-align: left;
+}
+.reply:disabled {
+  cursor: default;
+}
+.reply-sender {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+.reply-text {
+  overflow: hidden;
+  color: var(--text-dim);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .files {
   margin: 0 0 2px;

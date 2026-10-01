@@ -22,6 +22,15 @@ const input = ref<HTMLTextAreaElement | null>(null)
 // Editing puts the message into the field; the draft typed before comes back after.
 let draftBeforeEdit = ''
 watch(
+  () => store.replyTo,
+  async (message) => {
+    if (!message) return
+    await nextTick()
+    input.value?.focus()
+  },
+)
+
+watch(
   () => store.editing,
   async (message, previous) => {
     if (message) {
@@ -91,8 +100,9 @@ function onKeydown(event: KeyboardEvent): void {
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault()
     void submit()
-  } else if (event.key === 'Escape' && store.editing) {
-    store.cancelEdit()
+  } else if (event.key === 'Escape') {
+    if (store.editing) store.cancelEdit()
+    else store.cancelReply()
   }
 }
 </script>
@@ -103,6 +113,11 @@ function onKeydown(event: KeyboardEvent): void {
       <span class="label">Редактирование</span>
       <span class="quote">{{ store.editing.text }}</span>
       <button type="button" class="close" title="Отменить (Esc)" @click="store.cancelEdit()">✕</button>
+    </div>
+    <div v-else-if="store.replyTo" class="context">
+      <span class="label">Ответ {{ store.replyTo.senderName }}</span>
+      <span class="quote">{{ store.replyTo.text }}</span>
+      <button type="button" class="close" title="Отменить (Esc)" @click="store.cancelReply()">✕</button>
     </div>
     <textarea
       ref="input"
