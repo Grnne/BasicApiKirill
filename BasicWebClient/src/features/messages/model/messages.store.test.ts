@@ -225,3 +225,25 @@ describe('opening a chat at a found message', () => {
     expect(store.jumpTarget).toBe(found.id)
   })
 })
+
+describe('a companion who limits who may write', () => {
+  it('a send refused by their privacy marks the chat; a message that goes through clears it', async () => {
+    const { store } = await openChatWithUnread()
+    vi.mocked(messagesApi.sendMessage).mockRejectedValueOnce(new ApiError(403, { errorCode: 'PRIVACY_RESTRICTED' }))
+
+    store.send('hello')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(store.isRestricted('chat-1')).toBe(true)
+
+    store.tryAgain('chat-1')
+    expect(store.isRestricted('chat-1')).toBe(false)
+
+    vi.mocked(messagesApi.sendMessage).mockRejectedValueOnce(new ApiError(403, { errorCode: 'PRIVACY_RESTRICTED' }))
+    store.send('again')
+    await vi.advanceTimersByTimeAsync(0)
+    vi.mocked(messagesApi.sendMessage).mockResolvedValueOnce(message({ id: 'm9', seq: 9, senderId: ME }))
+    store.send('now it works')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(store.isRestricted('chat-1')).toBe(false)
+  })
+})

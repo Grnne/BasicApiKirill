@@ -46,6 +46,10 @@ export const useAccountStore = defineStore('account', () => {
     me.value = profile
   }
 
+  function setPrivacy(settings: PrivacySettingsDto): void {
+    privacy.value = settings
+  }
+
   function isBlocked(userId: string | null | undefined): boolean {
     return !!userId && blocked.value.has(userId)
   }
@@ -56,5 +60,5 @@ export const useAccountStore = defineStore('account', () => {
     blocked.value = new Set()
   }
 
-  return { me, privacy, isBlocked, setMe, replaceAll, apply, reset }
+  return { me, privacy, blocked, isBlocked, setMe, setPrivacy, replaceAll, apply, reset }
 })

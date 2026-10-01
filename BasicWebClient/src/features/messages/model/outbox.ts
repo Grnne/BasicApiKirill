@@ -11,7 +11,8 @@ export interface OutboxApi {
 
 export interface OutboxSink {
   stored(message: MessageDto): void
-  failed(chatId: string, clientMessageId: string, error: string): void
+  /** `code` — the server's errorCode, when it answered with one. */
+  failed(chatId: string, clientMessageId: string, error: string, code: string | null): void
   sending(chatId: string, clientMessageId: string): void
 }
 
@@ -49,7 +50,8 @@ export class Outbox {
       } catch (error) {
         const delay = this.retryDelay(error, attempt)
         if (delay === null) {
-          this.sink.failed(pending.chatId, pending.clientMessageId, describeError(error))
+          const code = error instanceof ApiError ? error.code : null
+          this.sink.failed(pending.chatId, pending.clientMessageId, describeError(error), code)
           return false
         }
         await sleep(delay)

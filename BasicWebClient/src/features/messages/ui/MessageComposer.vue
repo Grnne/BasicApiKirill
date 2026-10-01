@@ -7,7 +7,10 @@ import type { ChatParticipant } from '@/entities/chat/types'
 import { useConfigStore } from '@/entities/config/config.store'
 import { safeUrl } from '@/entities/message/lib/formatted'
 import FormattedText from '@/entities/message/ui/FormattedText'
+import * as usersApi from '@/entities/user/api'
+import { useAccountStore } from '@/entities/user/model/account.store'
 import { useAuthStore } from '@/features/auth/model/auth.store'
+import { describeError } from '@/shared/api/problem'
 import * as messagesApi from '../api/messages.api'
 import { adjustEntities, insertMention, mentionQuery, setLink, toggleEntity, type Entity } from '../lib/compose'
 import { useUploads } from '../lib/useUploads'
@@ -63,6 +66,27 @@ const groupRights = computed(() => {
   return details.get(chatId)?.myPermissions ?? null
 })
 const mayWrite = computed(() => groupRights.value?.sendMessages !== false)
+
+const account = useAccountStore()
+/** The other side of a private chat. */
+const companionId = computed(() => {
+  const chat = chats.get(store.chatId)
+  return chat?.type === 'private' ? chat.companionId : null
+})
+const blockedByMe = computed(() => account.isBlocked(companionId.value))
+const unblockError = ref<string | null>(null)
+
+async function unblock(): Promise<void> {
+  const userId = companionId.value
+  if (!userId) return
+  unblockError.value = null
+  try {
+    await usersApi.unblockUser(userId)
+    account.apply('BlockListChanged', { userId, blocked: false })
+  } catch (e) {
+    unblockError.value = describeError(e)
+  }
+}
 const mayAttach = computed(() => groupRights.value?.sendMedia !== false)
 const fileInput = ref<HTMLInputElement | null>(null)
 
@@ -387,7 +411,16 @@ function onKeydown(event: KeyboardEvent): void {
 </script>
 
 <template>
-  <p v-if="!mayWrite" class="read-only">В этой группе писать могут только админы</p>
+  <div v-if="blockedByMe" class="read-only">
+    Вы заблокировали этого пользователя.
+    <button type="button" class="inline" @click="unblock">Разблокировать</button>
+    <span v-if="unblockError" class="inline-error">{{ unblockError }}</span>
+  </div>
+  <div v-else-if="store.isRestricted(store.chatId)" class="read-only">
+    Пользователь ограничил, кто может ему писать.
+    <button type="button" class="inline" @click="store.tryAgain(store.chatId!)">Попробовать ещё раз</button>
+  </div>
+  <p v-else-if="!mayWrite" class="read-only">В этой группе писать могут только админы</p>
   <form v-else class="composer" @submit.prevent="submit" @dragover.prevent @drop.prevent="onDrop">
     <div v-if="store.editing" class="context">
       <span class="label">Редактирование</span>
@@ -545,6 +578,17 @@ function onKeydown(event: KeyboardEvent): void {
   border-top: 1px solid var(--border);
   color: var(--text-dim);
   text-align: center;
+}
+.inline {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+}
+.inline-error {
+  display: block;
+  color: var(--danger);
+  font-size: 12px;
 }
 .tool.attach {
   margin-right: 6px;

@@ -14,3 +14,17 @@ export function getUser(userId: string): Promise<UserProfile> {
   return http.get<UserProfile>(`/api/Users/${userId}`)
 }
 
+
+/** Neither side may write in their private chat; the caller's devices get BlockListChanged. Twice is fine. */
+export function blockUser(userId: string): Promise<void> {
+  return http.put<void>(`/api/Users/${userId}/block`)
+}
+
+export function unblockUser(userId: string): Promise<void> {
+  return http.delete<void>(`/api/Users/${userId}/block`)
+}
+
+/** Whom the caller blocked. */
+export function getBlocked(): Promise<UserProfile[]> {
+  return http.get<UserProfile[]>('/api/Users/me/blocked')
+}

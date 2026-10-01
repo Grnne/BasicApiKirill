@@ -62,7 +62,7 @@ describe('Outbox', () => {
     await vi.advanceTimersByTimeAsync(300)
 
     expect(await done).toBe(false)
-    expect(sink.failed).toHaveBeenCalledWith('chat-1', 'cm-1', 'Нет связи с сервером')
+    expect(sink.failed).toHaveBeenCalledWith('chat-1', 'cm-1', 'Нет связи с сервером', null)
   })
 
   it('does not repeat a refusal: the reason goes to the user', async () => {
@@ -73,7 +73,12 @@ describe('Outbox', () => {
     expect(await outbox.deliver(pending)).toBe(false)
 
     expect(send).toHaveBeenCalledTimes(1)
-    expect(sink.failed).toHaveBeenCalledWith('chat-1', 'cm-1', 'Пользователь ограничил, кто может ему писать или добавлять его')
+    expect(sink.failed).toHaveBeenCalledWith(
+      'chat-1',
+      'cm-1',
+      'Пользователь ограничил, кто может ему писать или добавлять его',
+      'PRIVACY_RESTRICTED',
+    )
   })
 
   it('waits out a short rate limit once', async () => {

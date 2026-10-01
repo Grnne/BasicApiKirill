@@ -17,6 +17,8 @@ import {
 import { useChatDetailsStore } from '@/entities/chat/model/details.store'
 import type { ChatListItem, ChatParticipant } from '@/entities/chat/types'
 import { formatDuration } from '@/entities/media/lib'
+import * as usersApi from '@/entities/user/api'
+import { useAccountStore } from '@/entities/user/model/account.store'
 import { useMediaLinksStore } from '@/entities/media/model/links.store'
 import AttachmentList from '@/entities/media/ui/AttachmentList.vue'
 import AvatarCircle from '@/entities/media/ui/AvatarCircle.vue'
@@ -49,6 +51,25 @@ const links = useMediaLinksStore()
 const notices = useNoticesStore()
 
 const isGroup = computed(() => props.chat.type === 'group')
+const account = useAccountStore()
+
+/* ── Block (private chats) ── */
+
+const companionId = computed(() => (props.chat.type === 'private' ? props.chat.companionId : null))
+const blocked = computed(() => account.isBlocked(companionId.value))
+const confirmingBlock = ref(false)
+
+async function setBlocked(on: boolean): Promise<void> {
+  confirmingBlock.value = false
+  const userId = companionId.value
+  if (!userId) return
+  try {
+    await (on ? usersApi.blockUser(userId) : usersApi.unblockUser(userId))
+    account.apply('BlockListChanged', { userId, blocked: on })
+  } catch (e) {
+    notices.push(describeError(e))
+  }
+}
 const detail = computed(() => (isGroup.value ? details.get(props.chat.chatId) : null))
 
 const TABS: { filter: GalleryFilter; label: string; empty: string }[] = [
@@ -164,6 +185,10 @@ function onScroll(event: Event): void {
       <AvatarCircle :avatar-id="chat.avatarId" :initial="chatInitial(chat)" :size="72" />
       <span class="title">{{ chatTitle(chat) }}</span>
       <span v-if="subtitle" class="subtitle">{{ subtitle }}</span>
+      <span v-if="companionId" class="card-actions">
+        <button v-if="blocked" type="button" class="jump" @click="setBlocked(false)">Разблокировать</button>
+        <button v-else type="button" class="jump danger-text" @click="confirmingBlock = true">Заблокировать</button>
+      </span>
       <span v-if="mayEdit || mayAudit" class="card-actions">
         <button v-if="mayEdit" type="button" class="jump" @click="emit('editGroup')">Настройки</button>
         <button v-if="mayAudit" type="button" class="jump" @click="emit('audit')">Журнал действий</button>
@@ -281,6 +306,15 @@ function onScroll(event: Event): void {
       @cancel="removing = null"
     />
     <ConfirmDialog
+      v-if="confirmingBlock"
+      title="Заблокировать?"
+      :text="`${chatTitle(chat)} не сможет вам писать, добавлять вас в группы и видеть ваш статус и фото.`"
+      confirm-label="Заблокировать"
+      danger
+      @confirm="setBlocked(true)"
+      @cancel="confirmingBlock = false"
+    />
+    <ConfirmDialog
       v-if="leaving"
       title="Покинуть группу?"
       :text="leaveText"
@@ -335,6 +369,9 @@ function onScroll(event: Event): void {
   font-weight: 600;
   text-align: center;
   overflow-wrap: anywhere;
+}
+.danger-text {
+  color: var(--danger);
 }
 .card-actions {
   display: flex;

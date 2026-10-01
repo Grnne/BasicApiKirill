@@ -3,6 +3,8 @@ import { useRouter } from 'vue-router'
 
 import PasswordSection from '@/features/profile/ui/PasswordSection.vue'
 import ProfileSection from '@/features/profile/ui/ProfileSection.vue'
+import BlockedSection from '@/features/privacy/ui/BlockedSection.vue'
+import PrivacySection from '@/features/privacy/ui/PrivacySection.vue'
 
 const router = useRouter()
 </script>
@@ -17,6 +19,8 @@ const router = useRouter()
     <main class="content">
       <ProfileSection />
       <PasswordSection />
+      <PrivacySection />
+      <BlockedSection />
     </main>
   </div>
 </template>

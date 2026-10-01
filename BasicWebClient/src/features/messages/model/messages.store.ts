@@ -22,15 +22,33 @@ export const useMessagesStore = defineStore('messages', () => {
   const notices = useNoticesStore()
   const ctx = () => ({ meId: auth.user?.userId ?? '' })
 
+  /**
+   * Chats whose other side does not let the user write (their privacy, or they blocked the user —
+   * the server tells both apart from nobody). Known only from a refused send; kept until a message
+   * goes through or the user tries again.
+   */
+  const restricted = ref<ReadonlySet<string>>(new Set())
+  function setRestricted(id: string, on: boolean): void {
+    if (restricted.value.has(id) === on) return
+    const next = new Set(restricted.value)
+    if (on) next.add(id)
+    else next.delete(id)
+    restricted.value = next
+  }
+
   const outbox = new Outbox(
     { send: messagesApi.sendMessage },
     {
       stored: (message) => {
         history.stored(message)
         chats.preview(message, ctx())
+        setRestricted(message.chatId, false)
       },
       sending: (chatId, id) => history.updatePending(chatId, id, { state: 'sending', error: null }),
-      failed: (chatId, id, error) => history.updatePending(chatId, id, { state: 'failed', error }),
+      failed: (chatId, id, error, code) => {
+        history.updatePending(chatId, id, { state: 'failed', error })
+        if (code === 'PRIVACY_RESTRICTED') setRestricted(chatId, true)
+      },
     },
   )
 
@@ -77,6 +95,7 @@ export const useMessagesStore = defineStore('messages', () => {
     chatId.value = null
     error.value = ''
     isLoading.value = false
+    restricted.value = new Set()
   }
 
   async function loadLatest(id: string): Promise<void> {
@@ -361,7 +380,12 @@ export const useMessagesStore = defineStore('messages', () => {
     }
   }
 
+  const isRestricted = (id: string | null) => !!id && restricted.value.has(id)
+  const tryAgain = (id: string) => setRestricted(id, false)
+
   return {
+    isRestricted,
+    tryAgain,
     chatId,
     messages,
     hasMore,
