@@ -17,3 +17,12 @@ it('the dev page has a CSP meta, the build drops it for the server header', () =
   expect(built).not.toMatch(META)
   expect(built).toContain('<div id="app"></div>')
 })
+
+it('the dev page lets scripts talk to its own origin only, WebSockets included', () => {
+  // "ws: wss:" allowed sockets to any host, against the point of connect-src 'self'; the hub and
+  // Vite's HMR are same-origin (the dev server proxies /hubs), which 'self' covers.
+  const html = readFileSync(INDEX, 'utf8')
+  const policy = /content="(default-src[^"]+)"/.exec(html)?.[1] ?? ''
+  const connect = /connect-src ([^;]+)/.exec(policy)?.[1]?.trim()
+  expect(connect).toBe("'self'")
+})

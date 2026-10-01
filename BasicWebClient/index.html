@@ -6,12 +6,12 @@
     <!--
       Dev server only: the build drops this tag (vite.config.ts, devOnlyCsp) and the API sends
       the same policy as a header, with the file storage origin added.
-      connect-src 'self': even with XSS a script cannot send the token to another host;
-      ws:/wss: — the hub and Vite's HMR channel. 'unsafe-inline' is for Vue's <style> tags only.
+      connect-src 'self': even with XSS a script cannot send the token to another host; it covers
+      the hub and Vite's HMR socket too (same origin). 'unsafe-inline' is for Vue's <style> tags only.
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' ws: wss:; worker-src 'self'; base-uri 'none'; object-src 'none'"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; worker-src 'self'; base-uri 'none'; object-src 'none'"
     />
     <title>Basic Chat</title>
   </head>
