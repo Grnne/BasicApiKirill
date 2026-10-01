@@ -1,6 +1,5 @@
 import { group, privateChat, send } from './support/api'
 import { expect, test } from './support/fixtures'
-import { chatHeader, openChat } from './support/ui'
 
 test('the app is served with protective headers', async ({ request }) => {
   const response = await request.get('/client/')
@@ -39,19 +38,21 @@ test('a stranger cannot read, write or change a chat they are not in', async ({ 
     request.get(`/api/chats/${chatId}`, { headers: as }),
     request.get(`/api/chats/${chatId}/messages/cursor`, { headers: as }),
     request.get(`/api/chats/${chatId}/messages/search?q=секрет`, { headers: as }),
-    request.get(`/api/chats/${chatId}/media`, { headers: as }),
+    request.get(`/api/chats/${chatId}/media?filter=media`, { headers: as }),
     request.post(`/api/chats/${chatId}/messages`, { headers: as, data: { text: 'я тут' } }),
     request.patch(`/api/chats/${chatId}/messages/${messageId}`, { headers: as, data: { text: 'подмена' } }),
     request.delete(`/api/chats/${chatId}/messages/${messageId}?forEveryone=true`, { headers: as }),
     request.put(`/api/chats/${chatId}/messages/${messageId}/reactions`, { headers: as, data: { emoji: '👍' } }),
-    request.post(`/api/chats/${chatId}/read`, { headers: as, data: { seq: 1 } }),
-    request.post(`/api/chats/${groupId}/members`, { headers: as, data: { userIds: [mallory.userId] } }),
+    request.post(`/api/chats/${chatId}/read`, { headers: as, data: { lastMessageId: messageId } }),
+    request.post(`/api/chats/${groupId}/members`, { headers: as, data: { userIds: [alice.userId] } }),
     request.patch(`/api/chats/${groupId}`, { headers: as, data: { title: 'захвачено' } }),
     request.delete(`/api/chats/${groupId}`, { headers: as }),
     request.get(`/api/chats/${groupId}/audit`, { headers: as }),
   ]
+  // Each probe is a well-formed request: refused for who sends it, not for its shape (a 400
+  // would pass without the membership check ever running).
   for (const response of await Promise.all(attempts)) {
-    expect([400, 403, 404], `${response.url()} → ${response.status()}`).toContain(response.status())
+    expect([403, 404], `${response.url()} → ${response.status()}`).toContain(response.status())
   }
 
   // Nothing leaked into the search across chats either.
@@ -159,7 +160,10 @@ test('the hub refuses a connection without a valid token', async ({ open, user }
     const base = location.origin.replace(/^http/, 'ws')
     return [await tryOpen(`${base}/hubs/chat`), await tryOpen(`${base}/hubs/chat?access_token=forged.token.value`)]
   })
-  for (const r of result) expect(r).not.toMatch(/^message:\{\}/)
-  await openChat(page, 'Избранное').catch(() => {})
-  await expect(chatHeader(page).or(page.getByText('Выбери чат слева'))).toBeVisible()
+  // Refused at the handshake: the socket closes. A handshake answer ("{}") would mean it was let
+  // in, and a timeout would hide either.
+  for (const r of result) expect(r).toMatch(/^close:/)
+  // The page's own connection is not affected.
+  await expect(page.getByText('Выбери чат слева')).toBeVisible()
+  await expect(page.getByText('нет связи')).toHaveCount(0)
 })

@@ -27,6 +27,18 @@ test('on a phone: list, chat and back, info, settings — nothing spills sideway
   await expect(message(a, 'оченьдлинноеслово')).toBeVisible()
   await noSideScroll(a)
 
+  // The menu of an incoming message, whose bubble fills the width: it stays on the screen. The
+  // page's own scroll width cannot show it — the list clips and scrolls inside itself.
+  await message(a, 'оченьдлинноеслово').hover()
+  await message(a, 'оченьдлинноеслово').locator('button.more').click()
+  const menu = a.locator('.window .menu')
+  await expect(menu).toBeVisible()
+  const box = (await menu.boundingBox())!
+  expect(box.x).toBeGreaterThanOrEqual(0)
+  expect(box.x + box.width).toBeLessThanOrEqual(phone.viewport.width)
+  await menu.press('Escape')
+  await expect(menu).toBeHidden()
+
   await sendText(a, 'с телефона')
   await expect(message(a, 'с телефона')).toBeVisible()
   await messageAction(a, 'с телефона', 'Изменить')

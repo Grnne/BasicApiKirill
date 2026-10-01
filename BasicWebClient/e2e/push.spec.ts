@@ -20,7 +20,13 @@ test('push: subscribe, get a notification while away, unsubscribe', async ({ ope
   await enable.click()
   const error = section.locator('.error')
   await expect(section.getByRole('button', { name: 'Выключить' }).or(error)).toBeVisible({ timeout: 30_000 })
-  test.skip(await error.isVisible(), `the browser could not subscribe: ${await error.innerText().catch(() => '')}`)
+  // Only the browser's own refusal (no push service under automation) is a reason to skip; an
+  // error of the page or of our API is a failure.
+  if (await error.isVisible()) {
+    const text = await error.innerText()
+    test.skip(text.startsWith('Браузер не смог подписаться'), `the browser could not subscribe: ${text}`)
+    throw new Error(`push could not be turned on: ${text}`)
+  }
 
   const devices = b.locator('section.section', { has: b.getByRole('heading', { name: 'Устройства' }) })
   await b.reload()
