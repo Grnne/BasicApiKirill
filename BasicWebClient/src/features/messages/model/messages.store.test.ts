@@ -91,11 +91,45 @@ describe('a failed load of the open chat', () => {
 })
 
 describe('reading the open chat', () => {
-  it('opening the chat reads it', async () => {
-    const { chats } = await openChatWithUnread()
+  it('loading the chat does not read it: the list does, once someone sees it', async () => {
+    // The bug: every load marked the chat read — in a hidden tab, after a reconnect, scrolled up.
+    const { store, chats } = await openChatWithUnread()
+    expect(messagesApi.markRead).not.toHaveBeenCalled()
+    expect(store.latestVersion).toBe(1)
+
+    store.seen()
+    await vi.advanceTimersByTimeAsync(1_000)
 
     expect(messagesApi.markRead).toHaveBeenCalledWith('chat-1', m1.id)
     expect(chats.get('chat-1')!.unreadCount).toBe(0)
+  })
+
+  it('seen, then another chat opened at once: the first chat is still read', async () => {
+    // The bug: the pause before /read took whichever chat was open when it ended — a chat looked
+    // at and left within half a second stayed unread (found by the UI e2e).
+    const { store, chats } = await openChatWithUnread()
+    chats.put(chat({ chatId: 'chat-2' }))
+    vi.mocked(messageEntityApi.getMessagesPage).mockResolvedValue({ items: [], nextCursor: null, hasMore: false })
+
+    store.seen()
+    await store.openChat('chat-2')
+    await vi.advanceTimersByTimeAsync(1_000)
+
+    expect(messagesApi.markRead).toHaveBeenCalledWith('chat-1', m1.id)
+  })
+
+  it('a read mark that did not reach the server is sent again', async () => {
+    // The bug: the counters dropped before the request, so after a failure nothing looked unread
+    // and the mark was never sent — other devices and the sender kept "unread".
+    const { store } = await openChatWithUnread()
+    vi.mocked(messagesApi.markRead).mockRejectedValueOnce(new Error('offline'))
+
+    store.seen()
+    await vi.advanceTimersByTimeAsync(1_000)
+    await vi.advanceTimersByTimeAsync(5_000)
+
+    expect(messagesApi.markRead).toHaveBeenCalledTimes(2)
+    expect(messagesApi.markRead).toHaveBeenLastCalledWith('chat-1', m1.id)
   })
 
   it('a message that arrives while the chat is on screen is read too', async () => {
@@ -115,6 +149,8 @@ describe('reading the open chat', () => {
 
   it('nothing new: no request', async () => {
     const { store } = await openChatWithUnread()
+    store.seen()
+    await vi.advanceTimersByTimeAsync(1_000)
     vi.mocked(messagesApi.markRead).mockClear()
 
     store.seen()

@@ -76,6 +76,17 @@ watch(
   },
 )
 
+// The newest page arrived (the chat opened, a reload): it is read only if someone sees it.
+watch(
+  () => store.latestVersion,
+  async () => {
+    const stick = isNearBottom()
+    await nextTick()
+    if (stick && !store.hasNewer) scrollToBottom()
+    noteSeenIfVisible()
+  },
+)
+
 /**
  * Scroll to the bottom when loading ends, not on chatId change: while loading, a placeholder is
  * shown and the messages are not in the DOM yet.

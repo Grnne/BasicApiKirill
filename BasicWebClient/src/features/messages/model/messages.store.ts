@@ -81,6 +81,8 @@ export const useMessagesStore = defineStore('messages', () => {
   const hasNewer = computed(() => current.value?.hasNewer ?? false)
   const isLoadingNewer = ref(false)
   const pending = computed(() => current.value?.pending ?? [])
+  /** Moves when the newest page of the open chat arrives: the list then shows and reads it. */
+  const latestVersion = ref(0)
 
   /** Aborted when switching to another chat. */
   let inFlight: AbortController | null = null
@@ -97,6 +99,10 @@ export const useMessagesStore = defineStore('messages', () => {
     clearTimeout(reloadTimer)
     reloadAttempt = 0
     clearTimeout(readTimer)
+    seenOnScreen = null
+    clearTimeout(readRetryTimer)
+    unsentRead = null
+    readAttempt = 0
     editing.value = null
     replyTo.value = null
     selected.value = new Set()
@@ -119,7 +125,8 @@ export const useMessagesStore = defineStore('messages', () => {
       await history.loadLatest(id, controller.signal)
       if (controller.signal.aborted || chatId.value !== id) return
       reloadAttempt = 0
-      await markReadUpToLast()
+      // Not read here: the list reads it when it is on screen in a visible tab.
+      latestVersion.value += 1
     } catch (e) {
       if (controller.signal.aborted) return
       error.value = 'Не удалось загрузить сообщения'
@@ -144,6 +151,8 @@ export const useMessagesStore = defineStore('messages', () => {
     const jump = pendingJump?.chatId === id ? pendingJump.messageId : null
     pendingJump = null
     if (chatId.value !== id) {
+      // A chat looked at and left at once still counts as read.
+      flushSeen()
       reloadAttempt = 0
       editing.value = null
       replyTo.value = null
@@ -375,28 +384,68 @@ export const useMessagesStore = defineStore('messages', () => {
   const READ_DELAY_MS = 500
   let readTimer: ReturnType<typeof setTimeout> | undefined
 
+  /** What was on screen when seen() was called: the chat may change before the pause ends. */
+  let seenOnScreen: { chatId: string; last: Message } | null = null
+
   /** The newest message is on screen (the list is at the bottom of a visible tab). */
   function seen(): void {
+    const id = chatId.value
+    const last = messages.value.at(-1)
+    if (!id || !last) return
+    seenOnScreen = { chatId: id, last }
     clearTimeout(readTimer)
-    readTimer = setTimeout(() => void markReadUpToLast(), READ_DELAY_MS)
+    readTimer = setTimeout(flushSeen, READ_DELAY_MS)
+  }
+
+  /** Sends the pending read mark now: the chat is being left. */
+  function flushSeen(): void {
+    clearTimeout(readTimer)
+    const read = seenOnScreen
+    seenOnScreen = null
+    if (read) void markRead(read.chatId, read.last)
   }
 
   async function markReadUpToLast(): Promise<void> {
     const id = chatId.value
     const last = messages.value.at(-1)
+    if (id && last) await markRead(id, last)
+  }
+
+  async function markRead(id: string, last: Message): Promise<void> {
     const chat = chats.get(id)
-    if (!id || !last) return
 
     const unread =
       !chat || chat.unreadCount > 0 || chat.markedUnread ||
       (last.senderId !== auth.user?.userId && last.seq > chat.lastReadSeq)
-    if (!unread) return
+    if (!unread && unsentRead?.chatId !== id) return
 
     chats.markReadLocally(id, last.seq)
+    unsentRead = { chatId: id, messageId: last.id }
+    await sendRead()
+  }
+
+  // The counters drop before the request; a mark that failed is kept and sent again, or nothing
+  // would look unread here while other devices and the sender still saw it unread.
+  const READ_RETRY_DELAYS_MS = [5_000, 15_000, 60_000]
+  let unsentRead: { chatId: string; messageId: string } | null = null
+  let readRetryTimer: ReturnType<typeof setTimeout> | undefined
+  let readAttempt = 0
+
+  async function sendRead(): Promise<void> {
+    const read = unsentRead
+    if (!read) return
+    clearTimeout(readRetryTimer)
     try {
-      await messagesApi.markRead(id, last.id)
+      await messagesApi.markRead(read.chatId, read.messageId)
+      if (unsentRead === read) {
+        unsentRead = null
+        readAttempt = 0
+      }
     } catch {
-      // Not critical: the read mark is sent again next time the chat is opened.
+      if (unsentRead !== read) return
+      const delay = READ_RETRY_DELAYS_MS[Math.min(readAttempt, READ_RETRY_DELAYS_MS.length - 1)]
+      readAttempt += 1
+      readRetryTimer = setTimeout(() => void sendRead(), delay)
     }
   }
 
@@ -418,6 +467,7 @@ export const useMessagesStore = defineStore('messages', () => {
     hasNewer,
     isLoadingNewer,
     pending,
+    latestVersion,
     editing,
     replyTo,
     selected,
