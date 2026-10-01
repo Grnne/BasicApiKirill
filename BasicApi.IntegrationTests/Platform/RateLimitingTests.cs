@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using BasicApi.Features.Auth;
 using BasicApi.IntegrationTests.Infrastructure;
 using Microsoft.AspNetCore.Hosting;
@@ -63,5 +64,33 @@ public class RateLimitingTests(PostgresFixture db)
 
         // The anonymous IP budget is exhausted - an authorized user from the same IP still works.
         Assert.Equal(HttpStatusCode.OK, await GetChatsAsync(client, Token(factory, Guid.NewGuid())));
+    }
+
+    private static async Task<HttpStatusCode> LoginAsync(HttpClient client) =>
+        (await client.PostAsJsonAsync("/api/auth/login",
+            new { usernameOrEmail = "nobody", password = "wrong-password" })).StatusCode;
+
+    [Fact]
+    public async Task Auth_AllowsFiveAttemptsPerMinute_ByDefault()
+    {
+        await using var factory = new ApiFactory(db.ConnectionString);
+        using var client = factory.CreateClient();
+
+        for (var i = 0; i < 5; i++)
+            Assert.Equal(HttpStatusCode.Unauthorized, await LoginAsync(client));
+        Assert.Equal(HttpStatusCode.TooManyRequests, await LoginAsync(client));
+    }
+
+    [Fact]
+    public async Task Auth_Limit_IsConfigurable()
+    {
+        // A local stack under UI tests signs in dozens of users from one IP.
+        await using var factory = new ApiFactory(db.ConnectionString,
+            new Dictionary<string, string?> { ["RateLimiting:AuthPerMinute"] = "8" });
+        using var client = factory.CreateClient();
+
+        for (var i = 0; i < 8; i++)
+            Assert.Equal(HttpStatusCode.Unauthorized, await LoginAsync(client));
+        Assert.Equal(HttpStatusCode.TooManyRequests, await LoginAsync(client));
     }
 }

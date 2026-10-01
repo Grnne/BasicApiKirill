@@ -20,9 +20,10 @@ docker-compose up -d
 ```powershell
 ./scripts/test.ps1          # сборка, тесты клиента, юнит- и интеграционные тесты, аудит пакетов (нужны Docker и Node.js)
 ./scripts/test.ps1 -Image   # плюс сборка прод-образа
+./scripts/e2e-ui.ps1        # сценарии пользователя в браузере против локального прод-стека (docs/deploy.md)
 ```
 
-CI (GitHub Actions) запускает то же на каждый push. Деплой ручной — по
+CI (GitHub Actions) запускает `test.ps1` на каждый push. Деплой ручной — по
 [docs/deploy.md](docs/deploy.md); после деплоя — `./scripts/e2e.ps1 -BaseUrl https://<домен>` и
 [чек-лист ручной проверки](docs/manual-checklist.md).
 

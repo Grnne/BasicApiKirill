@@ -182,9 +182,15 @@ Caddy публикуется на 8081/8443 через override-файл:
 # docker-compose.local.yml (не коммитить вместе с секретами)
 services:
   caddy:
+    # Только на loopback: стенд не виден из сети.
     ports: !override
-      - "8081:80"
-      - "8443:443"
+      - "127.0.0.1:8081:80"
+      - "127.0.0.1:8443:443"
+  basicapi:
+    # Сквозные тесты интерфейса регистрируют десятки пользователей с одного IP.
+    environment:
+      RateLimiting__AuthPerMinute: "1000"
+      RateLimiting__PerIpPerMinute: "3000"
 ```
 
 `.env.local` — как `.env.prod.example`, с `DOMAIN=localhost`,
@@ -194,8 +200,14 @@ services:
 ```powershell
 docker compose --env-file .env.local -f docker-compose.prod.yml -f docker-compose.local.yml up -d --build
 ./scripts/e2e.ps1                      # по умолчанию https://localhost:8443
+./scripts/e2e-ui.ps1 -Restart          # сценарии пользователя в браузере, с рестартами API и базы
 docker compose --env-file .env.local -f docker-compose.prod.yml -f docker-compose.local.yml down -v
 ```
+
+`e2e-ui.ps1` гоняет Playwright в установленном Edge (`-Browser chrome` — в Chrome), браузеры не
+скачивает; отчёт — `BasicWebClient/e2e-report/index.html`. Порты — именно на `127.0.0.1`: на
+Windows с WSL опубликованный на всех адресах порт после рестарта Caddy перехватывает на `[::1]`
+`wslrelay`, и `https://localhost:8443` зависает у браузера и тестов (они пробуют IPv6 первым).
 
 `down -v` удаляет и тома стека (база, сертификаты Caddy) — для локального
 прогона это то, что нужно; на сервере `-v` не использовать.

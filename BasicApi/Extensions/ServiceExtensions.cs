@@ -262,6 +262,7 @@ public static class ServiceExtensions
         var perIp = configuration.GetValue("RateLimiting:PerIpPerMinute", 100);
         var commandsPer10Seconds = configuration.GetValue("RateLimiting:CommandsPer10Seconds", 20);
         var composerPer10Seconds = configuration.GetValue("RateLimiting:ComposerPer10Seconds", 20);
+        var authPerMinute = configuration.GetValue("RateLimiting:AuthPerMinute", 5);
 
         services.AddRateLimiter(options =>
         {
@@ -278,14 +279,14 @@ public static class ServiceExtensions
                         _ => PerMinute(perIp));
             });
 
-            // Brute-force protection: 5 login/registration attempts per minute from one IP
+            // Brute-force protection: 5 login/registration attempts per minute from one IP by default
             // (applies IN ADDITION to the global limit, both must pass).
             options.AddPolicy("auth", context =>
                 RateLimitPartition.GetFixedWindowLimiter(
                     partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
-                        PermitLimit = 5,
+                        PermitLimit = authPerMinute,
                         Window = TimeSpan.FromMinutes(1),
                         QueueLimit = 0
                     }));
