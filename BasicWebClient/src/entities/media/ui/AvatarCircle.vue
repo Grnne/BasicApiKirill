@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 
 import { useMediaLinksStore } from '../model/links.store'
 
@@ -7,22 +7,20 @@ import { useMediaLinksStore } from '../model/links.store'
 const props = withDefaults(defineProps<{ avatarId: string | null; initial: string; size?: number }>(), { size: 34 })
 
 const links = useMediaLinksStore()
-const failed = ref(false)
-watch(
-  () => props.avatarId,
-  () => (failed.value = false),
-)
+/** The address that failed: an expired link fails too, and the next fresh one is worth a try. */
+const failedUrl = ref<string | null>(null)
 
-const src = computed(() => {
-  if (!props.avatarId || failed.value) return null
+const url = computed(() => {
+  if (!props.avatarId) return null
   const link = links.get(props.avatarId)
   return link?.thumbnailUrl ?? link?.url ?? null
 })
+const src = computed(() => (url.value !== failedUrl.value ? url.value : null))
 </script>
 
 <template>
   <span class="avatar" :style="{ width: `${size}px`, height: `${size}px`, fontSize: `${Math.round(size * 0.42)}px` }">
-    <img v-if="src" :src="src" alt="" @error="failed = true" />
+    <img v-if="src" :src="src" alt="" @error="failedUrl = src" />
     <template v-else>{{ initial }}</template>
   </span>
 </template>
