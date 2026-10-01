@@ -57,6 +57,14 @@ function historyOf(state: HistoryState, chatId: string): ChatHistory {
   return history
 }
 
+/**
+ * An entry for a chat whose first page is on its way: messages that arrive meanwhile are newer
+ * than the page and are kept in it (putLatestPage keeps what is newer).
+ */
+export function openHistory(state: HistoryState, chatId: string): void {
+  historyOf(state, chatId)
+}
+
 const bySeq = (a: MessageDto, b: MessageDto) => a.seq - b.seq
 
 /**

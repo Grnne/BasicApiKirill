@@ -215,6 +215,9 @@ export const useMessagesStore = defineStore('messages', () => {
     drafts.cancel(id)
     chats.patch(id, { draft: null })
     void outbox.deliver(message)
+    // Sent from a window in the middle of the history: the message belongs past the gap, where
+    // the list would not show it. The chat goes to its newest part, as after "↓".
+    if (hasNewer.value) void backToLatest()
     return true
   }
 

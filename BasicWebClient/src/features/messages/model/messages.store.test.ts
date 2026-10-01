@@ -258,6 +258,25 @@ describe('reactions', () => {
 })
 
 describe('jumping in the history', () => {
+  it('a message sent while the history is open in the middle takes the chat to its newest part', async () => {
+    // The bug: the server's answer belongs past the gap, so the sent message vanished from the
+    // list until the user scrolled all the way down.
+    const { store } = await openChatWithUnread()
+    vi.mocked(messageEntityApi.getMessageContext).mockResolvedValue({
+      items: [message({ seq: 500, id: 'm500' })], nextCursor: null, hasMore: false, hasNewer: true,
+    } as never)
+    await store.jumpTo('m500')
+    expect(store.hasNewer).toBe(true)
+    vi.mocked(messageEntityApi.getMessagesPage).mockClear()
+    vi.mocked(messagesApi.sendMessage).mockImplementation(() => new Promise(() => {}))
+
+    store.send('hello')
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(messageEntityApi.getMessagesPage).toHaveBeenCalledWith('chat-1', null, expect.anything())
+    expect(store.hasNewer).toBe(false)
+  })
+
   it('a message not loaded opens the history around it, and newer pages follow', async () => {
     const { store } = await openChatWithUnread()
     const far = message({ seq: 500 })
