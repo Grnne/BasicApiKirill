@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 
+import * as chatApi from '@/entities/chat/api'
 import { chatTitle } from '@/entities/chat/lib'
 import { useChatsStore } from '@/entities/chat/model/chats.store'
 
@@ -13,9 +14,25 @@ const search = ref<HTMLInputElement | null>(null)
 
 const found = computed(() => {
   const q = query.value.trim().toLowerCase()
-  const list = chats.list.filter((c) => !c.archived)
+  const list = chats.list.filter((c) => !c.archived && c.type !== 'saved')
   return q ? list.filter((c) => chatTitle(c).toLowerCase().includes(q)) : list
 })
+
+/** "Saved messages" is always offered first, created if it does not exist yet. */
+async function pickSaved(): Promise<void> {
+  const existing = chats.list.find((c) => c.type === 'saved')
+  if (existing) {
+    emit('pick', existing.chatId)
+    return
+  }
+  try {
+    const saved = await chatApi.openSavedChat()
+    chats.put(saved)
+    emit('pick', saved.chatId)
+  } catch {
+    emit('cancel')
+  }
+}
 
 function onKeydown(event: KeyboardEvent): void {
   if (event.key === 'Escape') emit('cancel')
@@ -33,10 +50,13 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
       <h2 class="title">Переслать {{ count > 1 ? `сообщения (${count})` : 'сообщение' }}</h2>
       <input ref="search" v-model="query" class="search" type="search" placeholder="Найти чат" />
       <ul class="list">
+        <li v-if="!query.trim()">
+          <button type="button" class="chat" @click="pickSaved">★ Избранное</button>
+        </li>
         <li v-for="chat in found" :key="chat.chatId">
           <button type="button" class="chat" @click="emit('pick', chat.chatId)">{{ chatTitle(chat) }}</button>
         </li>
-        <li v-if="found.length === 0" class="empty">Ничего не нашлось</li>
+        <li v-if="found.length === 0 && query.trim()" class="empty">Ничего не нашлось</li>
       </ul>
       <button type="button" class="cancel" @click="emit('cancel')">Отмена</button>
     </div>

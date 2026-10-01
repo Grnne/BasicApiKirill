@@ -3,6 +3,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
+import * as chatApi from '@/entities/chat/api'
 import { useChatsStore } from '@/entities/chat/model/chats.store'
 import { useAuthStore } from '@/features/auth/model/auth.store'
 import { useHubStore } from '@/shared/api/hub.store'
@@ -34,6 +35,16 @@ export const useChatListStore = defineStore('chatList', () => {
     const chat = await chatsApi.createPrivateChat(userId)
     chats.put(chat)
     await select(chat.chatId)
+  }
+
+  async function openSaved(): Promise<void> {
+    try {
+      const chat = await chatApi.openSavedChat()
+      chats.put(chat)
+      await select(chat.chatId)
+    } catch (e) {
+      notices.push(describeError(e))
+    }
   }
 
   /** Runs a list command; on failure the server's next event (or a reload) restores the truth. */
@@ -98,5 +109,5 @@ export const useChatListStore = defineStore('chatList', () => {
     selectedChatId.value = null
   }
 
-  return { selectedChatId, selectedChat, select, deselect, openPrivateChat, markUnread, markRead, pin, reorderPinned, archive, mute, unmute, command, reset }
+  return { selectedChatId, selectedChat, select, deselect, openPrivateChat, openSaved, markUnread, markRead, pin, reorderPinned, archive, mute, unmute, command, reset }
 })

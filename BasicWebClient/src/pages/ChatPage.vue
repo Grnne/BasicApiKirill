@@ -51,6 +51,7 @@ async function onLogout(): Promise<void> {
       <span class="brand">Basic<span class="accent">Chat</span></span>
       <ConnectionStatus />
       <span class="user">{{ account.me?.displayName ?? auth.user?.displayName }}</span>
+      <BaseButton variant="ghost" title="Избранное" @click="chatList.openSaved()">★</BaseButton>
       <BaseButton variant="ghost" @click="onLogout">Выйти</BaseButton>
     </header>
 
