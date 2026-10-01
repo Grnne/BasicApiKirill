@@ -23,11 +23,15 @@ export interface SyncSink {
 export interface SyncOptions {
   /** Pause after a live event before catching up: one catch-up per burst. */
   catchUpDelayMs?: number
+  /** The longest a catch-up waits for a burst to end: a busy chat never goes quiet. */
+  catchUpMaxWaitMs?: number
   ackDelayMs?: number
   pageSize?: number
 }
 
 const journaled = new Set<string>(JOURNALED_EVENT_NAMES)
+/** Pauses before a failed sync is tried again. */
+const RETRY_DELAYS_MS = [2_000, 5_000, 15_000, 30_000]
 
 export class SyncEngine {
   private pts: number | null = null
@@ -36,10 +40,16 @@ export class SyncEngine {
   private running: Promise<void> | null = null
   private rerun = false
   private catchUpTimer: ReturnType<typeof setTimeout> | undefined
+  private catchUpDueBy: number | null = null
   private ackTimer: ReturnType<typeof setTimeout> | undefined
+  private retryTimer: ReturnType<typeof setTimeout> | undefined
+  private retryAttempt = 0
   private stopped = false
+  /** Moves on stop: answers to a run of the previous session are dropped. */
+  private session = 0
 
   private readonly catchUpDelayMs: number
+  private readonly catchUpMaxWaitMs: number
   private readonly ackDelayMs: number
   private readonly pageSize: number
 
@@ -49,6 +59,7 @@ export class SyncEngine {
     options: SyncOptions = {},
   ) {
     this.catchUpDelayMs = options.catchUpDelayMs ?? 1_000
+    this.catchUpMaxWaitMs = options.catchUpMaxWaitMs ?? 3_000
     this.ackDelayMs = options.ackDelayMs ?? 2_000
     this.pageSize = options.pageSize ?? 100
   }
@@ -64,15 +75,17 @@ export class SyncEngine {
   /** On every (re)connection: snapshot if there is none yet, then catch up. */
   sync(): Promise<void> {
     this.stopped = false
-    clearTimeout(this.catchUpTimer)
+    this.clearCatchUp()
+    clearTimeout(this.retryTimer)
     if (this.running) {
       this.rerun = true
       return this.running
     }
-    this.running = this.run().finally(() => {
-      this.running = null
+    const running = this.run(this.session).finally(() => {
+      if (this.running === running) this.running = null
     })
-    return this.running
+    this.running = running
+    return running
   }
 
   /** A live hub event that is also journaled. */
@@ -91,8 +104,16 @@ export class SyncEngine {
   /** Something changed on the server (e.g. a ChatListUpdated preview): catch up soon. */
   scheduleCatchUp(): void {
     if (this.stopped || this.pts === null) return
+    const now = Date.now()
+    this.catchUpDueBy ??= now + this.catchUpMaxWaitMs
     clearTimeout(this.catchUpTimer)
-    this.catchUpTimer = setTimeout(() => void this.sync(), this.catchUpDelayMs)
+    const delay = Math.max(0, Math.min(this.catchUpDelayMs, this.catchUpDueBy - now))
+    this.catchUpTimer = setTimeout(() => void this.sync(), delay)
+  }
+
+  private clearCatchUp(): void {
+    clearTimeout(this.catchUpTimer)
+    this.catchUpDueBy = null
   }
 
   /** Send the pending ack now (the tab is being hidden or closed). */
@@ -103,31 +124,49 @@ export class SyncEngine {
 
   stop(): void {
     this.stopped = true
-    clearTimeout(this.catchUpTimer)
+    this.session += 1
+    this.running = null
+    this.clearCatchUp()
     clearTimeout(this.ackTimer)
+    clearTimeout(this.retryTimer)
+    this.retryAttempt = 0
     this.pts = null
     this.ackedPts = 0
     this.buffer = []
     this.rerun = false
   }
 
-  private async run(): Promise<void> {
+  private async run(session: number): Promise<void> {
     do {
       this.rerun = false
       try {
-        if (this.pts === null) await this.loadSnapshot()
-        await this.catchUp()
+        if (this.pts === null) await this.loadSnapshot(session)
+        await this.catchUp(session)
+        this.retryAttempt = 0
       } catch (error) {
-        // A network failure: the next reconnect, live event or visibility change retries.
+        // A reconnect, a live event or a visibility change also retry; without a snapshot nothing
+        // else would, so there is always a timer too.
         console.warn('Sync failed:', error)
+        if (this.isCurrent(session)) this.scheduleRetry()
         return
       }
-    } while (this.rerun && !this.stopped)
+    } while (this.rerun && this.isCurrent(session))
   }
 
-  private async loadSnapshot(): Promise<void> {
+  private isCurrent(session: number): boolean {
+    return !this.stopped && session === this.session
+  }
+
+  private scheduleRetry(): void {
+    const delay = RETRY_DELAYS_MS[Math.min(this.retryAttempt, RETRY_DELAYS_MS.length - 1)]
+    this.retryAttempt += 1
+    clearTimeout(this.retryTimer)
+    this.retryTimer = setTimeout(() => void this.sync(), delay)
+  }
+
+  private async loadSnapshot(session: number): Promise<void> {
     const state = await this.api.getState()
-    if (this.stopped) return
+    if (!this.isCurrent(session)) return
     this.sink.snapshot(state)
     this.pts = state.pts
 
@@ -136,15 +175,15 @@ export class SyncEngine {
     for (const event of buffered) this.sink.apply(event.type, event.payload as never)
   }
 
-  private async catchUp(): Promise<void> {
+  private async catchUp(session: number): Promise<void> {
     for (;;) {
-      if (this.stopped || this.pts === null) return
+      if (!this.isCurrent(session) || this.pts === null) return
       const diff = await this.api.getDifference(this.pts, this.pageSize)
-      if (this.stopped) return
+      if (!this.isCurrent(session)) return
 
       if (diff.snapshotRequired) {
         this.pts = null
-        await this.loadSnapshot()
+        await this.loadSnapshot(session)
         continue
       }
 
