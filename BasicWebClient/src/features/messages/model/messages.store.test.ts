@@ -2,7 +2,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useChatsStore } from '@/entities/chat/model/chats.store'
-import { useAuthStore } from '@/features/auth/model/auth.store'
+import { useSessionStore } from '@/entities/user/model/session.store'
 import { ME, chat, message } from '@/testing/fixtures'
 import * as messagesApi from '../api/messages.api'
 import * as messageEntityApi from '@/entities/message/api'
@@ -34,8 +34,8 @@ vi.mock('@/entities/chat/api', () => ({ getChatItem: vi.fn(() => new Promise(() 
 const m1 = message({ seq: 1 })
 
 async function openChatWithUnread() {
-  const auth = useAuthStore()
-  auth.user = { userId: ME, username: 'me', email: 'me@test', displayName: 'Me', avatarId: null }
+  const session = useSessionStore()
+  session.user = { userId: ME, username: 'me', email: 'me@test', displayName: 'Me', avatarId: null }
   const chats = useChatsStore()
   chats.replaceAll([chat({ lastMessage: m1, lastReadSeq: 0, unreadCount: 1 })], [])
   // A copy per test: the reducers update loaded messages in place.
@@ -56,8 +56,8 @@ afterEach(() => vi.useRealTimers())
 describe('a failed load of the open chat', () => {
   it('is retried by itself until it loads', async () => {
     // Seen with a database restart: the chat said "could not load" until another chat was opened.
-    const auth = useAuthStore()
-    auth.user = { userId: ME, username: 'me', email: 'me@test', displayName: 'Me', avatarId: null }
+    const session = useSessionStore()
+    session.user = { userId: ME, username: 'me', email: 'me@test', displayName: 'Me', avatarId: null }
     useChatsStore().replaceAll([chat({ lastMessage: m1 })], [])
     vi.mocked(messageEntityApi.getMessagesPage)
       .mockRejectedValueOnce(new ApiError(503, { errorCode: 'SERVICE_UNAVAILABLE' }))
@@ -75,8 +75,8 @@ describe('a failed load of the open chat', () => {
   })
 
   it('stops retrying once another chat is open', async () => {
-    const auth = useAuthStore()
-    auth.user = { userId: ME, username: 'me', email: 'me@test', displayName: 'Me', avatarId: null }
+    const session = useSessionStore()
+    session.user = { userId: ME, username: 'me', email: 'me@test', displayName: 'Me', avatarId: null }
     useChatsStore().replaceAll([chat({ lastMessage: m1 }), chat({ chatId: 'chat-2' })], [])
     vi.mocked(messageEntityApi.getMessagesPage).mockReset()
     vi.mocked(messageEntityApi.getMessagesPage).mockRejectedValue(new ApiError(500, { errorCode: 'INTERNAL_ERROR' }))
@@ -341,8 +341,8 @@ describe('opening a chat at a found message', () => {
 
   it('a requested jump opens the chat around the message instead of its newest page', async () => {
     setActivePinia(createPinia())
-    const auth = useAuthStore()
-    auth.user = { userId: ME, username: 'me', email: 'me@test', displayName: 'Me', avatarId: null }
+    const session = useSessionStore()
+    session.user = { userId: ME, username: 'me', email: 'me@test', displayName: 'Me', avatarId: null }
     useChatsStore().replaceAll([chat({ chatId: 'chat-2' })], [])
     const found = message({ chatId: 'chat-2', seq: 40 })
     vi.mocked(messageEntityApi.getMessagesPage).mockClear()

@@ -8,7 +8,7 @@ import { useMediaLinksStore } from '@/entities/media/model/links.store'
 import { useHistoryStore } from '@/entities/message/model/history.store'
 import { useAccountStore } from '@/entities/user/model/account.store'
 import { usePresenceStore } from '@/entities/user/presence.store'
-import { useAuthStore } from '@/features/auth/model/auth.store'
+import { useSessionStore } from '@/entities/user/model/session.store'
 import { useHubStore } from '@/shared/api/hub.store'
 import { JOURNALED_EVENT_NAMES, type JournaledEventName, type JournaledEvents } from '@/shared/api/hub.types'
 import type { SyncStateDto } from '@/shared/api/schema'
@@ -17,7 +17,7 @@ import { SyncEngine } from './sync-engine'
 
 /** Feeds the entity stores from the snapshot, live hub events and the journal. */
 export const useSyncStore = defineStore('sync', () => {
-  const auth = useAuthStore()
+  const session = useSessionStore()
   const hub = useHubStore()
   const chats = useChatsStore()
   const details = useChatDetailsStore()
@@ -27,7 +27,7 @@ export const useSyncStore = defineStore('sync', () => {
   const config = useConfigStore()
   const mediaLinks = useMediaLinksStore()
 
-  const ctx = () => ({ meId: auth.user?.userId ?? '' })
+  const ctx = () => ({ meId: session.user?.userId ?? '' })
 
   function snapshot(state: SyncStateDto): void {
     chats.replaceAll(state.chats, state.folders)

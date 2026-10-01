@@ -10,7 +10,7 @@ import { hideSpoilers } from '@/entities/message/lib/preview'
 import FormattedText from '@/entities/message/ui/FormattedText'
 import * as usersApi from '@/entities/user/api'
 import { useAccountStore } from '@/entities/user/model/account.store'
-import { useAuthStore } from '@/features/auth/model/auth.store'
+import { useSessionStore } from '@/entities/user/model/session.store'
 import { describeError } from '@/shared/api/problem'
 import * as messagesApi from '../api/messages.api'
 import { adjustEntities, insertMention, mentionQuery, setLink, toggleEntity, type Entity } from '../lib/compose'
@@ -51,7 +51,7 @@ const store = useMessagesStore()
 const config = useConfigStore()
 const chats = useChatsStore()
 const details = useChatDetailsStore()
-const auth = useAuthStore()
+const session = useSessionStore()
 
 const text = ref('')
 const entities = ref<Entity[]>([])
@@ -338,7 +338,7 @@ const suggestions = computed(() => {
   if (!m) return []
   const q = m.query.toLowerCase()
   return members.value
-    .filter((p) => p.userId !== auth.user?.userId)
+    .filter((p) => p.userId !== session.user?.userId)
     .filter((p) => p.displayName.toLowerCase().includes(q) || p.username.toLowerCase().startsWith(q))
     .slice(0, MAX_SUGGESTIONS)
 })
@@ -533,7 +533,7 @@ function onKeydown(event: KeyboardEvent): void {
     </button>
 
     <p v-if="entities.length > 0" class="preview">
-      <FormattedText :text="text" :entities="entities" :me-id="auth.user?.userId ?? null" />
+      <FormattedText :text="text" :entities="entities" :me-id="session.user?.userId ?? null" />
     </p>
   </form>
 </template>

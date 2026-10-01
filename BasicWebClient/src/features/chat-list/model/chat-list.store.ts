@@ -6,7 +6,7 @@ import { defineStore } from 'pinia'
 import * as chatApi from '@/entities/chat/api'
 import { useChatsStore } from '@/entities/chat/model/chats.store'
 import { matchesFolderTypes } from '@/entities/chat/model/folders'
-import { useAuthStore } from '@/features/auth/model/auth.store'
+import { useSessionStore } from '@/entities/user/model/session.store'
 import { useHubStore } from '@/shared/api/hub.store'
 import { describeError } from '@/shared/api/problem'
 import { useNoticesStore } from '@/shared/ui/notices.store'
@@ -106,8 +106,8 @@ export const useChatListStore = defineStore('chatList', () => {
     )
   }
 
-  const auth = useAuthStore()
-  const ctx = () => ({ meId: auth.user?.userId ?? '' })
+  const session = useSessionStore()
+  const ctx = () => ({ meId: session.user?.userId ?? '' })
 
   function pin(chatId: string, pinned: boolean): Promise<void> {
     return command(async () => {

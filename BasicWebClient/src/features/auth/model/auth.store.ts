@@ -6,10 +6,10 @@
  */
 
 import { computed, ref, shallowRef } from 'vue'
-import { defineStore } from 'pinia'
+import { defineStore, storeToRefs } from 'pinia'
 
 import type { AuthResponse, LoginRequest, RegisterRequest } from '@/entities/user/auth.types'
-import type { OwnProfile } from '@/entities/user/types'
+import { useSessionStore } from '@/entities/user/model/session.store'
 import { ApiError } from '@/shared/api/problem'
 import { isStorageAvailable, readLocal, removeLocal, writeLocal } from '@/shared/lib/storage'
 import * as authApi from '../api/auth.api'
@@ -20,7 +20,8 @@ export const useAuthStore = defineStore('auth', () => {
   /** Deliberately never persisted. */
   const accessToken = ref<string | null>(null)
   const refreshToken = ref<string | null>(readLocal(REFRESH_TOKEN_KEY))
-  const user = shallowRef<OwnProfile | null>(null)
+  // Kept in the session store: the other features read the user from there.
+  const { user } = storeToRefs(useSessionStore())
 
   /** False until the startup restore attempt has finished, whatever its outcome. */
   const isSessionRestored = ref(false)

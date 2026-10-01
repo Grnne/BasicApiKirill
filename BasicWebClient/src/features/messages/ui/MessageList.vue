@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 
 import { useChatsStore } from '@/entities/chat/model/chats.store'
-import { useAuthStore } from '@/features/auth/model/auth.store'
+import { useSessionStore } from '@/entities/user/model/session.store'
 import { formatDay, parseApiDate } from '@/shared/lib/date'
 import { closesRun } from '../lib/runs'
 import { useMessagesStore } from '../model/messages.store'
@@ -13,7 +13,7 @@ const STICK_THRESHOLD_PX = 120
 
 const LOAD_OLDER_THRESHOLD_PX = 150
 
-const auth = useAuthStore()
+const session = useSessionStore()
 const store = useMessagesStore()
 const chats = useChatsStore()
 const isGroup = computed(() => chats.get(store.chatId)?.type === 'group')
@@ -159,7 +159,7 @@ function startsNewDay(index: number): boolean {
         <p v-if="startsNewDay(index)" class="day">{{ formatDay(message.createdAt) }}</p>
         <MessageItem
           :message="message"
-          :me-id="auth.user?.userId ?? null"
+          :me-id="session.user?.userId ?? null"
           :avatar="isGroup ? (closesRun(store.messages, index) ? 'show' : 'space') : null"
         />
       </template>

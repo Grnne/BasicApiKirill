@@ -73,6 +73,16 @@ const notices = useNoticesStore()
 const creatingGroup = ref(false)
 const { addingMembers, editingGroup, managedMemberId, showingAudit } = useChatDialogs(() => chatList.selectedChatId)
 
+// One-way link: the chat list knows nothing about messages, which follow the selected chat.
+watch(
+  () => chatList.selectedChatId,
+  (chatId) => {
+    if (chatId) void messages.openChat(chatId)
+    else messages.reset()
+  },
+  { immediate: true },
+)
+
 function onMembersAdded(count: number): void {
   addingMembers.value = false
   notices.push(count > 0 ? `Добавлено участников: ${count}` : 'Все выбранные уже в группе', 'info')
@@ -140,7 +150,7 @@ const { logout: onLogout } = useLogout()
       </aside>
 
       <main class="main">
-        <ChatWindow @info="infoOpen = !infoOpen" />
+        <ChatWindow :chat="chatList.selectedChat" @back="chatList.deselect()" @info="infoOpen = !infoOpen" />
         <ChatInfoPanel
           v-if="infoOpen && chatList.selectedChat"
           class="info-panel"

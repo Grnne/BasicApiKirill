@@ -7,7 +7,7 @@ import AvatarCircle from '@/entities/media/ui/AvatarCircle.vue'
 import { usePresenceStore } from '@/entities/user/presence.store'
 import { messagePreview } from '@/entities/message/lib/preview'
 import { STATUS_MARKS, ownStatus } from '@/entities/message/lib/status'
-import { useAuthStore } from '@/features/auth/model/auth.store'
+import { useSessionStore } from '@/entities/user/model/session.store'
 import { formatTime } from '@/shared/lib/date'
 
 // An absent boolean prop would be cast to false: null means "the global pin".
@@ -22,7 +22,7 @@ const props = withDefaults(
 )
 
 const presence = usePresenceStore()
-const auth = useAuthStore()
+const session = useSessionStore()
 
 const title = computed(() => chatTitle(props.chat))
 
@@ -41,11 +41,11 @@ const preview = computed(() => {
 
   const message = props.chat.lastMessage
   if (!message) return 'нет сообщений'
-  return messagePreview(message, auth.user?.userId ?? null, props.chat.type === 'group')
+  return messagePreview(message, session.user?.userId ?? null, props.chat.type === 'group')
 })
 
 const status = computed(() =>
-  props.chat.lastMessage ? ownStatus(props.chat.lastMessage, props.chat, auth.user?.userId ?? null) : null,
+  props.chat.lastMessage ? ownStatus(props.chat.lastMessage, props.chat, session.user?.userId ?? null) : null,
 )
 
 const time = computed(() =>

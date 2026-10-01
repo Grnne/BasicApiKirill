@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useChatsStore } from '@/entities/chat/model/chats.store'
 import * as messageEntityApi from '@/entities/message/api'
-import { useAuthStore } from '@/features/auth/model/auth.store'
+import { useSessionStore } from '@/entities/user/model/session.store'
 import { ME, chat, message } from '@/testing/fixtures'
 import * as messagesApi from '../api/messages.api'
 import { useMessagesStore } from '../model/messages.store'
@@ -26,7 +26,7 @@ function setVisibility(state: 'visible' | 'hidden'): void {
 async function openUnreadChat() {
   const pinia = createPinia()
   setActivePinia(pinia)
-  useAuthStore().user = { userId: ME, username: 'me', email: 'me@test', displayName: 'Me', avatarId: null }
+  useSessionStore().user = { userId: ME, username: 'me', email: 'me@test', displayName: 'Me', avatarId: null }
   const last = message({ seq: 1 })
   useChatsStore().replaceAll([chat({ lastMessage: last, lastReadSeq: 0, unreadCount: 1 })], [])
   vi.mocked(messageEntityApi.getMessagesPage).mockResolvedValue({ items: [{ ...last }], nextCursor: null, hasMore: false })
@@ -67,7 +67,7 @@ describe('going from chat to chat', () => {
     // scrolled down — a chat with cached messages opened mid-way at the old scroll position.
     const pinia = createPinia()
     setActivePinia(pinia)
-    useAuthStore().user = { userId: ME, username: 'me', email: 'me@test', displayName: 'Me', avatarId: null }
+    useSessionStore().user = { userId: ME, username: 'me', email: 'me@test', displayName: 'Me', avatarId: null }
     useChatsStore().replaceAll([chat({ chatId: 'a' }), chat({ chatId: 'b' })], [])
     vi.mocked(messageEntityApi.getMessagesPage).mockImplementation(async (chatId) => ({
       items: [message({ chatId, seq: 1, id: `${chatId}-1` })], nextCursor: null, hasMore: false,

@@ -5,7 +5,7 @@ import { defineStore } from 'pinia'
 
 import { useChatsStore } from '@/entities/chat/model/chats.store'
 import { useHistoryStore } from '@/entities/message/model/history.store'
-import { useAuthStore } from '@/features/auth/model/auth.store'
+import { useSessionStore } from '@/entities/user/model/session.store'
 import type { Message } from '@/entities/message/types'
 import type { AttachmentDto, MessageEntityDto } from '@/shared/api/schema'
 import { ApiError, NetworkError, describeError } from '@/shared/api/problem'
@@ -16,11 +16,11 @@ import { DraftSaver } from './drafts'
 import { Outbox } from './outbox'
 
 export const useMessagesStore = defineStore('messages', () => {
-  const auth = useAuthStore()
+  const session = useSessionStore()
   const chats = useChatsStore()
   const history = useHistoryStore()
   const notices = useNoticesStore()
-  const ctx = () => ({ meId: auth.user?.userId ?? '' })
+  const ctx = () => ({ meId: session.user?.userId ?? '' })
 
   /**
    * Chats whose other side does not let the user write (their privacy, or they blocked the user —
@@ -433,7 +433,7 @@ export const useMessagesStore = defineStore('messages', () => {
 
     const unread =
       !chat || chat.unreadCount > 0 || chat.markedUnread ||
-      (last.senderId !== auth.user?.userId && last.seq > chat.lastReadSeq)
+      (last.senderId !== session.user?.userId && last.seq > chat.lastReadSeq)
     if (!unread && unsentRead?.chatId !== id) return
 
     chats.markReadLocally(id, last.seq)
