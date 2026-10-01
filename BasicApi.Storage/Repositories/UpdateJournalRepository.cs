@@ -10,8 +10,9 @@ public sealed class UpdateJournalRepository(IDbSession db) : IUpdateJournal
         if (userIds.Count == 0)
             return Task.CompletedTask;
 
-        // Counters are taken in user_id order: two transactions writing to the journals of the same
-        // people lock their rows in the same order and do not wait on each other in a cycle.
+        // Counters are taken in user_id order, so two single writes never wait on each other in a
+        // cycle. A transaction that writes more than once (one person, then everyone) still can:
+        // Postgres ends one of them and DbSession runs it again.
         return db.ExecuteAsync(@"
             WITH pts AS (
                 INSERT INTO user_pts (user_id, last_pts)

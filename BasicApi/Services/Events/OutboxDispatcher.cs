@@ -90,6 +90,8 @@ public sealed class OutboxDispatcher(
         var db = scope.ServiceProvider.GetRequiredService<IDbSession>();
         var outbox = scope.ServiceProvider.GetRequiredService<IOutboxRepository>();
 
+        // Not repeated on a conflict: the sends and the push queue are not part of the transaction,
+        // and the next round delivers what was not marked processed.
         return await db.InTransactionAsync(async ct =>
         {
             var rows = await outbox.LockPendingAsync(BatchSize, ct);
@@ -116,7 +118,7 @@ public sealed class OutboxDispatcher(
 
             await outbox.MarkProcessedAsync(sent, ct);
             return new DispatchResult(sent.Count, Failed: false);
-        }, ct: ct);
+        }, ct: ct, retryOnConflict: false);
     }
 
     private async Task SendAsync(OutboxRow row, CancellationToken ct)

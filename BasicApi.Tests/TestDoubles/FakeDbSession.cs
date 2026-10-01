@@ -22,7 +22,8 @@ public sealed class FakeDbSession : IDbSession
     }
 
     public async Task<T> InTransactionAsync<T>(
-        Func<CancellationToken, Task<T>> work, IsolationLevel isolation = IsolationLevel.ReadCommitted, CancellationToken ct = default)
+        Func<CancellationToken, Task<T>> work, IsolationLevel isolation = IsolationLevel.ReadCommitted, CancellationToken ct = default,
+        bool retryOnConflict = true)
     {
         if (InTransaction)
             return await work(ct);
