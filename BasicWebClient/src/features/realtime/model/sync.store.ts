@@ -72,6 +72,13 @@ export const useSyncStore = defineStore('sync', () => {
       }),
     )
     presence.subscribeToHub()
+    // Companions of chats that appear after the snapshot (a new chat, one opened from search).
+    unsubscribe.push(
+      watch(
+        () => chats.list.map((c) => c.companionId).filter((id): id is string => id !== null),
+        (ids) => void presence.track(ids),
+      ),
+    )
 
     void config.load()
     // The snapshot does not wait for the hub; every (re)connection may have missed events.

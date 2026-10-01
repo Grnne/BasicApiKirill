@@ -1,6 +1,6 @@
 /* Online and typing state; in entities because both the chat list and the chat window use it. */
 
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 
 import { useHubStore } from '@/shared/api/hub.store'
@@ -51,6 +51,21 @@ export const usePresenceStore = defineStore('presence', () => {
     }
   }
 
+  /** Statuses asked for and not answered yet: a chat list that changes asks only once. */
+  const asking = new Set<string>()
+
+  /** Users whose status is shown (companions of chats that appear later): asked once each. */
+  async function track(userIds: string[]): Promise<void> {
+    const unknown = [...new Set(userIds)].filter((id) => id && !(id in online.value) && !asking.has(id))
+    if (unknown.length === 0) return
+    unknown.forEach((id) => asking.add(id))
+    try {
+      await loadStatuses(unknown)
+    } finally {
+      unknown.forEach((id) => asking.delete(id))
+    }
+  }
+
   /** Initial typing state: events that happened before we connected. */
   async function loadTyping(): Promise<void> {
     try {
@@ -95,7 +110,26 @@ export const usePresenceStore = defineStore('presence', () => {
   function subscribeToHub(): void {
     if (unsubscribe.length > 0) return
 
+    // Online changes and typing are not journaled: while the connection was down they were
+    // missed, so the shown statuses are asked again when it is back.
+    let wasDown = false
+    const stopWatch = watch(
+      () => hub.status,
+      (status, before) => {
+        if (status !== 'connected') {
+          // The first connection is not a drop: the snapshot asks for the statuses then.
+          if (before === 'connected') wasDown = true
+          return
+        }
+        if (!wasDown) return
+        wasDown = false
+        void loadStatuses(Object.keys(online.value))
+        void loadTyping()
+      },
+    )
+
     unsubscribe = [
+      stopWatch,
       hub.on('UserOnlineChanged', (userId, isOnlineNow) => {
         online.value = { ...online.value, [userId]: isOnlineNow }
       }),
@@ -114,6 +148,7 @@ export const usePresenceStore = defineStore('presence', () => {
     unsubscribe = []
     online.value = {}
     typingUntil.value = {}
+    asking.clear()
   }
 
   return {
@@ -122,6 +157,7 @@ export const usePresenceStore = defineStore('presence', () => {
     isOnline,
     isSomeoneTyping,
     loadStatuses,
+    track,
     loadTyping,
     subscribeToHub,
     reset,
