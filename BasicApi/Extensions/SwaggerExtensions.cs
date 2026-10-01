@@ -1,7 +1,9 @@
 ﻿using System.Reflection;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
+using BasicApi.Services.Events;
 using Microsoft.OpenApi;
+using Swashbuckle.AspNetCore.SwaggerGen;
 
 namespace BasicApi.Extensions;
 
@@ -44,6 +46,11 @@ public static class SwaggerExtensions
                 [new OpenApiSecuritySchemeReference(JwtBearerDefaults.AuthenticationScheme, document)] = []
             });
 
+            // Nullability as declared in C#: generated clients get string, not string | null, where null never comes.
+            c.SupportNonNullableReferenceTypes();
+            c.UseAllOfToExtendReferenceSchemas();
+            c.DocumentFilter<HubEventSchemasFilter>();
+
             var xmlFile = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
             var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
             if (File.Exists(xmlPath))
@@ -67,5 +74,24 @@ public static class SwaggerExtensions
         });
 
         return app;
+    }
+}
+
+/// <summary>
+/// Adds the payloads of hub events to the document's schemas: SignalR is not described by OpenAPI, but
+/// clients generate their types from this document, events included.
+/// </summary>
+internal sealed class HubEventSchemasFilter : IDocumentFilter
+{
+    public void Apply(OpenApiDocument swaggerDoc, DocumentFilterContext context)
+    {
+        var payloads = typeof(IChatEventPublisher).GetMethods()
+            .SelectMany(m => m.GetParameters())
+            .Select(p => p.ParameterType)
+            .Where(t => t.IsClass && t.Namespace?.StartsWith("BasicApi.Models", StringComparison.Ordinal) == true)
+            .Distinct();
+
+        foreach (var type in payloads)
+            context.SchemaGenerator.GenerateSchema(type, context.SchemaRepository);
     }
 }
