@@ -53,11 +53,16 @@ export const useHistoryStore = defineStore('history', () => {
     putNewerPage(state.value, chatId, await messageApi.getMessagesAfter(chatId, last.seq))
   }
 
-  /** newestSeq: the chat's last message, to know whether the page reaches it. */
-  async function loadAt(chatId: string, date: string, newestSeq: number): Promise<void> {
+  /**
+   * newestSeq: the chat's last message, to know whether the page reaches it. False when nothing
+   * was written by then: the history stays as it is.
+   */
+  async function loadAt(chatId: string, date: string, newestSeq: number): Promise<boolean> {
     const page = await messageApi.getMessagesAt(chatId, date)
     const last = page.items.at(-1)
-    putWindow(state.value, chatId, { ...page, hasNewer: !!last && last.seq < newestSeq })
+    if (!last) return false
+    putWindow(state.value, chatId, { ...page, hasNewer: last.seq < newestSeq })
+    return true
   }
 
   function apply<K extends JournaledEventName>(type: K, payload: JournaledEvents[K], ctx: HistoryContext): void {

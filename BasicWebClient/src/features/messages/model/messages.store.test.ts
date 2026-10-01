@@ -26,6 +26,7 @@ vi.mock('@/entities/message/api', () => ({
   getMessagesPage: vi.fn(),
   getMessageContext: vi.fn(),
   getMessagesAfter: vi.fn(),
+  getMessagesAt: vi.fn(),
   PAGE_SIZE: 30,
 }))
 vi.mock('@/entities/chat/api', () => ({ getChatItem: vi.fn(() => new Promise(() => {})) }))
@@ -280,7 +281,32 @@ describe('jumping in the history', () => {
   })
 })
 
+describe('jumping to a date', () => {
+  it('a date before the first message keeps the chat as it was', async () => {
+    // The bug: the empty answer replaced the history; the chat stayed empty, without "↓".
+    const { store } = await openChatWithUnread()
+    vi.mocked(messageEntityApi.getMessagesAt).mockResolvedValue({ items: [], nextCursor: null, hasMore: false })
+
+    await store.jumpToDate(new Date('2020-01-01T00:00:00Z'))
+
+    expect(store.messages.map((m) => m.id)).toEqual([m1.id])
+    expect(useNoticesStore().items.map((n) => n.text)).toContain('В этот день сообщений ещё не было')
+  })
+})
+
 describe('opening a chat at a found message', () => {
+  it('an error of the chat before does not show in the next one', async () => {
+    const { store } = await openChatWithUnread()
+    store.error = 'Не удалось загрузить сообщения'
+    vi.mocked(messageEntityApi.getMessageContext).mockResolvedValue({ items: [message({ chatId: 'chat-2', seq: 5 })], hasOlder: false, hasNewer: false } as never)
+    useChatsStore().put(chat({ chatId: 'chat-2' }))
+
+    store.requestJump('chat-2', 'm-x')
+    await store.openChat('chat-2')
+
+    expect(store.error).toBe('')
+  })
+
   it('a requested jump opens the chat around the message instead of its newest page', async () => {
     setActivePinia(createPinia())
     const auth = useAuthStore()

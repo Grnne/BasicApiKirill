@@ -153,6 +153,10 @@ export const useMessagesStore = defineStore('messages', () => {
     if (chatId.value !== id) {
       // A chat looked at and left at once still counts as read.
       flushSeen()
+      // What was loading or failed belongs to the chat before.
+      inFlight?.abort()
+      clearTimeout(reloadTimer)
+      error.value = ''
       reloadAttempt = 0
       editing.value = null
       replyTo.value = null
@@ -278,10 +282,10 @@ export const useMessagesStore = defineStore('messages', () => {
     const id = chatId.value
     if (!id) return
     try {
-      await history.loadAt(id, date.toISOString(), chats.get(id)?.lastMessage?.seq ?? 0)
+      const found = await history.loadAt(id, date.toISOString(), chats.get(id)?.lastMessage?.seq ?? 0)
       const target = messages.value.at(-1)
-      if (target && chatId.value === id) jumpTarget.value = target.id
-      else if (!target) notices.push('В этот день сообщений ещё не было', 'info')
+      if (!found) notices.push('В этот день сообщений ещё не было', 'info')
+      else if (target && chatId.value === id) jumpTarget.value = target.id
     } catch (e) {
       notices.push(describeError(e))
     }

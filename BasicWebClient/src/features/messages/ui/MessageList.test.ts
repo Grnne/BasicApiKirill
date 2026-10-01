@@ -60,3 +60,34 @@ describe('reading what is on screen', () => {
     expect(messagesApi.markRead).not.toHaveBeenCalled()
   })
 })
+
+describe('going from chat to chat', () => {
+  it('a chat opened again shows its newest messages, not where the chat before was scrolled to', async () => {
+    // The bug: the list is not re-created per chat, and only a load that showed a placeholder
+    // scrolled down — a chat with cached messages opened mid-way at the old scroll position.
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    useAuthStore().user = { userId: ME, username: 'me', email: 'me@test', displayName: 'Me', avatarId: null }
+    useChatsStore().replaceAll([chat({ chatId: 'a' }), chat({ chatId: 'b' })], [])
+    vi.mocked(messageEntityApi.getMessagesPage).mockImplementation(async (chatId) => ({
+      items: [message({ chatId, seq: 1, id: `${chatId}-1` })], nextCursor: null, hasMore: false,
+    }))
+    const wrapper = mount(MessageList, { global: { plugins: [pinia] } })
+    const viewport = wrapper.get('.viewport').element as HTMLElement
+    Object.defineProperty(viewport, 'scrollHeight', { value: 2_000, configurable: true })
+    Object.defineProperty(viewport, 'clientHeight', { value: 400, configurable: true })
+    const store = useMessagesStore()
+    await store.openChat('a')
+    await store.openChat('b')
+    await store.openChat('a')
+    await flushPromises()
+
+    viewport.scrollTop = 0
+    vi.mocked(messageEntityApi.getMessagesPage).mockImplementation(() => new Promise(() => {}))
+    void store.openChat('b')
+    await flushPromises()
+
+    expect(viewport.scrollTop).toBe(2_000)
+  })
+})
+

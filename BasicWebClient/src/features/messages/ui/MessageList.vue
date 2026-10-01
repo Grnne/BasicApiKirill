@@ -76,6 +76,16 @@ watch(
   },
 )
 
+// Another chat: the list is the same element, so its scroll position belongs to the chat before.
+// A chat with cached messages shows them at once (no placeholder), from the newest.
+watch(
+  () => store.chatId,
+  async () => {
+    await nextTick()
+    if (!store.hasNewer) scrollToBottom()
+  },
+)
+
 // The newest page arrived (the chat opened, a reload): it is read only if someone sees it.
 watch(
   () => store.latestVersion,
