@@ -40,6 +40,9 @@ function Report([string]$text) {
 function Step([string]$name, [scriptblock]$action) {
     Write-Host ""
     Write-Host "=== $name ===" -ForegroundColor Cyan
+    # A step fails by its exit code. Windows PowerShell 5.1 turns any stderr line of a native
+    # command (docker and npm progress) into an error, and 'Stop' would end the run on it.
+    $ErrorActionPreference = 'Continue'
     & $action
     if ($LASTEXITCODE -ne 0) {
         Write-Host ""
