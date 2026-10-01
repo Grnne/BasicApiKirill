@@ -1,4 +1,5 @@
 using BasicApi.Hubs;
+using BasicApi.Models;
 using BasicApi.Models.Dto.Chat;
 using BasicApi.Models.Dto.Users;
 using BasicApi.Models.Dto.Message;
@@ -118,17 +119,27 @@ public sealed class SignalRChatEventPublisher(IHubContext<ChatHub> hub, HubConne
             ? Task.CompletedTask
             : hub.Clients.Users(ToStrings(recipientIds)).SendAsync("TypingChanged", chatId, userId, isTyping, ct);
 
-    /// <summary>Message for a chat list row: the text is truncated.</summary>
+    /// <summary>
+    /// Message for a chat list row: the text is truncated, formatting, replies and reactions are
+    /// left out. Not a full message — clients take counters and mentions from the journal.
+    /// </summary>
     public static MessageDto Preview(MessageDto message) => new()
     {
         Id = message.Id,
         ChatId = message.ChatId,
         SenderId = message.SenderId,
         SenderName = message.SenderName,
-        Text = message.Text.Length > PreviewLength ? message.Text[..PreviewLength] + "…" : message.Text,
+        Text = Truncate(MessageEntities.HideSpoilers(message.Text, message.Entities)),
         CreatedAt = message.CreatedAt,
-        IsRead = message.IsRead
+        IsRead = message.IsRead,
+        Seq = message.Seq,
+        Type = message.Type,
+        Action = message.Action,
+        Attachments = message.Attachments
     };
+
+    private static string Truncate(string text) =>
+        text.Length > PreviewLength ? text[..PreviewLength] + "…" : text;
 
     private Task ToUsers(IReadOnlyCollection<Guid> userIds, string method, object payload, CancellationToken ct) =>
         userIds.Count == 0 ? Task.CompletedTask : hub.Clients.Users(ToStrings(userIds)).SendAsync(method, payload, ct);

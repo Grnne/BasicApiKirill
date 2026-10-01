@@ -4,9 +4,11 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import * as chatApi from '@/entities/chat/api'
 import { chatTitle } from '@/entities/chat/lib'
 import { useChatsStore } from '@/entities/chat/model/chats.store'
+import { useRestoreFocus } from '@/shared/ui/useRestoreFocus'
 
 defineProps<{ count: number }>()
 const emit = defineEmits<{ pick: [chatId: string]; cancel: [] }>()
+useRestoreFocus()
 
 const chats = useChatsStore()
 const query = ref('')

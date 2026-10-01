@@ -6,10 +6,10 @@
  */
 
 import { computed, ref, shallowRef } from 'vue'
-import { defineStore } from 'pinia'
+import { defineStore, storeToRefs } from 'pinia'
 
 import type { AuthResponse, LoginRequest, RegisterRequest } from '@/entities/user/auth.types'
-import type { OwnProfile } from '@/entities/user/types'
+import { useSessionStore } from '@/entities/user/model/session.store'
 import { ApiError } from '@/shared/api/problem'
 import { isStorageAvailable, readLocal, removeLocal, writeLocal } from '@/shared/lib/storage'
 import * as authApi from '../api/auth.api'
@@ -20,12 +20,19 @@ export const useAuthStore = defineStore('auth', () => {
   /** Deliberately never persisted. */
   const accessToken = ref<string | null>(null)
   const refreshToken = ref<string | null>(readLocal(REFRESH_TOKEN_KEY))
-  const user = shallowRef<OwnProfile | null>(null)
+  // Kept in the session store: the other features read the user from there.
+  const { user } = storeToRefs(useSessionStore())
 
   /** False until the startup restore attempt has finished, whatever its outcome. */
   const isSessionRestored = ref(false)
 
   const isAuthenticated = computed(() => accessToken.value !== null && user.value !== null)
+
+  /**
+   * Signed out of this tab only because the server could not be reached (network, 5xx): the
+   * sign-in itself is alive and can be resumed without the password.
+   */
+  const canResume = computed(() => !isAuthenticated.value && refreshToken.value !== null)
 
   function applyAuth(response: AuthResponse): void {
     accessToken.value = response.token
@@ -57,10 +64,15 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function clearSession(): void {
+    forgetSession()
+    removeLocal(REFRESH_TOKEN_KEY)
+  }
+
+  /** This tab's session only: the stored token may be another tab's sign-in. */
+  function forgetSession(): void {
     accessToken.value = null
     refreshToken.value = null
     user.value = null
-    removeLocal(REFRESH_TOKEN_KEY)
   }
 
   /**
@@ -93,7 +105,16 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     try {
-      applyAuth(await authApi.refresh(token))
+      const response = await authApi.refresh(token)
+      if (user.value && response.userId !== user.value.userId) {
+        // The stored token was someone else's: another tab signed out and signed in as another
+        // user. Their pair stays theirs (the old one is used up now); this tab's session ended.
+        writeLocal(REFRESH_TOKEN_KEY, response.refreshToken)
+        forgetSession()
+        sessionLost.value = true
+        return false
+      }
+      applyAuth(response)
       return true
     } catch (error) {
       // Only a 401 means the token is dead; network errors and 5xx keep the session.
@@ -128,7 +149,8 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function logout(): Promise<void> {
-    const token = refreshToken.value
+    // Another tab may have rotated the pair since this one last refreshed.
+    const token = (isStorageAvailable() ? readLocal(REFRESH_TOKEN_KEY) : null) ?? refreshToken.value
     try {
       await authApi.logout(token)
     } catch {
@@ -142,6 +164,7 @@ export const useAuthStore = defineStore('auth', () => {
     accessToken,
     user,
     isAuthenticated,
+    canResume,
     isSessionRestored,
     login,
     register,

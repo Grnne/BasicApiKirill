@@ -25,6 +25,9 @@ public interface ISessionService
     /// <returns>Session family of the revoked session, or null when nothing was revoked.</returns>
     Task<Guid?> RevokeAsync(string? refreshToken, CancellationToken ct = default);
 
+    /// <summary>Ends one sign-in: every live session of its rotation chain.</summary>
+    Task RevokeFamilyAsync(Guid sessionFamilyId, CancellationToken ct = default);
+
     Task RevokeAllForUserAsync(Guid userId, CancellationToken ct = default);
 
     /// <summary>Ends every sign-in of the user but <paramref name="keepFamilyId"/> (null — all of them).</summary>

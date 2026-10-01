@@ -168,6 +168,18 @@ describe('folders', () => {
     expect(foldersApi.updateFolder).toHaveBeenCalledWith('a', { pinnedChatIds: ['y', 'x'] })
     expect(chats.folders[0]!.pinnedChatIds).toEqual(['y', 'x'])
   })
+
+  it('unpinning a chat the folder holds by its type does not leave it listed by name', async () => {
+    // The bug: the server lists every pinned chat by name; unpinned, it stayed listed and kept
+    // showing in the folder after it was archived.
+    const chats = useChatsStore()
+    chats.replaceAll([chat({ chatId: 'p1', type: 'private' })], [{ ...f('a'), chatIds: ['p1', 'g9'], pinnedChatIds: ['p1'] }])
+    vi.mocked(foldersApi.updateFolder).mockImplementation(async (_id, body) => ({ ...f('a'), ...body }) as never)
+
+    await useChatListStore().pinInFolder(chats.folders[0]!, 'p1', false)
+
+    expect(foldersApi.updateFolder).toHaveBeenLastCalledWith('a', { pinnedChatIds: [], chatIds: ['g9'] })
+  })
 })
 
 describe('the open chat goes away', () => {

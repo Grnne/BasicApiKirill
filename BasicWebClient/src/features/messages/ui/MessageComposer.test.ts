@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as chatApi from '@/entities/chat/api'
 import { useChatsStore } from '@/entities/chat/model/chats.store'
 import type { ChatDetail } from '@/entities/chat/types'
-import { chat } from '@/testing/fixtures'
+import { chat, message } from '@/testing/fixtures'
 import * as messagesApi from '../api/messages.api'
 import { useMessagesStore } from '../model/messages.store'
 import MessageComposer from './MessageComposer.vue'
@@ -56,6 +56,25 @@ describe('MessageComposer', () => {
     expect(el.value).toBe('')
   })
 
+  it('mounted while a message is being edited, it holds that message, not the draft', async () => {
+    // The bug: selection mode swapped the field out; back from it, the field held the draft
+    // under "Редактирование", and Enter saved the draft into the message.
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    useChatsStore().replaceAll([chat({ draft: { text: 'draft', entities: [], replyToMessageId: null, updatedAt: '2026-10-01T12:00:00Z' } })], [])
+    const store = useMessagesStore()
+    store.chatId = 'chat-1'
+    store.startEdit(message({ id: 'm-1', text: 'original' }))
+
+    const wrapper = mount(MessageComposer, { global: { plugins: [pinia] }, attachTo: document.body })
+    await flushPromises()
+
+    expect((wrapper.get('textarea').element as HTMLTextAreaElement).value).toBe('original')
+    store.cancelEdit()
+    await flushPromises()
+    expect((wrapper.get('textarea').element as HTMLTextAreaElement).value).toBe('draft')
+  })
+
   it('formatting follows the text as it is edited', async () => {
     const { wrapper, send } = setup()
     const area = wrapper.get('textarea')
@@ -68,6 +87,36 @@ describe('MessageComposer', () => {
     await area.trigger('keydown', { key: 'Enter' })
 
     expect(send).toHaveBeenCalledWith('hello world', [{ type: 'italic', offset: 6, length: 5 }], [])
+  })
+
+  it('Enter that picks a word in an input method does not send', async () => {
+    // Chinese, Japanese, Korean input: Enter confirms the candidate, the text is not finished.
+    const { wrapper, send } = setup()
+    const area = wrapper.get('textarea')
+    await area.setValue('ni')
+
+    await area.trigger('keydown', { key: 'Enter', isComposing: true })
+
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it('"stopped typing" goes to the chat that was typed in, not the one opened since', async () => {
+    // The bug: the stop went to the new chat, the old one showed "печатает…" for seconds more,
+    // and typing in the new one within 3 s sent no indicator.
+    vi.useFakeTimers()
+    const { wrapper } = setup()
+    useChatsStore().put(chat({ chatId: 'chat-2' }))
+    const store = useMessagesStore()
+    await wrapper.get('textarea').setValue('h')
+    vi.mocked(messagesApi.sendTyping).mockClear()
+
+    store.chatId = 'chat-2'
+    await flushPromises()
+    await wrapper.get('textarea').setValue('x')
+
+    expect(messagesApi.sendTyping).toHaveBeenCalledWith('chat-1', false)
+    expect(messagesApi.sendTyping).toHaveBeenCalledWith('chat-2', true)
+    vi.useRealTimers()
   })
 
   it('Shift+Enter is a new line, not sending', async () => {
@@ -126,6 +175,6 @@ describe('drafts', () => {
     await vi.advanceTimersByTimeAsync(1_500)
 
     expect(messagesApi.saveDraft).toHaveBeenCalledTimes(1)
-    expect(messagesApi.saveDraft).toHaveBeenCalledWith('chat-1', { text: 'черновик', entities: [], replyToMessageId: null })
+    expect(messagesApi.saveDraft).toHaveBeenCalledWith('chat-1', { text: 'черновик', entities: [], replyToMessageId: null }, false)
   })
 })

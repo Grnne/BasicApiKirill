@@ -6,10 +6,11 @@ import { useChatDetailsStore } from '@/entities/chat/model/details.store'
 import type { ChatParticipant } from '@/entities/chat/types'
 import { useConfigStore } from '@/entities/config/config.store'
 import { safeUrl } from '@/entities/message/lib/formatted'
+import { hideSpoilers } from '@/entities/message/lib/preview'
 import FormattedText from '@/entities/message/ui/FormattedText'
 import * as usersApi from '@/entities/user/api'
 import { useAccountStore } from '@/entities/user/model/account.store'
-import { useAuthStore } from '@/features/auth/model/auth.store'
+import { useSessionStore } from '@/entities/user/model/session.store'
 import { describeError } from '@/shared/api/problem'
 import * as messagesApi from '../api/messages.api'
 import { adjustEntities, insertMention, mentionQuery, setLink, toggleEntity, type Entity } from '../lib/compose'
@@ -50,7 +51,7 @@ const store = useMessagesStore()
 const config = useConfigStore()
 const chats = useChatsStore()
 const details = useChatDetailsStore()
-const auth = useAuthStore()
+const session = useSessionStore()
 
 const text = ref('')
 const entities = ref<Entity[]>([])
@@ -136,6 +137,13 @@ watch(
     }
   },
 )
+// Mounted mid-edit: the chat's draft has just been loaded (the chatId watcher runs at setup).
+onMounted(() => {
+  const message = store.editing
+  if (!message) return
+  draftBeforeEdit = { text: text.value, entities: entities.value }
+  setContent(message.text, message.entities)
+})
 
 watch(
   () => store.replyTo,
@@ -207,7 +215,7 @@ watch(
 )
 
 function onHidden(): void {
-  if (document.visibilityState === 'hidden') store.drafts.flushAll()
+  if (document.visibilityState === 'hidden') store.drafts.flushAll(true)
 }
 onMounted(() => document.addEventListener('visibilitychange', onHidden))
 onUnmounted(() => {
@@ -219,6 +227,8 @@ onUnmounted(() => {
 
 let lastTypingSentAt = 0
 let stopTypingTimer: ReturnType<typeof setTimeout> | undefined
+/** Where "typing" was sent: the stop goes there, whichever chat is open by then. */
+let typingChatId: string | null = null
 
 function typing(chatId: string, isTyping: boolean): void {
   messagesApi.sendTyping(chatId, isTyping).catch(() => {
@@ -230,7 +240,8 @@ function stopTyping(): void {
   clearTimeout(stopTypingTimer)
   stopTypingTimer = undefined
 
-  const chatId = store.chatId
+  const chatId = typingChatId
+  typingChatId = null
   if (chatId && lastTypingSentAt > 0) {
     lastTypingSentAt = 0
     typing(chatId, false)
@@ -240,10 +251,12 @@ function stopTyping(): void {
 function noteTyping(): void {
   const chatId = store.chatId
   if (!chatId || store.editing) return
+  if (typingChatId && typingChatId !== chatId) stopTyping()
 
   const now = Date.now()
   if (now - lastTypingSentAt > TYPING_THROTTLE_MS) {
     lastTypingSentAt = now
+    typingChatId = chatId
     typing(chatId, true)
   }
   clearTimeout(stopTypingTimer)
@@ -251,6 +264,8 @@ function noteTyping(): void {
 }
 
 onUnmounted(stopTyping)
+// Leaving the chat ends typing in it at once, not after the pause.
+watch(() => store.chatId, stopTyping)
 
 /* ── Text and formatting ── */
 
@@ -323,7 +338,7 @@ const suggestions = computed(() => {
   if (!m) return []
   const q = m.query.toLowerCase()
   return members.value
-    .filter((p) => p.userId !== auth.user?.userId)
+    .filter((p) => p.userId !== session.user?.userId)
     .filter((p) => p.displayName.toLowerCase().includes(q) || p.username.toLowerCase().startsWith(q))
     .slice(0, MAX_SUGGESTIONS)
 })
@@ -397,6 +412,8 @@ function onFormatKey(event: KeyboardEvent): boolean {
 }
 
 function onKeydown(event: KeyboardEvent): void {
+  // An input method's own keys (Enter confirms a candidate); 229 — older browsers.
+  if (event.isComposing || event.keyCode === 229) return
   if (onSuggestionKey(event) || onFormatKey(event)) {
     event.preventDefault()
     return
@@ -426,12 +443,12 @@ function onKeydown(event: KeyboardEvent): void {
     <div v-if="store.editing" class="context">
       <span class="label">Редактирование</span>
       <span class="quote">{{ store.editing.text }}</span>
-      <button type="button" class="close" title="Отменить (Esc)" @click="store.cancelEdit()">✕</button>
+      <button type="button" class="close" title="Отменить (Esc)" aria-label="Отменить правку" @click="store.cancelEdit()">✕</button>
     </div>
     <div v-else-if="store.replyTo" class="context">
       <span class="label">Ответ {{ store.replyTo.senderName }}</span>
-      <span class="quote">{{ store.replyTo.text }}</span>
-      <button type="button" class="close" title="Отменить (Esc)" @click="store.cancelReply()">✕</button>
+      <span class="quote">{{ hideSpoilers(store.replyTo.text, store.replyTo.entities) }}</span>
+      <button type="button" class="close" title="Отменить (Esc)" aria-label="Отменить ответ" @click="store.cancelReply()">✕</button>
     </div>
 
     <div class="tools" role="toolbar" aria-label="Форматирование">
@@ -451,6 +468,7 @@ function onKeydown(event: KeyboardEvent): void {
         type="button"
         class="tool attach"
         :title="mayAttach ? 'Прикрепить файлы' : 'В этой группе файлы отправляют только админы'"
+        aria-label="Прикрепить файлы"
         :disabled="!!store.editing || !mayAttach"
         @click="fileInput?.click()"
       >
@@ -460,7 +478,7 @@ function onKeydown(event: KeyboardEvent): void {
       <button
         type="button"
         class="tool"
-        title="Ссылка (Ctrl+K)"
+        title="Ссылка (Ctrl+K)" aria-label="Ссылка (Ctrl+K)"
         :disabled="!hasSelection"
         @mousedown.prevent
         @click="startLink"
@@ -515,7 +533,7 @@ function onKeydown(event: KeyboardEvent): void {
     </button>
 
     <p v-if="entities.length > 0" class="preview">
-      <FormattedText :text="text" :entities="entities" :me-id="auth.user?.userId ?? null" />
+      <FormattedText :text="text" :entities="entities" :me-id="session.user?.userId ?? null" />
     </p>
   </form>
 </template>

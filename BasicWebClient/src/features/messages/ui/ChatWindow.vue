@@ -5,24 +5,25 @@ import { chatInitial, chatTitle } from '@/entities/chat/lib'
 import { useChatDetailsStore } from '@/entities/chat/model/details.store'
 import AvatarCircle from '@/entities/media/ui/AvatarCircle.vue'
 import { usePresenceStore } from '@/entities/user/presence.store'
+import type { ChatListItem } from '@/entities/chat/types'
 import { plural } from '@/shared/lib/plural'
-import { useChatListStore } from '@/features/chat-list/model/chat-list.store'
 import { useMessagesStore } from '../model/messages.store'
 import ChatSearch from './ChatSearch.vue'
 import MessageList from './MessageList.vue'
 import MessageComposer from './MessageComposer.vue'
 import SelectionBar from './SelectionBar.vue'
 
-const emit = defineEmits<{ info: [] }>()
+/** The selected chat; the page opens its messages (the chat list knows nothing about them). */
+const props = defineProps<{ chat: ChatListItem | null }>()
+const emit = defineEmits<{ info: []; back: [] }>()
 
-const chatList = useChatListStore()
 const messages = useMessagesStore()
 const presence = usePresenceStore()
 const details = useChatDetailsStore()
 
 // Typing takes precedence over the online status.
 const subtitle = computed(() => {
-  const chat = chatList.selectedChat
+  const chat = props.chat
   if (!chat) return ''
 
   if (presence.isSomeoneTyping(chat.chatId)) return 'печатает…'
@@ -35,45 +36,37 @@ const subtitle = computed(() => {
 })
 
 const isTyping = computed(
-  () => chatList.selectedChat !== null && presence.isSomeoneTyping(chatList.selectedChat.chatId),
+  () => props.chat !== null && presence.isSomeoneTyping(props.chat.chatId),
 )
 
 const searching = ref(false)
 
-// One-way link: the chat list knows nothing about messages, which follow the selected chatId.
 watch(
-  () => chatList.selectedChatId,
-  (chatId) => {
-    searching.value = false
-    if (chatId) {
-      void messages.openChat(chatId)
-    } else {
-      messages.reset()
-    }
-  },
-  { immediate: true },
+  () => props.chat?.chatId,
+  () => (searching.value = false),
 )
 </script>
 
 <template>
-  <section v-if="chatList.selectedChat" class="window">
+  <section v-if="chat" class="window">
     <header class="head">
-      <button type="button" class="back" title="К списку чатов" @click="chatList.deselect()">
+      <button type="button" class="back" title="К списку чатов" aria-label="К списку чатов" @click="emit('back')">
         ←
       </button>
       <button type="button" class="about" title="О чате" @click="emit('info')">
-        <AvatarCircle :avatar-id="chatList.selectedChat.avatarId" :initial="chatInitial(chatList.selectedChat)" :size="32" />
-        <span class="title">{{ chatTitle(chatList.selectedChat) }}</span>
+        <AvatarCircle :avatar-id="chat.avatarId" :initial="chatInitial(chat)" :size="32" />
+        <span class="title">{{ chatTitle(chat) }}</span>
         <span :class="['subtitle', { typing: isTyping }]">{{ subtitle }}</span>
       </button>
-      <button type="button" class="search-toggle" title="Поиск в чате" @click="searching = !searching">🔍</button>
+      <button type="button" class="search-toggle" title="Поиск в чате" aria-label="Поиск в чате" @click="searching = !searching">🔍</button>
     </header>
 
     <ChatSearch v-if="searching" @close="searching = false" />
 
     <MessageList />
     <SelectionBar v-if="messages.selected.size > 0" />
-    <MessageComposer v-else />
+    <!-- Hidden, not unmounted: an edit and uploads in progress outlive the selection. -->
+    <MessageComposer v-show="messages.selected.size === 0" />
   </section>
 
   <section v-else class="empty">

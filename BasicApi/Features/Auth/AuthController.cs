@@ -81,9 +81,9 @@ public class AuthController(AuthService auth) : ControllerBase
     /// Log out of the current session.
     /// </summary>
     /// <remarks>
-    /// Send the session's `refreshToken` in the body — that is what actually gets revoked.
-    /// Without it the server has nothing to invalidate and the session stays alive until
-    /// it expires.
+    /// Ends the sign-in of the access token the request carries, and the session of the
+    /// `refreshToken` in the body, if one is sent. A refresh token that was rotated meanwhile
+    /// does not matter: the sign-in still ends.
     ///
     /// Idempotent: an unknown or already-revoked token also returns 200, so the endpoint
     /// cannot be used to find out which tokens exist. The access token keeps working until
@@ -95,7 +95,7 @@ public class AuthController(AuthService auth) : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Logout([FromBody] LogoutRequestDto? request)
     {
-        await auth.LogoutAsync(request?.RefreshToken, HttpContext.RequestAborted);
+        await auth.LogoutAsync(request?.RefreshToken, User.GetSessionFamilyId(), HttpContext.RequestAborted);
         return Ok();
     }
 

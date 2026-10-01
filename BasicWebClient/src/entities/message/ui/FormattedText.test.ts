@@ -17,6 +17,12 @@ describe('FormattedText', () => {
     expect(wrapper.html()).toContain('<strong>bold</strong> <code>code</code>')
   })
 
+  it('an entity type named like a built-in object member is plain text', () => {
+    // The type was looked up on a plain object: "constructor" found Object and rendered it.
+    const wrapper = mount(FormattedText, { props: { text: 'odd', entities: [{ type: 'constructor', offset: 0, length: 3 }] } })
+    expect(wrapper.html()).toContain('<span>odd</span>')
+  })
+
   it('markup in the text stays text', () => {
     const wrapper = mount(FormattedText, { props: { text: '<img src=x onerror=alert(1)>' } })
     expect(wrapper.find('img').exists()).toBe(false)
@@ -55,6 +61,19 @@ describe('FormattedText', () => {
     })
     expect(wrapper.findAll('.mention')).toHaveLength(2)
     expect(wrapper.findAll('.mention.me')).toHaveLength(1)
+  })
+
+  it('a spoiler can be revealed from the keyboard too', async () => {
+    const wrapper = mount(FormattedText, {
+      props: { text: 'secret', entities: [{ type: 'spoiler', offset: 0, length: 6 }] },
+    })
+    const spoiler = wrapper.get('.spoiler')
+    expect(spoiler.attributes('tabindex')).toBe('0')
+    expect(spoiler.attributes('role')).toBe('button')
+
+    await spoiler.trigger('keydown', { key: 'Enter' })
+
+    expect(spoiler.classes()).toContain('revealed')
   })
 
   it('a spoiler is revealed by a click', async () => {

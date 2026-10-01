@@ -60,6 +60,19 @@ public class AuthServiceLogoutValidateTests
     }
 
     [Fact]
+    public async Task LogoutAsync_EndsTheCallersSignIn_EvenWhenTheTokenRevokesNothing()
+    {
+        var family = Guid.NewGuid();
+        _sessionServiceMock
+            .Setup(s => s.RevokeAsync(It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid?)null);
+
+        await _service.LogoutAsync("rotated-meanwhile", family);
+
+        _sessionServiceMock.Verify(s => s.RevokeFamilyAsync(family, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task LogoutAsync_UnknownToken_ReturnsOk()
     {
         // Logout is idempotent and must not work as an oracle for

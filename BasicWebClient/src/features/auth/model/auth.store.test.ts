@@ -42,6 +42,24 @@ describe('refresh across tabs', () => {
     expect(localStorage.getItem(KEY)).toBe('token-3')
   })
 
+  it('another user signed in from another tab: this tab ends its session instead of taking theirs', async () => {
+    // The bug: a tab that slept through a logout and someone else's login refreshed with the new
+    // token and went on showing the first user's chats under the second user's name.
+    localStorage.setItem(KEY, 'token-1')
+    const auth = useAuthStore()
+    vi.mocked(authApi.refresh).mockResolvedValueOnce(answer('token-2'))
+    await auth.restoreSession()
+    localStorage.setItem(KEY, 'token-of-bob')
+    vi.mocked(authApi.refresh).mockResolvedValueOnce({ ...answer('token-bob-2'), userId: 'u-bob', username: 'bob' })
+
+    expect(await auth.refreshTokens()).toBe(false)
+
+    expect(auth.isAuthenticated).toBe(false)
+    expect(auth.sessionLost).toBe(true)
+    // The other tab's sign-in is left alone.
+    expect(localStorage.getItem(KEY)).toBe('token-bob-2')
+  })
+
   it('a logout in another tab ends the session here too', async () => {
     localStorage.setItem(KEY, 'token-1')
     const auth = useAuthStore()
@@ -63,6 +81,17 @@ describe('a session that ends by itself', () => {
 
     expect(auth.isAuthenticated).toBe(false)
     expect(auth.sessionLost).toBe(true)
+  })
+
+  it('a logout names the refresh token another tab rotated, not the one this tab started with', async () => {
+    vi.mocked(authApi.logout).mockResolvedValue(undefined)
+    localStorage.setItem(KEY, 'token-1')
+    const auth = useAuthStore()
+    localStorage.setItem(KEY, 'token-2')
+
+    await auth.logout()
+
+    expect(authApi.logout).toHaveBeenCalledWith('token-2')
   })
 
   it('an own logout is not a lost session', async () => {

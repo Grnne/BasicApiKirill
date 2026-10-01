@@ -74,7 +74,20 @@ export function formatText(text: string, entities: readonly MessageEntityDto[]):
 }
 
 const URL_PATTERN = /\bhttps?:\/\/[^\s<>"']+/g
-const TRAILING_PUNCTUATION = /[.,!?;:)\]}'"»]+$/
+const TRAILING_PUNCTUATION = `.,!?;:)]}'"»`
+
+const count = (text: string, char: string) => text.split(char).length - 1
+
+/** Punctuation after a URL is the sentence's, but a ")" that closes a "(" in it is the URL's own. */
+function trimUrl(url: string): string {
+  let end = url.length
+  while (end > 0 && TRAILING_PUNCTUATION.includes(url[end - 1]!)) {
+    const head = url.slice(0, end)
+    if (url[end - 1] === ')' && count(head, '(') >= count(head, ')')) break
+    end -= 1
+  }
+  return url.slice(0, end)
+}
 
 /** Bare http(s) URLs in plain text become links, except inside code and existing links. */
 function autolink(nodes: FormattedNode[]): FormattedNode[] {
@@ -87,7 +100,7 @@ function autolink(nodes: FormattedNode[]): FormattedNode[] {
     const parts: FormattedNode[] = []
     let pos = 0
     for (const match of node.text.matchAll(URL_PATTERN)) {
-      const url = match[0].replace(TRAILING_PUNCTUATION, '')
+      const url = trimUrl(match[0])
       const index = match.index
       if (index > pos) parts.push({ kind: 'text', text: node.text.slice(pos, index) })
       parts.push({

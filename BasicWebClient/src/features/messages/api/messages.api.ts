@@ -51,12 +51,12 @@ export function removeReaction(chatId: string, messageId: string): Promise<void>
 }
 
 /** 200 with the draft, or 204 when the text is empty without a reply (the draft is removed). */
-export async function saveDraft(chatId: string, body: SaveDraftDto): Promise<DraftDto | null> {
-  return (await http.put<DraftDto | undefined>(`/api/chats/${chatId}/draft`, body)) ?? null
+export async function saveDraft(chatId: string, body: SaveDraftDto, keepalive = false): Promise<DraftDto | null> {
+  return (await http.put<DraftDto | undefined>(`/api/chats/${chatId}/draft`, body, { keepalive })) ?? null
 }
 
-export function removeDraft(chatId: string): Promise<void> {
-  return http.delete<void>(`/api/chats/${chatId}/draft`)
+export function removeDraft(chatId: string, keepalive = false): Promise<void> {
+  return http.delete<void>(`/api/chats/${chatId}/draft`, { keepalive })
 }
 
 /** Words match by their start and in other forms (Russian too); at least 2 characters. */

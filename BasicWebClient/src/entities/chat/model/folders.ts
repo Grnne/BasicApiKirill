@@ -4,11 +4,15 @@
 import type { FolderDto } from '@/shared/api/schema'
 import type { ChatListItem } from '../types'
 
+/** Of a kind the folder takes all of (all private chats, all groups). */
+export function matchesFolderTypes(folder: FolderDto, chat: ChatListItem): boolean {
+  return (folder.includePrivate && chat.type === 'private') || (folder.includeGroups && chat.type === 'group')
+}
+
 /** In the folder: listed explicitly or pinned in it, or matching its types and not archived. */
 function inFolder(folder: FolderDto, chat: ChatListItem): boolean {
   if (folder.chatIds.includes(chat.chatId) || folder.pinnedChatIds.includes(chat.chatId)) return true
-  if (chat.archived) return false
-  return (folder.includePrivate && chat.type === 'private') || (folder.includeGroups && chat.type === 'group')
+  return !chat.archived && matchesFolderTypes(folder, chat)
 }
 
 /** Pinned in the folder first, in its order, then the most recently active. */

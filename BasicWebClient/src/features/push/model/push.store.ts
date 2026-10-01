@@ -35,7 +35,8 @@ export const usePushStore = defineStore('push', () => {
       state.value = 'denied'
       return
     }
-    const subscription = await browser.currentSubscription()
+    // Rejects where the site may not keep data; the page calls refresh without waiting.
+    const subscription = await browser.currentSubscription().catch(() => null)
     state.value = subscription && browser.permission() === 'granted' ? 'on' : 'off'
   }
 

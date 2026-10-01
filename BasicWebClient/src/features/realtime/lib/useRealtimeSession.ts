@@ -1,21 +1,20 @@
 /* Ties the hub connection and sync to the session. Not in the auth store: the hub already depends
-   on auth for the token, so that would be an import cycle. */
+   on auth for the token, so that would be an import cycle. The app passes whether someone is
+   signed in: a feature does not read another feature's model. */
 
 import { watch } from 'vue'
 
-import { useAuthStore } from '@/features/auth/model/auth.store'
 import { useHubStore } from '@/shared/api/hub.store'
 import { useSyncStore } from '../model/sync.store'
 
-export function useRealtimeSession(): void {
-  const auth = useAuthStore()
+export function useRealtimeSession(isAuthenticated: () => boolean): void {
   const hub = useHubStore()
   const sync = useSyncStore()
 
   watch(
-    () => auth.isAuthenticated,
-    (isAuthenticated) => {
-      if (isAuthenticated) {
+    isAuthenticated,
+    (signedIn) => {
+      if (signedIn) {
         sync.start()
         void hub.start()
       } else {

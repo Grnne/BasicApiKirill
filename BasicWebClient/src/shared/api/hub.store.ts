@@ -75,6 +75,8 @@ export const useHubStore = defineStore('hub', () => {
 
   /** true between start() and stop(): the connection should be up. */
   let wanted = false
+  /** Moves on stop: a connection started before it (by the previous sign-in) is not kept. */
+  let generation = 0
   const retry = new RetryLoop(connect)
 
   function retryNow(): void {
@@ -101,6 +103,7 @@ export const useHubStore = defineStore('hub', () => {
     if (connection.value || status.value === 'connecting') return true
 
     status.value = 'connecting'
+    const mine = generation
 
     const hub = new HubConnectionBuilder()
       .withUrl(HUB_URL, {
@@ -141,7 +144,7 @@ export const useHubStore = defineStore('hub', () => {
 
     try {
       await hub.start()
-      if (!wanted) {
+      if (!wanted || mine !== generation) {
         await hub.stop()
         return true
       }
@@ -150,6 +153,7 @@ export const useHubStore = defineStore('hub', () => {
       if (joinedChatId.value) await invokeSafe('JoinChat', joinedChatId.value)
       return true
     } catch (error) {
+      if (mine !== generation) return true
       status.value = 'disconnected'
       console.warn('Hub connection failed:', error)
       return false
@@ -158,6 +162,7 @@ export const useHubStore = defineStore('hub', () => {
 
   async function stop(): Promise<void> {
     wanted = false
+    generation += 1
     retry.cancel()
     window.removeEventListener('online', retryNow)
     document.removeEventListener('visibilitychange', onBrowserBack)

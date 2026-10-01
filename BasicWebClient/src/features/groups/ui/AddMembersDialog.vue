@@ -5,11 +5,13 @@ import * as chatApi from '@/entities/chat/api'
 import { useChatDetailsStore } from '@/entities/chat/model/details.store'
 import { useConfigStore } from '@/entities/config/config.store'
 import type { UserSearchResult } from '@/entities/user/types'
-import { describeError } from '@/shared/api/problem'
+import { useRestoreFocus } from '@/shared/ui/useRestoreFocus'
+import { describeAddError } from '../lib/refusal'
 import UserPicker from './UserPicker.vue'
 
 const props = defineProps<{ chatId: string; meId: string }>()
 const emit = defineEmits<{ done: [added: number]; cancel: [] }>()
+useRestoreFocus()
 
 const config = useConfigStore()
 const details = useChatDetailsStore()
@@ -32,7 +34,7 @@ async function add(): Promise<void> {
     details.apply('MemberAdded', { chatId: props.chatId, addedBy: props.meId, members: added }, props.meId)
     emit('done', added.length)
   } catch (e) {
-    error.value = describeError(e)
+    error.value = describeAddError(e, picked.value)
   } finally {
     busy.value = false
   }

@@ -77,7 +77,7 @@ onMounted(() => input.value?.focus())
         @keydown.esc="emit('close')"
       />
       <input v-model="date" class="date" type="date" title="Перейти к дате" @change="goToDate" />
-      <button type="button" class="close" title="Закрыть" @click="emit('close')">✕</button>
+      <button type="button" class="close" title="Закрыть" aria-label="Закрыть" @click="emit('close')">✕</button>
     </div>
 
     <p v-if="error" class="note error">{{ error }}</p>

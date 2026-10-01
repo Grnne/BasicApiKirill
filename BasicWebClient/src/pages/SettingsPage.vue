@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import DevicesSection from '@/features/devices/ui/DevicesSection.vue'
@@ -14,6 +15,8 @@ import { useLogout } from './lib/useLogout'
 const router = useRouter()
 const notices = useNoticesStore()
 const { logout, logoutEverywhere } = useLogout()
+/** A password change signs the other devices out: the list is loaded again. */
+const devicesVersion = ref(0)
 
 async function onSignOutEverywhere(): Promise<void> {
   try {
@@ -33,11 +36,11 @@ async function onSignOutEverywhere(): Promise<void> {
 
     <main class="content">
       <ProfileSection />
-      <PasswordSection />
+      <PasswordSection @changed="devicesVersion += 1" />
       <PushSection />
       <PrivacySection />
       <BlockedSection />
-      <DevicesSection @sign-out-here="logout" @sign-out-everywhere="onSignOutEverywhere" />
+      <DevicesSection :key="devicesVersion" @sign-out-here="logout" @sign-out-everywhere="onSignOutEverywhere" />
     </main>
   </div>
 </template>

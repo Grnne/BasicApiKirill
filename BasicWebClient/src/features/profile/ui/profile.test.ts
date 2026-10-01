@@ -78,6 +78,8 @@ describe('password', () => {
     expect(profileApi.changePassword).toHaveBeenCalledWith('old-pass', 'new-pass')
     expect(wrapper.findAll('input[type=password]').every((i) => (i.element as HTMLInputElement).value === '')).toBe(true)
     expect(useNoticesStore().items[0]!.text).toContain('других устройствах')
+    // The server signed the other devices out: the list on the page must not still show them.
+    expect(wrapper.emitted('changed')).toHaveLength(1)
 
     vi.mocked(profileApi.changePassword).mockRejectedValueOnce(
       new ApiError(400, { title: 'Bad', status: 400, errorCode: 'WRONG_PASSWORD' } as never),

@@ -2,7 +2,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useChatsStore } from '@/entities/chat/model/chats.store'
-import { useAuthStore } from '@/features/auth/model/auth.store'
+import { useSessionStore } from '@/entities/user/model/session.store'
 import { ME, chat, message } from '@/testing/fixtures'
 import * as messagesApi from '../api/messages.api'
 import * as messageEntityApi from '@/entities/message/api'
@@ -26,6 +26,7 @@ vi.mock('@/entities/message/api', () => ({
   getMessagesPage: vi.fn(),
   getMessageContext: vi.fn(),
   getMessagesAfter: vi.fn(),
+  getMessagesAt: vi.fn(),
   PAGE_SIZE: 30,
 }))
 vi.mock('@/entities/chat/api', () => ({ getChatItem: vi.fn(() => new Promise(() => {})) }))
@@ -33,8 +34,8 @@ vi.mock('@/entities/chat/api', () => ({ getChatItem: vi.fn(() => new Promise(() 
 const m1 = message({ seq: 1 })
 
 async function openChatWithUnread() {
-  const auth = useAuthStore()
-  auth.user = { userId: ME, username: 'me', email: 'me@test', displayName: 'Me', avatarId: null }
+  const session = useSessionStore()
+  session.user = { userId: ME, username: 'me', email: 'me@test', displayName: 'Me', avatarId: null }
   const chats = useChatsStore()
   chats.replaceAll([chat({ lastMessage: m1, lastReadSeq: 0, unreadCount: 1 })], [])
   // A copy per test: the reducers update loaded messages in place.
@@ -55,8 +56,8 @@ afterEach(() => vi.useRealTimers())
 describe('a failed load of the open chat', () => {
   it('is retried by itself until it loads', async () => {
     // Seen with a database restart: the chat said "could not load" until another chat was opened.
-    const auth = useAuthStore()
-    auth.user = { userId: ME, username: 'me', email: 'me@test', displayName: 'Me', avatarId: null }
+    const session = useSessionStore()
+    session.user = { userId: ME, username: 'me', email: 'me@test', displayName: 'Me', avatarId: null }
     useChatsStore().replaceAll([chat({ lastMessage: m1 })], [])
     vi.mocked(messageEntityApi.getMessagesPage)
       .mockRejectedValueOnce(new ApiError(503, { errorCode: 'SERVICE_UNAVAILABLE' }))
@@ -74,8 +75,8 @@ describe('a failed load of the open chat', () => {
   })
 
   it('stops retrying once another chat is open', async () => {
-    const auth = useAuthStore()
-    auth.user = { userId: ME, username: 'me', email: 'me@test', displayName: 'Me', avatarId: null }
+    const session = useSessionStore()
+    session.user = { userId: ME, username: 'me', email: 'me@test', displayName: 'Me', avatarId: null }
     useChatsStore().replaceAll([chat({ lastMessage: m1 }), chat({ chatId: 'chat-2' })], [])
     vi.mocked(messageEntityApi.getMessagesPage).mockReset()
     vi.mocked(messageEntityApi.getMessagesPage).mockRejectedValue(new ApiError(500, { errorCode: 'INTERNAL_ERROR' }))
@@ -91,11 +92,45 @@ describe('a failed load of the open chat', () => {
 })
 
 describe('reading the open chat', () => {
-  it('opening the chat reads it', async () => {
-    const { chats } = await openChatWithUnread()
+  it('loading the chat does not read it: the list does, once someone sees it', async () => {
+    // The bug: every load marked the chat read — in a hidden tab, after a reconnect, scrolled up.
+    const { store, chats } = await openChatWithUnread()
+    expect(messagesApi.markRead).not.toHaveBeenCalled()
+    expect(store.latestVersion).toBe(1)
+
+    store.seen()
+    await vi.advanceTimersByTimeAsync(1_000)
 
     expect(messagesApi.markRead).toHaveBeenCalledWith('chat-1', m1.id)
     expect(chats.get('chat-1')!.unreadCount).toBe(0)
+  })
+
+  it('seen, then another chat opened at once: the first chat is still read', async () => {
+    // The bug: the pause before /read took whichever chat was open when it ended — a chat looked
+    // at and left within half a second stayed unread (found by the UI e2e).
+    const { store, chats } = await openChatWithUnread()
+    chats.put(chat({ chatId: 'chat-2' }))
+    vi.mocked(messageEntityApi.getMessagesPage).mockResolvedValue({ items: [], nextCursor: null, hasMore: false })
+
+    store.seen()
+    await store.openChat('chat-2')
+    await vi.advanceTimersByTimeAsync(1_000)
+
+    expect(messagesApi.markRead).toHaveBeenCalledWith('chat-1', m1.id)
+  })
+
+  it('a read mark that did not reach the server is sent again', async () => {
+    // The bug: the counters dropped before the request, so after a failure nothing looked unread
+    // and the mark was never sent — other devices and the sender kept "unread".
+    const { store } = await openChatWithUnread()
+    vi.mocked(messagesApi.markRead).mockRejectedValueOnce(new Error('offline'))
+
+    store.seen()
+    await vi.advanceTimersByTimeAsync(1_000)
+    await vi.advanceTimersByTimeAsync(5_000)
+
+    expect(messagesApi.markRead).toHaveBeenCalledTimes(2)
+    expect(messagesApi.markRead).toHaveBeenLastCalledWith('chat-1', m1.id)
   })
 
   it('a message that arrives while the chat is on screen is read too', async () => {
@@ -115,6 +150,8 @@ describe('reading the open chat', () => {
 
   it('nothing new: no request', async () => {
     const { store } = await openChatWithUnread()
+    store.seen()
+    await vi.advanceTimersByTimeAsync(1_000)
     vi.mocked(messagesApi.markRead).mockClear()
 
     store.seen()
@@ -172,6 +209,19 @@ describe('reply and forward', () => {
     )
   })
 
+  it('forwarding again after a failure that may have gone through makes no copies', async () => {
+    // The bug: every attempt had new clientMessageIds, so the server could not tell a repeat.
+    const { store } = await openChatWithUnread()
+    vi.mocked(messagesApi.forwardMessages).mockRejectedValueOnce(new Error('offline'))
+    vi.mocked(messagesApi.forwardMessages).mockResolvedValueOnce({ items: [] })
+
+    await store.forward('chat-2', [m1.id])
+    await store.forward('chat-2', [m1.id])
+
+    const [first, second] = vi.mocked(messagesApi.forwardMessages).mock.calls
+    expect(second![1].clientMessageIds).toEqual(first![1].clientMessageIds)
+  })
+
   it('forwards the selected messages in the chat order with a clientMessageId each', async () => {
     const { store } = await openChatWithUnread()
     const m2 = message({ seq: 2 })
@@ -221,6 +271,25 @@ describe('reactions', () => {
 })
 
 describe('jumping in the history', () => {
+  it('a message sent while the history is open in the middle takes the chat to its newest part', async () => {
+    // The bug: the server's answer belongs past the gap, so the sent message vanished from the
+    // list until the user scrolled all the way down.
+    const { store } = await openChatWithUnread()
+    vi.mocked(messageEntityApi.getMessageContext).mockResolvedValue({
+      items: [message({ seq: 500, id: 'm500' })], nextCursor: null, hasMore: false, hasNewer: true,
+    } as never)
+    await store.jumpTo('m500')
+    expect(store.hasNewer).toBe(true)
+    vi.mocked(messageEntityApi.getMessagesPage).mockClear()
+    vi.mocked(messagesApi.sendMessage).mockImplementation(() => new Promise(() => {}))
+
+    store.send('hello')
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(messageEntityApi.getMessagesPage).toHaveBeenCalledWith('chat-1', null, expect.anything())
+    expect(store.hasNewer).toBe(false)
+  })
+
   it('a message not loaded opens the history around it, and newer pages follow', async () => {
     const { store } = await openChatWithUnread()
     const far = message({ seq: 500 })
@@ -244,11 +313,36 @@ describe('jumping in the history', () => {
   })
 })
 
+describe('jumping to a date', () => {
+  it('a date before the first message keeps the chat as it was', async () => {
+    // The bug: the empty answer replaced the history; the chat stayed empty, without "↓".
+    const { store } = await openChatWithUnread()
+    vi.mocked(messageEntityApi.getMessagesAt).mockResolvedValue({ items: [], nextCursor: null, hasMore: false })
+
+    await store.jumpToDate(new Date('2020-01-01T00:00:00Z'))
+
+    expect(store.messages.map((m) => m.id)).toEqual([m1.id])
+    expect(useNoticesStore().items.map((n) => n.text)).toContain('В этот день сообщений ещё не было')
+  })
+})
+
 describe('opening a chat at a found message', () => {
+  it('an error of the chat before does not show in the next one', async () => {
+    const { store } = await openChatWithUnread()
+    store.error = 'Не удалось загрузить сообщения'
+    vi.mocked(messageEntityApi.getMessageContext).mockResolvedValue({ items: [message({ chatId: 'chat-2', seq: 5 })], hasOlder: false, hasNewer: false } as never)
+    useChatsStore().put(chat({ chatId: 'chat-2' }))
+
+    store.requestJump('chat-2', 'm-x')
+    await store.openChat('chat-2')
+
+    expect(store.error).toBe('')
+  })
+
   it('a requested jump opens the chat around the message instead of its newest page', async () => {
     setActivePinia(createPinia())
-    const auth = useAuthStore()
-    auth.user = { userId: ME, username: 'me', email: 'me@test', displayName: 'Me', avatarId: null }
+    const session = useSessionStore()
+    session.user = { userId: ME, username: 'me', email: 'me@test', displayName: 'Me', avatarId: null }
     useChatsStore().replaceAll([chat({ chatId: 'chat-2' })], [])
     const found = message({ chatId: 'chat-2', seq: 40 })
     vi.mocked(messageEntityApi.getMessagesPage).mockClear()

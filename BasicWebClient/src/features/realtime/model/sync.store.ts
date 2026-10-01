@@ -8,7 +8,7 @@ import { useMediaLinksStore } from '@/entities/media/model/links.store'
 import { useHistoryStore } from '@/entities/message/model/history.store'
 import { useAccountStore } from '@/entities/user/model/account.store'
 import { usePresenceStore } from '@/entities/user/presence.store'
-import { useAuthStore } from '@/features/auth/model/auth.store'
+import { useSessionStore } from '@/entities/user/model/session.store'
 import { useHubStore } from '@/shared/api/hub.store'
 import { JOURNALED_EVENT_NAMES, type JournaledEventName, type JournaledEvents } from '@/shared/api/hub.types'
 import type { SyncStateDto } from '@/shared/api/schema'
@@ -17,7 +17,7 @@ import { SyncEngine } from './sync-engine'
 
 /** Feeds the entity stores from the snapshot, live hub events and the journal. */
 export const useSyncStore = defineStore('sync', () => {
-  const auth = useAuthStore()
+  const session = useSessionStore()
   const hub = useHubStore()
   const chats = useChatsStore()
   const details = useChatDetailsStore()
@@ -27,7 +27,7 @@ export const useSyncStore = defineStore('sync', () => {
   const config = useConfigStore()
   const mediaLinks = useMediaLinksStore()
 
-  const ctx = () => ({ meId: auth.user?.userId ?? '' })
+  const ctx = () => ({ meId: session.user?.userId ?? '' })
 
   function snapshot(state: SyncStateDto): void {
     chats.replaceAll(state.chats, state.folders)
@@ -67,11 +67,18 @@ export const useSyncStore = defineStore('sync', () => {
     unsubscribe.push(
       hub.on('ChatListUpdated', (_chatId, message) => {
         if (!engine.hasSnapshot) return
-        chats.preview(message, ctx())
+        chats.preview(message)
         engine.scheduleCatchUp()
       }),
     )
     presence.subscribeToHub()
+    // Companions of chats that appear after the snapshot (a new chat, one opened from search).
+    unsubscribe.push(
+      watch(
+        () => chats.list.map((c) => c.companionId).filter((id): id is string => id !== null),
+        (ids) => void presence.track(ids),
+      ),
+    )
 
     void config.load()
     // The snapshot does not wait for the hub; every (re)connection may have missed events.

@@ -20,6 +20,51 @@ beforeEach(() => vi.useFakeTimers())
 afterEach(() => vi.useRealTimers())
 
 describe('DraftSaver', () => {
+  it('saved as the tab is hidden, the request is made to outlive the page', async () => {
+    // The bug: text typed just before closing the tab was lost with the page.
+    const { api, saver } = setup()
+    saver.schedule('chat-1', content('last words'))
+
+    saver.flushAll(true)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(api.save).toHaveBeenCalledWith('chat-1', content('last words'), true)
+  })
+
+  it('a save still on its way when the message is sent does not bring the text back', async () => {
+    // The bug: the answer to the PUT came after sending and put "hello" back as the draft, and
+    // the composer filled itself with the text just sent.
+    const { api, saved, saver } = setup()
+    let answer!: (d: DraftDto) => void
+    api.save.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)))
+    saver.schedule('chat-1', content('hello'))
+    await vi.advanceTimersByTimeAsync(1_500)
+    expect(saver.isDirty('chat-1')).toBe(true)
+
+    saver.cancel('chat-1')
+    answer(dto('hello'))
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(saved).not.toHaveBeenCalledWith('chat-1', dto('hello'))
+    // The server may have stored it after the send removed the draft: removed once more.
+    expect(api.remove).toHaveBeenCalledWith('chat-1')
+  })
+
+  it('of two saves, the answer of the older one does not win', async () => {
+    const { api, saved, saver } = setup()
+    let first!: (d: DraftDto) => void
+    api.save.mockImplementationOnce(() => new Promise((resolve) => (first = resolve)))
+    saver.schedule('chat-1', content('a'))
+    await vi.advanceTimersByTimeAsync(1_500)
+    saver.schedule('chat-1', content('ab'))
+    await vi.advanceTimersByTimeAsync(1_500)
+
+    first(dto('a'))
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(saved).toHaveBeenLastCalledWith('chat-1', dto('ab'))
+  })
+
   it('saves once after typing stops', async () => {
     const { api, saved, saver } = setup()
 
@@ -30,7 +75,7 @@ describe('DraftSaver', () => {
     await vi.advanceTimersByTimeAsync(1_500)
 
     expect(api.save).toHaveBeenCalledTimes(1)
-    expect(api.save).toHaveBeenCalledWith('chat-1', content('hi'))
+    expect(api.save).toHaveBeenCalledWith('chat-1', content('hi'), false)
     expect(saved).toHaveBeenCalledWith('chat-1', dto('hi'))
     expect(saver.isDirty('chat-1')).toBe(false)
   })
@@ -40,7 +85,7 @@ describe('DraftSaver', () => {
 
     saver.schedule('chat-1', content('  '))
     await saver.flush('chat-1')
-    expect(api.remove).toHaveBeenCalledWith('chat-1')
+    expect(api.remove).toHaveBeenCalledWith('chat-1', false)
     expect(saved).toHaveBeenCalledWith('chat-1', null)
 
     saver.schedule('chat-1', content('', 'msg-1'))

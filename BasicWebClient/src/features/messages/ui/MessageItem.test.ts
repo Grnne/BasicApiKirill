@@ -58,3 +58,50 @@ describe('deleting another member\'s message in a group', () => {
     expect(wrapper.text()).toContain('только у вас')
   })
 })
+
+describe('the edit window', () => {
+  it('is counted when the menu opens, not when the message was first drawn', async () => {
+    // The bug: the time was taken once, and "Изменить" stayed after the 48 hours had passed.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-01T12:00:00Z'))
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    useChatsStore().replaceAll([chat()], [])
+    const wrapper = mount(MessageItem, {
+      props: { message: message({ senderId: ME, text: 'моё', createdAt: '2026-09-29T12:01:00Z' }), meId: ME },
+      global: { plugins: [pinia] },
+      attachTo: document.body,
+    })
+    await wrapper.get('button.more').trigger('click')
+    expect(wrapper.text()).toContain('Изменить')
+    await wrapper.get('button.more').trigger('click')
+
+    vi.setSystemTime(new Date('2026-10-01T12:02:00Z'))
+    await wrapper.get('button.more').trigger('click')
+
+    expect(wrapper.text()).not.toContain('Изменить')
+    vi.useRealTimers()
+  })
+})
+
+describe('the menu from the keyboard', () => {
+  it('opens with the first action focused; Escape closes it and returns to its button', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    useChatsStore().replaceAll([chat()], [])
+    const wrapper = mount(MessageItem, {
+      props: { message: message({ senderId: BOB, text: 'привет' }), meId: ME },
+      global: { plugins: [pinia] },
+      attachTo: document.body,
+    })
+
+    await wrapper.get('button.more').trigger('click')
+    await flushPromises()
+    expect(document.activeElement?.textContent).toBe('Ответить')
+
+    await wrapper.get('.menu').trigger('keydown', { key: 'Escape' })
+
+    expect(wrapper.find('.menu').exists()).toBe(false)
+    expect(document.activeElement).toBe(wrapper.get('button.more').element)
+  })
+})

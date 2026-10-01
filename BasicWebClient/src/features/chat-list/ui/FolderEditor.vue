@@ -4,12 +4,14 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { chatTitle } from '@/entities/chat/lib'
 import { useChatsStore } from '@/entities/chat/model/chats.store'
 import type { FolderDto } from '@/shared/api/schema'
+import { useRestoreFocus } from '@/shared/ui/useRestoreFocus'
 import { useChatListStore } from '../model/chat-list.store'
 
 const MAX_TITLE = 64
 
 const props = defineProps<{ folder: FolderDto | null }>()
 const emit = defineEmits<{ close: [] }>()
+useRestoreFocus()
 
 const store = useChatListStore()
 const chats = useChatsStore()
@@ -39,6 +41,8 @@ async function save(): Promise<void> {
     includeGroups: includeGroups.value,
     onlyUnread: onlyUnread.value,
     chatIds: [...chatIds.value],
+    // The server keeps every pinned chat in the folder: an unchecked one is unpinned too.
+    pinnedChatIds: (props.folder?.pinnedChatIds ?? []).filter((id) => chatIds.value.has(id)),
   })
   busy.value = false
   if (ok) emit('close')

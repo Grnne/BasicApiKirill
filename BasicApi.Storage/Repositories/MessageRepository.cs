@@ -27,6 +27,7 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
         r.sender_id AS ReplyToSenderId,
         ru.display_name AS ReplyToSenderName,
         r.text AS ReplyToText,
+        r.entities::text AS ReplyToEntitiesJson,
         COALESCE(r.deleted_at IS NOT NULL, false) AS ReplyToDeleted,
         m.forward_from_user_id AS ForwardFromUserId,
         fu.display_name AS ForwardFromUserName,

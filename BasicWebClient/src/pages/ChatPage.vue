@@ -14,6 +14,7 @@ import GroupEditDialog from '@/features/groups/ui/GroupEditDialog.vue'
 import MemberDialog from '@/features/groups/ui/MemberDialog.vue'
 import CreateGroupDialog from '@/features/groups/ui/CreateGroupDialog.vue'
 import { useNoticesStore } from '@/shared/ui/notices.store'
+import { useChatDialogs } from './lib/useChatDialogs'
 import { useLogout } from './lib/useLogout'
 import UserSearchPanel from '@/features/user-search/ui/UserSearchPanel.vue'
 import MessageSearchPanel from '@/features/message-search/ui/MessageSearchPanel.vue'
@@ -70,10 +71,17 @@ async function onMessageFound(chatId: string, messageId: string): Promise<void> 
 
 const notices = useNoticesStore()
 const creatingGroup = ref(false)
-const addingMembers = ref(false)
-const editingGroup = ref(false)
-const managedMemberId = ref<string | null>(null)
-const showingAudit = ref(false)
+const { addingMembers, editingGroup, managedMemberId, showingAudit } = useChatDialogs(() => chatList.selectedChatId)
+
+// One-way link: the chat list knows nothing about messages, which follow the selected chat.
+watch(
+  () => chatList.selectedChatId,
+  (chatId) => {
+    if (chatId) void messages.openChat(chatId)
+    else messages.reset()
+  },
+  { immediate: true },
+)
 
 function onMembersAdded(count: number): void {
   addingMembers.value = false
@@ -117,8 +125,8 @@ const { logout: onLogout } = useLogout()
         />
         <span class="user-name">{{ account.me?.displayName ?? auth.user?.displayName }}</span>
       </button>
-      <BaseButton variant="ghost" title="Новая группа" @click="creatingGroup = true">＋</BaseButton>
-      <BaseButton variant="ghost" title="Избранное" @click="chatList.openSaved()">★</BaseButton>
+      <BaseButton variant="ghost" title="Новая группа" aria-label="Новая группа" @click="creatingGroup = true">＋</BaseButton>
+      <BaseButton variant="ghost" title="Избранное" aria-label="Избранное" @click="chatList.openSaved()">★</BaseButton>
       <BaseButton variant="ghost" @click="onLogout">Выйти</BaseButton>
     </header>
 
@@ -142,7 +150,7 @@ const { logout: onLogout } = useLogout()
       </aside>
 
       <main class="main">
-        <ChatWindow @info="infoOpen = !infoOpen" />
+        <ChatWindow :chat="chatList.selectedChat" @back="chatList.deselect()" @info="infoOpen = !infoOpen" />
         <ChatInfoPanel
           v-if="infoOpen && chatList.selectedChat"
           class="info-panel"

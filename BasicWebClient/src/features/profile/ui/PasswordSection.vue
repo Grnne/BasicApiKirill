@@ -8,6 +8,9 @@ import * as profileApi from '../api/profile.api'
 /** The server's minimum. */
 const MIN_PASSWORD = 6
 
+/** The other devices were signed out: what lists them is out of date. */
+const emit = defineEmits<{ changed: [] }>()
+
 const notices = useNoticesStore()
 
 const current = ref('')
@@ -33,6 +36,7 @@ async function change(): Promise<void> {
     await profileApi.changePassword(current.value, next.value)
     current.value = next.value = repeat.value = ''
     notices.push('Пароль изменён. На других устройствах нужно войти заново', 'info')
+    emit('changed')
   } catch (e) {
     error.value = describeError(e)
   } finally {

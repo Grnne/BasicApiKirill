@@ -6,8 +6,10 @@ export type UploadKind = 'photo' | 'video' | 'file'
 const PHOTO_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp'])
 const VIDEO_TYPES = new Set(['video/mp4', 'video/quicktime', 'video/webm'])
 
+export const isPhotoType = (type: string) => PHOTO_TYPES.has(type)
+
 export function uploadKind(file: { type: string; size: number }, config: ClientConfigDto): UploadKind {
-  if (PHOTO_TYPES.has(file.type) && file.size <= config.media.maxPhotoSize) return 'photo'
+  if (isPhotoType(file.type) && file.size <= config.media.maxPhotoSize) return 'photo'
   if (VIDEO_TYPES.has(file.type)) return 'video'
   return 'file'
 }

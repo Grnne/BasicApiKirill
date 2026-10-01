@@ -2,6 +2,7 @@ using System.Data;
 using System.Data.Common;
 using BasicApi.Storage.Interfaces;
 using Dapper;
+using Npgsql;
 
 namespace BasicApi.Storage;
 
@@ -29,11 +30,17 @@ public interface IDbSession
     /// <summary>
     /// Runs work in a transaction: success — commit, exception — rollback.
     /// A nested call joins the already open transaction.
+    /// Postgres may end a transaction to break a deadlock (two requests writing to the journals of
+    /// the same people in different orders) or on a serialization failure: then the work is run
+    /// again from the start in a new transaction, so it must touch nothing but the database before
+    /// the commit (other effects go through <see cref="OnCommitted"/>). Work that cannot be
+    /// repeated passes <paramref name="retryOnConflict"/> false.
     /// </summary>
     Task<T> InTransactionAsync<T>(
         Func<CancellationToken, Task<T>> work,
         IsolationLevel isolation = IsolationLevel.ReadCommitted,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        bool retryOnConflict = true);
 }
 
 public sealed class DbSession(IDbConnectionFactory connectionFactory) : IDbSession, IAsyncDisposable
@@ -78,14 +85,46 @@ public sealed class DbSession(IDbConnectionFactory connectionFactory) : IDbSessi
             _onCommitted.Add(action);
     }
 
+    /// <summary>Attempts of a transaction Postgres ended on a conflict: rare, and each one is a request's worth.</summary>
+    private const int MaxAttempts = 3;
+
     public async Task<T> InTransactionAsync<T>(
         Func<CancellationToken, Task<T>> work,
         IsolationLevel isolation = IsolationLevel.ReadCommitted,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        bool retryOnConflict = true)
     {
         if (_transaction is not null)
             return await work(ct);
 
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await RunInTransactionAsync(work, isolation, ct);
+            }
+            catch (Exception e) when (retryOnConflict && attempt < MaxAttempts && IsConflict(e))
+            {
+                // A short pause, different each time: the other transaction finishes meanwhile.
+                await Task.Delay(Random.Shared.Next(5, 25) * attempt, ct);
+            }
+        }
+    }
+
+    /// <summary>Deadlock or serialization failure: nothing wrong with the work, only its timing.</summary>
+    private static bool IsConflict(Exception? e)
+    {
+        for (; e is not null; e = e.InnerException)
+        {
+            if (e is PostgresException { SqlState: PostgresErrorCodes.DeadlockDetected or PostgresErrorCodes.SerializationFailure })
+                return true;
+        }
+        return false;
+    }
+
+    private async Task<T> RunInTransactionAsync<T>(
+        Func<CancellationToken, Task<T>> work, IsolationLevel isolation, CancellationToken ct)
+    {
         _connection = (DbConnection)connectionFactory.CreateConnection();
         Action[]? committed = null;
         try

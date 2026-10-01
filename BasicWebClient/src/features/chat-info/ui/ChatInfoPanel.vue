@@ -178,7 +178,7 @@ function onScroll(event: Event): void {
   <aside class="info" aria-label="О чате">
     <header class="head">
       <span class="heading">О чате</span>
-      <button type="button" class="close" title="Закрыть" @click="emit('close')">✕</button>
+      <button type="button" class="close" title="Закрыть" aria-label="Закрыть" @click="emit('close')">✕</button>
     </header>
 
     <div class="card">
@@ -231,8 +231,8 @@ function onScroll(event: Event): void {
           </span>
           <span v-if="ROLE_LABELS[m.role]" class="role">{{ ROLE_LABELS[m.role] }}</span>
         </button>
-        <button v-if="mayManage(m)" type="button" class="remove" title="Роль и права" @click="emit('manageMember', m.userId)">⋯</button>
-        <button v-if="mayRemove(m)" type="button" class="remove" title="Исключить" @click="removing = m">✕</button>
+        <button v-if="mayManage(m)" type="button" class="remove" title="Роль и права" :aria-label="`Роль и права: ${m.displayName}`" @click="emit('manageMember', m.userId)">⋯</button>
+        <button v-if="mayRemove(m)" type="button" class="remove" title="Исключить" :aria-label="`Исключить: ${m.displayName}`" @click="removing = m">✕</button>
       </div>
       <button v-if="detail" type="button" class="action danger" @click="leaving = true">Покинуть группу</button>
     </div>
@@ -282,7 +282,7 @@ function onScroll(event: Event): void {
 
       <p v-if="gallery.error.value" class="note error">
         {{ gallery.error.value }}
-        <button type="button" class="jump" @click="gallery.reload()">Повторить</button>
+        <button type="button" class="jump" @click="gallery.retry()">Повторить</button>
       </p>
       <p v-else-if="gallery.busy.value" class="note">загрузка…</p>
       <p v-else-if="empty" class="note">{{ tab.empty }}</p>

@@ -301,11 +301,15 @@ test('long history loads page by page to its start, in order', async ({ open, us
   await expect(shown.last()).toHaveText('история 060')
 
   const viewport = a.locator('.window .viewport')
-  for (let i = 0; i < 10 && !(await a.getByText('начало переписки').isVisible()); i++) {
-    await viewport.evaluate((el) => el.scrollTo(0, 0))
-    await a.waitForTimeout(400)
-  }
-  await expect(a.getByText('начало переписки')).toBeVisible()
+  // Up until the start shows: each page loads on a scroll near the top. A list already at the top
+  // fires no scroll event on scrollTo(0, 0), so it is nudged down first.
+  await expect(async () => {
+    await viewport.evaluate((el) => {
+      el.scrollTo(0, 1)
+      el.scrollTo(0, 0)
+    })
+    await expect(a.getByText('начало переписки')).toBeVisible({ timeout: 1_000 })
+  }).toPass({ timeout: 60_000 })
   expect(await shown.allInnerTexts()).toEqual(texts)
 })
 

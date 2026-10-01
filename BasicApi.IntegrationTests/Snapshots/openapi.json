@@ -2515,7 +2515,7 @@
     },
     "/api/Auth/logout": {
       "post": {
-        "description": "Send the session's `refreshToken` in the body — that is what actually gets revoked.\nWithout it the server has nothing to invalidate and the session stays alive until\nit expires.\n            \nIdempotent: an unknown or already-revoked token also returns 200, so the endpoint\ncannot be used to find out which tokens exist. The access token keeps working until\nit expires (minutes) — discard it client-side.",
+        "description": "Ends the sign-in of the access token the request carries, and the session of the\n`refreshToken` in the body, if one is sent. A refresh token that was rotated meanwhile\ndoes not matter: the sign-in still ends.\n            \nIdempotent: an unknown or already-revoked token also returns 200, so the endpoint\ncannot be used to find out which tokens exist. The access token keeps working until\nit expires (minutes) — discard it client-side.",
         "requestBody": {
           "content": {
             "application/*+json": {

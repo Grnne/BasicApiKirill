@@ -26,6 +26,36 @@ public static partial class MessageEntities
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
+    /// <summary>What a spoiler shows as where the text has no formatting; its length tells nothing.</summary>
+    public const string SpoilerCover = "▒▒▒▒";
+
+    /// <summary>
+    /// The text with every spoiler covered, for the places that show it without formatting: the
+    /// chat list, a reply's quote, a notification. Overlapping spoilers are covered once.
+    /// </summary>
+    public static string HideSpoilers(string text, IReadOnlyList<MessageEntityDto>? entities)
+    {
+        if (entities is null || text.Length == 0 || !entities.Any(e => e.Type == "spoiler"))
+            return text;
+
+        var result = new System.Text.StringBuilder(text.Length);
+        var at = 0;
+        var covering = false;
+        foreach (var spoiler in entities.Where(e => e.Type == "spoiler").OrderBy(e => e.Offset))
+        {
+            var start = Math.Clamp(spoiler.Offset, 0, text.Length);
+            var end = Math.Clamp(spoiler.Offset + spoiler.Length, start, text.Length);
+            if (end <= start || end <= at)
+                continue;
+            // One that overlaps or touches the covered part extends it.
+            if (!covering || start > at)
+                result.Append(text, at, start - at).Append(SpoilerCover);
+            at = end;
+            covering = true;
+        }
+        return result.Append(text, at, text.Length - at).ToString();
+    }
+
     /// <summary>
     /// Checks entities against the text as the client sent it (<paramref name="raw"/>) and brings
     /// them to the stored, trimmed <paramref name="text"/>: offsets move left by the trimmed start,

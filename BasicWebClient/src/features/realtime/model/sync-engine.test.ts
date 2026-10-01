@@ -143,4 +143,46 @@ describe('SyncEngine', () => {
     await engine.sync()
     expect(api.getState).toHaveBeenCalledTimes(2)
   })
+
+  it('a failed first snapshot is tried again by itself', async () => {
+    // The bug: a 502 on the snapshot left "loading…" for good while the hub said "connected".
+    const { api, log, engine } = setup([])
+    api.getState.mockRejectedValueOnce(new Error('502'))
+
+    await engine.sync()
+    expect(engine.hasSnapshot).toBe(false)
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(log[0]).toBe('snapshot 10')
+    expect(engine.hasSnapshot).toBe(true)
+  })
+
+  it('a steady stream of events still gets a catch-up within three seconds', async () => {
+    // The bug: every event moved the catch-up a second further, so a busy chat held it off.
+    const { api, engine } = setup([])
+    await engine.sync()
+    api.getDifference.mockClear()
+
+    for (let i = 0; i < 10; i++) {
+      engine.scheduleCatchUp()
+      await vi.advanceTimersByTimeAsync(500)
+    }
+
+    expect(api.getDifference.mock.calls.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('a run of a signed-out session is not applied to the next sign-in', async () => {
+    let answer!: (s: SyncStateDto) => void
+    const { api, log, engine } = setup([])
+    api.getState.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)))
+    void engine.sync()
+
+    engine.stop()
+    const next = engine.sync()
+    answer(snapshot(99))
+    await next
+
+    expect(log).not.toContain('snapshot 99')
+  })
 })
+

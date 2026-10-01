@@ -123,15 +123,20 @@ public class Program
 
         app.UseResponseCompression();
 
-        app.UseDefaultFiles();
-        app.UseStaticFiles(new StaticFileOptions
+        // Also for the fallback: the client's routes (/client/chat) are index.html under another address.
+        var clientFiles = new StaticFileOptions
         {
             OnPrepareResponse = context =>
             {
-                if (ClientCacheControl(context.Context.Request.Path.Value ?? string.Empty) is { } cacheControl)
+                var cacheControl = context.File.Name == "index.html"
+                    ? "no-cache"
+                    : ClientCacheControl(context.Context.Request.Path.Value ?? string.Empty);
+                if (cacheControl is not null)
                     context.Context.Response.Headers[HeaderNames.CacheControl] = cacheControl;
             }
-        });
+        };
+        app.UseDefaultFiles();
+        app.UseStaticFiles(clientFiles);
 
         app.UseCors("Default");
 
@@ -181,7 +186,7 @@ public class Program
         // Client-side routing: /client/chat is a route inside the SPA, there is no file
         // with such a name. The "/client/{*path:nonfile}" constraint matters:
         // without it a typo in an /api/... address would return HTML instead of 404.
-        app.MapFallbackToFile("/client/{*path:nonfile}", "client/index.html");
+        app.MapFallbackToFile("/client/{*path:nonfile}", "client/index.html", clientFiles);
 
         app.Run();
     }

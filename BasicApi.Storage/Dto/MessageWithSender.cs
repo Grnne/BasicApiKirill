@@ -32,6 +32,7 @@ public class MessageWithSender
     public Guid? ReplyToSenderId { get; set; }
     public string? ReplyToSenderName { get; set; }
     public string? ReplyToText { get; set; }
+    public string? ReplyToEntitiesJson { get; set; }
     public bool ReplyToDeleted { get; set; }
 
     /// <summary>For a forward — the original author (with the name) and where it came from.</summary>

@@ -21,7 +21,8 @@ const icons = { photo: '🖼', video: '🎬', file: '📄' } as const
         </span>
         <span v-if="item.state === 'uploading'" class="bar"><span :style="{ width: `${Math.round(item.progress * 100)}%` }" /></span>
       </span>
-      <button type="button" class="remove" :title="item.state === 'uploading' ? 'Отменить' : 'Убрать'" @click="$emit('remove', item.key)">
+      <button type="button" class="remove" :title="item.state === 'uploading' ? 'Отменить' : 'Убрать'"
+        :aria-label="`${item.state === 'uploading' ? 'Отменить' : 'Убрать'}: ${item.file.name}`" @click="$emit('remove', item.key)">
         ✕
       </button>
     </li>
