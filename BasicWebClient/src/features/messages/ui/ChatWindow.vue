@@ -2,8 +2,10 @@
 import { computed, ref, watch } from 'vue'
 
 import { chatInitial, chatTitle } from '@/entities/chat/lib'
+import { useChatDetailsStore } from '@/entities/chat/model/details.store'
 import AvatarCircle from '@/entities/media/ui/AvatarCircle.vue'
 import { usePresenceStore } from '@/entities/user/presence.store'
+import { plural } from '@/shared/lib/plural'
 import { useChatListStore } from '@/features/chat-list/model/chat-list.store'
 import { useMessagesStore } from '../model/messages.store'
 import ChatSearch from './ChatSearch.vue'
@@ -16,6 +18,7 @@ const emit = defineEmits<{ info: [] }>()
 const chatList = useChatListStore()
 const messages = useMessagesStore()
 const presence = usePresenceStore()
+const details = useChatDetailsStore()
 
 // Typing takes precedence over the online status.
 const subtitle = computed(() => {
@@ -23,6 +26,10 @@ const subtitle = computed(() => {
   if (!chat) return ''
 
   if (presence.isSomeoneTyping(chat.chatId)) return 'печатает…'
+  if (chat.type === 'group') {
+    const count = details.get(chat.chatId)?.participants.length
+    return count ? `${count} ${plural(count, ['участник', 'участника', 'участников'])}` : ''
+  }
   if (chat.type !== 'private') return ''
   return presence.isOnline(chat.companionId) ? 'в сети' : 'не в сети'
 })

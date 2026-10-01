@@ -1,25 +1,40 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, toRef } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 
+import * as chatApi from '@/entities/chat/api'
 import { chatInitial, chatTitle } from '@/entities/chat/lib'
+import { ROLE_LABELS, canAddMembers, canRemoveMember, sortedMembers } from '@/entities/chat/members'
 import { useChatDetailsStore } from '@/entities/chat/model/details.store'
-import type { ChatListItem } from '@/entities/chat/types'
+import type { ChatListItem, ChatParticipant } from '@/entities/chat/types'
 import { formatDuration } from '@/entities/media/lib'
 import { useMediaLinksStore } from '@/entities/media/model/links.store'
 import AttachmentList from '@/entities/media/ui/AttachmentList.vue'
 import AvatarCircle from '@/entities/media/ui/AvatarCircle.vue'
 import MediaViewer from '@/entities/media/ui/MediaViewer.vue'
 import FormattedText from '@/entities/message/ui/FormattedText'
+import { describeError } from '@/shared/api/problem'
 import { formatDay } from '@/shared/lib/date'
 import { plural } from '@/shared/lib/plural'
+import ConfirmDialog from '@/shared/ui/ConfirmDialog.vue'
+import { useNoticesStore } from '@/shared/ui/notices.store'
 import type { GalleryFilter } from '../api/media.api'
 import { useGallery } from '../model/useGallery'
 
 const props = defineProps<{ chat: ChatListItem; meId: string | null }>()
-const emit = defineEmits<{ close: []; jump: [messageId: string] }>()
+const emit = defineEmits<{
+  close: []
+  jump: [messageId: string]
+  addMembers: []
+  openUser: [userId: string]
+  left: []
+}>()
 
 const details = useChatDetailsStore()
 const links = useMediaLinksStore()
+const notices = useNoticesStore()
+
+const isGroup = computed(() => props.chat.type === 'group')
+const detail = computed(() => (isGroup.value ? details.get(props.chat.chatId) : null))
 
 const TABS: { filter: GalleryFilter; label: string; empty: string }[] = [
   { filter: 'media', label: 'Медиа', empty: 'Фото и видео пока нет' },
@@ -29,9 +44,62 @@ const TABS: { filter: GalleryFilter; label: string; empty: string }[] = [
 ]
 const filter = ref<GalleryFilter>('media')
 const tab = computed(() => TABS.find((t) => t.filter === filter.value)!)
+/** Groups open on their members; the gallery loads only when one of its tabs is shown. */
+const showMembers = ref(isGroup.value)
+watch(
+  () => props.chat.chatId,
+  () => (showMembers.value = isGroup.value),
+)
 
-const gallery = useGallery(toRef(() => props.chat.chatId), filter)
+const gallery = useGallery(
+  computed(() => (showMembers.value ? null : props.chat.chatId)),
+  filter,
+)
 onUnmounted(() => gallery.stop())
+
+function showGallery(next: GalleryFilter): void {
+  filter.value = next
+  showMembers.value = false
+}
+
+/* ── Members ── */
+
+const members = computed(() => (detail.value ? sortedMembers(detail.value.participants) : []))
+const mayAdd = computed(() => !!detail.value && canAddMembers(detail.value))
+const mayRemove = (member: ChatParticipant) =>
+  !!detail.value && !!props.meId && canRemoveMember(detail.value, props.meId, member)
+
+const removing = ref<ChatParticipant | null>(null)
+const leaving = ref(false)
+
+async function confirmRemove(): Promise<void> {
+  const member = removing.value
+  removing.value = null
+  if (!member || !props.meId) return
+  try {
+    await chatApi.removeMember(props.chat.chatId, member.userId)
+    details.apply('MemberRemoved', { chatId: props.chat.chatId, userId: member.userId, removedBy: props.meId }, props.meId)
+  } catch (e) {
+    notices.push(describeError(e))
+  }
+}
+
+const leaveText = computed(() => {
+  if (members.value.length <= 1) return 'Вы последний участник: группа будет удалена вместе с историей.'
+  if (detail.value?.myRole === 'owner') return 'Группа перейдёт к самому давнему админу, а если их нет — к участнику.'
+  return 'Чат и его история пропадут у вас из списка.'
+})
+
+async function confirmLeave(): Promise<void> {
+  leaving.value = false
+  if (!props.meId) return
+  try {
+    await chatApi.removeMember(props.chat.chatId, props.meId)
+    emit('left')
+  } catch (e) {
+    notices.push(describeError(e))
+  }
+}
 
 const subtitle = computed(() => {
   if (props.chat.type === 'private') return props.chat.companionUsername ? `@${props.chat.companionUsername}` : ''
@@ -75,19 +143,46 @@ function onScroll(event: Event): void {
 
     <nav class="tabs" role="tablist">
       <button
+        v-if="isGroup"
+        type="button"
+        role="tab"
+        :aria-selected="showMembers"
+        :class="['tab', { active: showMembers }]"
+        @click="showMembers = true"
+      >
+        Участники
+      </button>
+      <button
         v-for="t in TABS"
         :key="t.filter"
         type="button"
         role="tab"
-        :aria-selected="filter === t.filter"
-        :class="['tab', { active: filter === t.filter }]"
-        @click="filter = t.filter"
+        :aria-selected="!showMembers && filter === t.filter"
+        :class="['tab', { active: !showMembers && filter === t.filter }]"
+        @click="showGallery(t.filter)"
       >
         {{ t.label }}
       </button>
     </nav>
 
-    <div class="content" @scroll.passive="onScroll">
+    <div v-if="showMembers" class="content">
+      <button v-if="mayAdd" type="button" class="action" @click="emit('addMembers')">＋ Добавить участников</button>
+      <p v-if="!detail" class="note">загрузка…</p>
+      <div v-for="m in members" :key="m.userId" class="member">
+        <button type="button" class="who" :disabled="m.userId === meId" @click="emit('openUser', m.userId)">
+          <AvatarCircle :avatar-id="m.avatarId" :initial="m.displayName.charAt(0).toUpperCase() || '?'" :size="32" />
+          <span class="member-name">
+            <span>{{ m.displayName }}<span v-if="m.userId === meId" class="me"> (вы)</span></span>
+            <span class="username">@{{ m.username }}</span>
+          </span>
+          <span v-if="ROLE_LABELS[m.role]" class="role">{{ ROLE_LABELS[m.role] }}</span>
+        </button>
+        <button v-if="mayRemove(m)" type="button" class="remove" title="Исключить" @click="removing = m">✕</button>
+      </div>
+      <button v-if="detail" type="button" class="action danger" @click="leaving = true">Покинуть группу</button>
+    </div>
+
+    <div v-else class="content" @scroll.passive="onScroll">
       <div v-if="filter === 'media'" class="grid">
         <button
           v-for="(f, index) in gallery.files.value"
@@ -145,6 +240,25 @@ function onScroll(event: Event): void {
         Ещё
       </button>
     </div>
+
+    <ConfirmDialog
+      v-if="removing"
+      title="Исключить из группы?"
+      :text="`${removing.displayName} больше не увидит группу и её историю.`"
+      confirm-label="Исключить"
+      danger
+      @confirm="confirmRemove"
+      @cancel="removing = null"
+    />
+    <ConfirmDialog
+      v-if="leaving"
+      title="Покинуть группу?"
+      :text="leaveText"
+      confirm-label="Покинуть"
+      danger
+      @confirm="confirmLeave"
+      @cancel="leaving = false"
+    />
 
     <MediaViewer
       v-if="viewing !== null"
@@ -286,6 +400,67 @@ function onScroll(event: Event): void {
   text-align: center;
 }
 .note.error {
+  color: var(--danger);
+}
+.action {
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  background: none;
+  color: var(--accent);
+  text-align: left;
+}
+.action.danger {
+  margin-top: 8px;
+  border-top: 1px solid var(--border);
+  color: var(--danger);
+}
+.member {
+  display: flex;
+  align-items: center;
+}
+.who {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 6px 16px;
+  border: none;
+  background: none;
+  color: inherit;
+  text-align: left;
+}
+.who:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+.who:disabled {
+  cursor: default;
+}
+.member-name {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.me,
+.username {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+.role {
+  color: var(--accent);
+  font-size: 11px;
+}
+.remove {
+  padding: 4px 12px;
+  border: none;
+  background: none;
+  color: var(--text-faint);
+}
+.remove:hover {
   color: var(--danger);
 }
 .more {

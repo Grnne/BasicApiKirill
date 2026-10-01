@@ -1,4 +1,5 @@
 import { http } from '@/shared/api/http'
+import type { GroupMemberDto } from '@/shared/api/schema'
 import type { ChatDetail, ChatListItem } from './types'
 
 export function getChatItem(chatId: string): Promise<ChatListItem> {
@@ -23,4 +24,14 @@ export function createGroup(title: string, memberIds: string[]): Promise<ChatLis
 /** null removes the photo. Members learn of it through ChatUpdated. */
 export function setChatAvatar(chatId: string, attachmentId: string | null): Promise<void> {
   return http.put<void>(`/api/chats/${chatId}/avatar`, { attachmentId })
+}
+
+/** Needs addMembers; those already in the group are skipped. Answers who was added. */
+export function addMembers(chatId: string, userIds: string[]): Promise<GroupMemberDto[]> {
+  return http.post<GroupMemberDto[]>(`/api/chats/${chatId}/members`, { userIds })
+}
+
+/** Removes a member; the caller's own id — leaves the group. */
+export function removeMember(chatId: string, userId: string): Promise<void> {
+  return http.delete<void>(`/api/chats/${chatId}/members/${userId}`)
 }

@@ -8,7 +8,9 @@ import ChatListPanel from '@/features/chat-list/ui/ChatListPanel.vue'
 import FolderTabs from '@/features/chat-list/ui/FolderTabs.vue'
 import ChatWindow from '@/features/messages/ui/ChatWindow.vue'
 import ChatInfoPanel from '@/features/chat-info/ui/ChatInfoPanel.vue'
-import CreateGroupDialog from '@/features/group-create/ui/CreateGroupDialog.vue'
+import AddMembersDialog from '@/features/groups/ui/AddMembersDialog.vue'
+import CreateGroupDialog from '@/features/groups/ui/CreateGroupDialog.vue'
+import { useNoticesStore } from '@/shared/ui/notices.store'
 import UserSearchPanel from '@/features/user-search/ui/UserSearchPanel.vue'
 import MessageSearchPanel from '@/features/message-search/ui/MessageSearchPanel.vue'
 import { useAuthStore } from '@/features/auth/model/auth.store'
@@ -49,7 +51,20 @@ async function onMessageFound(chatId: string, messageId: string): Promise<void> 
   await chatList.select(chatId)
 }
 
+const notices = useNoticesStore()
 const creatingGroup = ref(false)
+const addingMembers = ref(false)
+
+function onMembersAdded(count: number): void {
+  addingMembers.value = false
+  notices.push(count > 0 ? `Добавлено участников: ${count}` : 'Все выбранные уже в группе', 'info')
+}
+
+/** Left on purpose: the chat is closed before MemberRemoved takes it from the list. */
+async function onLeftGroup(): Promise<void> {
+  infoOpen.value = false
+  await chatList.deselect()
+}
 
 async function onGroupCreated(chatId: string): Promise<void> {
   creatingGroup.value = false
@@ -115,6 +130,9 @@ async function onLogout(): Promise<void> {
           :me-id="auth.user?.userId ?? null"
           @close="infoOpen = false"
           @jump="onInfoJump"
+          @add-members="addingMembers = true"
+          @open-user="onUserSelected"
+          @left="onLeftGroup"
         />
       </main>
 
@@ -122,6 +140,13 @@ async function onLogout(): Promise<void> {
     </div>
 
     <CreateGroupDialog v-if="creatingGroup" @created="onGroupCreated" @cancel="creatingGroup = false" />
+    <AddMembersDialog
+      v-if="addingMembers && chatList.selectedChatId && auth.user"
+      :chat-id="chatList.selectedChatId"
+      :me-id="auth.user.userId"
+      @done="onMembersAdded"
+      @cancel="addingMembers = false"
+    />
   </div>
 </template>
 

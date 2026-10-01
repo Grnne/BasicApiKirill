@@ -1,6 +1,6 @@
 // Which chat is open, and the list actions. The chats themselves live in the chats entity.
 
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 
 import * as chatApi from '@/entities/chat/api'
@@ -23,6 +23,16 @@ export const useChatListStore = defineStore('chatList', () => {
   const selectedFolderId = ref<string | null>(null)
   const selectedFolder = computed(() => chats.folders.find((f) => f.id === selectedFolderId.value) ?? null)
   const selectedChat = computed(() => chats.get(selectedChatId.value))
+
+  // The open chat left the list (removed from the group, the group deleted): say so and close it.
+  watch(selectedChat, (now, before) => {
+    if (now || !before || selectedChatId.value !== before.chatId) return
+    notices.push(
+      before.type === 'group' ? `Вы больше не участник группы «${before.title ?? ''}»` : 'Чат больше недоступен',
+      'info',
+    )
+    void deselect()
+  })
 
   async function select(chatId: string): Promise<void> {
     selectedChatId.value = chatId

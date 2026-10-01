@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
+import { useChatDetailsStore } from '@/entities/chat/model/details.store'
 import { STATUS_MARKS, type OwnStatus } from '@/entities/message/lib/status'
+import { systemCaption } from '@/entities/message/lib/system'
 import type { Message } from '@/entities/message/types'
 import FormattedText from '@/entities/message/ui/FormattedText'
 import AttachmentList from '@/entities/media/ui/AttachmentList.vue'
@@ -16,11 +18,18 @@ const props = defineProps<{
 defineEmits<{ jump: [messageId: string]; react: [emoji: string] }>()
 
 const files = computed(() => props.message.attachments.length)
+
+const details = useChatDetailsStore()
+const caption = computed(() =>
+  props.message.type === 'system'
+    ? systemCaption(props.message, (id) => details.member(props.message.chatId, id)?.displayName ?? null)
+    : '',
+)
 </script>
 
 <template>
-  <!-- A record of what happened in a group: the server writes its text in Russian. -->
-  <p v-if="message.type === 'system'" class="system">{{ message.text }}</p>
+  <!-- A record of what happened in a group, with the names people have now. -->
+  <p v-if="message.type === 'system'" class="system">{{ caption }}</p>
 
   <article v-else :class="['bubble', { own }]">
     <span v-if="!own" class="sender">{{ message.senderName }}</span>

@@ -27,7 +27,7 @@ export function galleryFiles(messages: readonly Message[], filter: GalleryFilter
 }
 
 /** One tab of the chat's gallery, paged back in time. A new chat or tab drops what is loading. */
-export function useGallery(chatId: Ref<string | null>, filter: Ref<GalleryFilter>) {
+export function useGallery(chatId: Readonly<Ref<string | null>>, filter: Readonly<Ref<GalleryFilter>>) {
   const messages = shallowRef<Message[]>([])
   const cursor = ref<string | null>(null)
   const done = ref(false)
@@ -62,6 +62,8 @@ export function useGallery(chatId: Ref<string | null>, filter: Ref<GalleryFilter
   watch(
     [chatId, filter],
     () => {
+      controller?.abort()
+      busy.value = false
       messages.value = []
       cursor.value = null
       done.value = false

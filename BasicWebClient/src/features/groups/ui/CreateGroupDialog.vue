@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 
 import * as chatApi from '@/entities/chat/api'
 import { useChatsStore } from '@/entities/chat/model/chats.store'
@@ -8,13 +8,11 @@ import * as mediaApi from '@/entities/media/api'
 import { uploadKind } from '@/entities/media/lib'
 import { measureVideo, putFile } from '@/entities/media/transfer'
 import { uploadFile } from '@/entities/media/upload'
-import AvatarCircle from '@/entities/media/ui/AvatarCircle.vue'
-import * as usersApi from '@/entities/user/api'
 import type { UserSearchResult } from '@/entities/user/types'
 import { describeError } from '@/shared/api/problem'
-import { useDebounced } from '@/shared/lib/useDebounced'
 import { useNoticesStore } from '@/shared/ui/notices.store'
 import { createGroupWithPhoto } from '../model/create-group'
+import UserPicker from './UserPicker.vue'
 
 const emit = defineEmits<{ created: [chatId: string]; cancel: [] }>()
 
@@ -56,36 +54,7 @@ function onPhotoChosen(event: Event): void {
 
 /* ── Members ── */
 
-const query = ref('')
-const debounced = useDebounced(() => query.value.trim())
-const found = ref<UserSearchResult[]>([])
 const picked = ref<UserSearchResult[]>([])
-let controller: AbortController | null = null
-
-watch(debounced, async (q) => {
-  controller?.abort()
-  if (q.length < 2) {
-    found.value = []
-    return
-  }
-  const current = (controller = new AbortController())
-  try {
-    const response = await usersApi.searchUsers(q, current.signal)
-    if (!current.signal.aborted) found.value = response.items
-  } catch {
-    if (!current.signal.aborted) found.value = []
-  }
-})
-
-const pickedIds = computed(() => new Set(picked.value.map((u) => u.userId)))
-
-function toggle(user: UserSearchResult): void {
-  if (pickedIds.value.has(user.userId)) {
-    picked.value = picked.value.filter((u) => u.userId !== user.userId)
-  } else if (picked.value.length < maxPicked.value) {
-    picked.value = [...picked.value, user]
-  }
-}
 
 /* ── Create ── */
 
@@ -131,7 +100,6 @@ onMounted(() => {
 })
 onUnmounted(() => {
   document.removeEventListener('keydown', onKeydown)
-  controller?.abort()
   setPhoto(null)
 })
 </script>
@@ -155,27 +123,8 @@ onUnmounted(() => {
       <p v-if="photoError" class="error">{{ photoError }}</p>
       <button v-if="photo" type="button" class="link" @click="setPhoto(null)">Убрать фото</button>
 
-      <div v-if="picked.length > 0" class="chips">
-        <button v-for="user in picked" :key="user.userId" type="button" class="chip" title="Убрать" @click="toggle(user)">
-          {{ user.displayName }} ✕
-        </button>
-      </div>
-
-      <input v-model="query" class="input" type="search" placeholder="Добавить участников: имя или логин" autocomplete="off" />
-      <p v-if="picked.length >= maxPicked" class="hint">В группе может быть не больше {{ maxPicked + 1 }} участников</p>
-      <div class="found">
-        <button
-          v-for="user in found"
-          :key="user.userId"
-          type="button"
-          :class="['user', { on: pickedIds.has(user.userId) }]"
-          @click="toggle(user)"
-        >
-          <AvatarCircle :avatar-id="user.avatarId" :initial="user.displayName.charAt(0).toUpperCase() || '?'" :size="28" />
-          <span class="name">{{ user.displayName }} <span class="username">@{{ user.username }}</span></span>
-          <span class="mark">{{ pickedIds.has(user.userId) ? '✓' : '' }}</span>
-        </button>
-      </div>
+      <span class="label">Участники</span>
+      <UserPicker v-model="picked" :max="maxPicked" />
 
       <p v-if="error" class="error">{{ error }}</p>
       <div class="buttons">
@@ -255,58 +204,6 @@ onUnmounted(() => {
 .input:focus {
   border-color: var(--accent);
   outline: none;
-}
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.chip {
-  padding: 2px 8px;
-  border: none;
-  border-radius: 10px;
-  background: var(--accent-soft);
-  color: var(--text);
-  font-size: 12px;
-}
-.found {
-  display: grid;
-  min-height: 0;
-  max-height: 240px;
-  overflow-y: auto;
-}
-.user {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 4px;
-  border: none;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-}
-.user:hover,
-.user.on {
-  background: var(--surface-hover);
-}
-.name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.username {
-  color: var(--text-faint);
-  font-size: 12px;
-}
-.mark {
-  color: var(--accent);
-}
-.hint {
-  margin: 0;
-  color: var(--text-dim);
-  font-size: 12px;
 }
 .error {
   margin: 0;

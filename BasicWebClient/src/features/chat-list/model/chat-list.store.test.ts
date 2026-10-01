@@ -1,3 +1,4 @@
+import { flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -153,5 +154,32 @@ describe('folders', () => {
 
     expect(foldersApi.updateFolder).toHaveBeenCalledWith('a', { pinnedChatIds: ['y', 'x'] })
     expect(chats.folders[0]!.pinnedChatIds).toEqual(['y', 'x'])
+  })
+})
+
+describe('the open chat goes away', () => {
+  it('removed from the open group: a notice, and the chat closes', async () => {
+    const chats = useChatsStore()
+    chats.replaceAll([chat({ chatId: 'g1', type: 'group', title: 'Team' })], [])
+    const list = useChatListStore()
+    await list.select('g1')
+
+    chats.apply('MemberRemoved', { chatId: 'g1', userId: 'me', removedBy: 'bob' }, { meId: 'me' })
+    await flushPromises()
+
+    expect(list.selectedChatId).toBeNull()
+    expect(useNoticesStore().items.map((n) => n.text)).toContain('Вы больше не участник группы «Team»')
+  })
+
+  it('another chat going away leaves the open one alone', async () => {
+    const chats = useChatsStore()
+    chats.replaceAll([chat({ chatId: 'g1', type: 'group' }), chat({ chatId: 'g2', type: 'group' })], [])
+    const list = useChatListStore()
+    await list.select('g1')
+
+    chats.apply('ChatDeleted', { chatId: 'g2' }, { meId: 'me' })
+    await flushPromises()
+
+    expect(list.selectedChatId).toBe('g1')
   })
 })
