@@ -33,9 +33,10 @@ function reachable(doc, roots) {
 }
 
 /**
- * The server writes every property of a response (null included), but the document has no
- * `required`. Every schema except the request-only ones gets all its properties required, so a
- * response field is never `T | undefined`; request bodies keep their optional fields.
+ * The server writes every property of a response (null included) unless it is marked
+ * x-omitted-when-null, but the document has no `required`. Every schema except the request-only
+ * ones gets those properties required, so a response field is never `T | undefined`; request
+ * bodies keep their optional fields.
  */
 function markResponsesRequired(doc) {
   const operations = Object.values(doc.paths).flatMap((item) => Object.values(item))
@@ -46,7 +47,10 @@ function markResponsesRequired(doc) {
 
   for (const [name, schema] of Object.entries(doc.components.schemas)) {
     if (!requestOnly.has(name) && schema.properties) {
-      schema.required = Object.keys(schema.properties)
+      // x-omitted-when-null: the server leaves the field out instead of writing null.
+      schema.required = Object.entries(schema.properties)
+        .filter(([, property]) => !property['x-omitted-when-null'])
+        .map(([key]) => key)
     }
   }
   return doc

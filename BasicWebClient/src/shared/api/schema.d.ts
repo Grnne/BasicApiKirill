@@ -6152,7 +6152,7 @@ export interface components {
          */
         MessageEntityDto: {
             /** @description `pre`: language for highlighting, optional. */
-            language: string | null;
+            language?: string | null;
             /** Format: int32 */
             length: number;
             /** Format: int32 */
@@ -6164,12 +6164,12 @@ export interface components {
              */
             type: string;
             /** @description `link`: http, https or mailto. */
-            url: string | null;
+            url?: string | null;
             /**
              * Format: uuid
              * @description `mention`: the mentioned member of the chat.
              */
-            userId: string | null;
+            userId?: string | null;
         };
         MessageForwardDto: {
             /** Format: uuid */
@@ -6274,12 +6274,12 @@ export interface components {
             messages: string | null;
         };
         ProblemDetails: {
-            detail: string | null;
-            instance: string | null;
+            detail?: string | null;
+            instance?: string | null;
             /** Format: int32 */
-            status: number | null;
-            title: string | null;
-            type: string | null;
+            status?: number | null;
+            title?: string | null;
+            type?: string | null;
         } & {
             [key: string]: unknown;
         };

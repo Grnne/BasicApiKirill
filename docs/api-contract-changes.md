@@ -1698,8 +1698,10 @@ service worker'ом, даже когда вкладка закрыта.
   `MembersAddedDto`, `MemberRemovedDto`, `MemberUpdatedDto`, `ChatDeletedDto`,
   `UserUpdatedDto`, `BlockListChangedDto`, `FoldersDto`. Какое событие что несёт — в разделах
   12–19 выше; те же объекты приходят в `payload` записей `GET /api/sync`.
-- Все поля ответа присутствуют в JSON всегда (в том числе со значением `null`); `required` в
-  описании по-прежнему не указывается.
+- Все поля ответа присутствуют в JSON всегда (в том числе со значением `null`), кроме
+  помеченных `x-omitted-when-null: true` — их при `null` в JSON нет: `url`, `userId` и `language`
+  у сущностей разметки, поля `PermissionsPatchDto` и необязательные поля ProblemDetails.
+  `required` в описании по-прежнему не указывается.
 
 ### 20.2. `GET /api/config` (новая)
 

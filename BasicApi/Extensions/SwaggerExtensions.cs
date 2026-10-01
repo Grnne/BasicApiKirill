@@ -1,4 +1,7 @@
 ﻿using System.Reflection;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
 using BasicApi.Services.Events;
@@ -50,6 +53,7 @@ public static class SwaggerExtensions
             c.SupportNonNullableReferenceTypes();
             c.UseAllOfToExtendReferenceSchemas();
             c.DocumentFilter<HubEventSchemasFilter>();
+            c.SchemaFilter<OmittedWhenNullSchemaFilter>();
 
             var xmlFile = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
             var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
@@ -93,5 +97,30 @@ internal sealed class HubEventSchemasFilter : IDocumentFilter
 
         foreach (var type in payloads)
             context.SchemaGenerator.GenerateSchema(type, context.SchemaRepository);
+    }
+}
+
+/// <summary>
+/// Marks properties left out of the JSON when null (<c>x-omitted-when-null</c>): every other property of
+/// an answer is always written, so generated clients may treat it as present.
+/// </summary>
+internal sealed class OmittedWhenNullSchemaFilter : ISchemaFilter
+{
+    public void Apply(IOpenApiSchema schema, SchemaFilterContext context)
+    {
+        if (schema.Properties is null)
+            return;
+
+        foreach (var property in context.Type.GetProperties())
+        {
+            if (property.GetCustomAttribute<JsonIgnoreAttribute>()?.Condition != JsonIgnoreCondition.WhenWritingNull)
+                continue;
+            if (schema.Properties.TryGetValue(JsonNamingPolicy.CamelCase.ConvertName(property.Name), out var target)
+                && target is OpenApiSchema concrete)
+            {
+                concrete.Extensions ??= new Dictionary<string, IOpenApiExtension>();
+                concrete.Extensions["x-omitted-when-null"] = new JsonNodeExtension(JsonValue.Create(true));
+            }
+        }
     }
 }

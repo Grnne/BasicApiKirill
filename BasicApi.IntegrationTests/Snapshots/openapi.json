@@ -1308,7 +1308,8 @@
           "language": {
             "description": "`pre`: language for highlighting, optional.",
             "nullable": true,
-            "type": "string"
+            "type": "string",
+            "x-omitted-when-null": true
           },
           "length": {
             "format": "int32",
@@ -1325,13 +1326,15 @@
           "url": {
             "description": "`link`: http, https or mailto.",
             "nullable": true,
-            "type": "string"
+            "type": "string",
+            "x-omitted-when-null": true
           },
           "userId": {
             "description": "`mention`: the mentioned member of the chat.",
             "format": "uuid",
             "nullable": true,
-            "type": "string"
+            "type": "string",
+            "x-omitted-when-null": true
           }
         },
         "type": "object"
@@ -1472,31 +1475,38 @@
         "properties": {
           "addAdmins": {
             "nullable": true,
-            "type": "boolean"
+            "type": "boolean",
+            "x-omitted-when-null": true
           },
           "addMembers": {
             "nullable": true,
-            "type": "boolean"
+            "type": "boolean",
+            "x-omitted-when-null": true
           },
           "changeInfo": {
             "nullable": true,
-            "type": "boolean"
+            "type": "boolean",
+            "x-omitted-when-null": true
           },
           "deleteMessages": {
             "nullable": true,
-            "type": "boolean"
+            "type": "boolean",
+            "x-omitted-when-null": true
           },
           "removeMembers": {
             "nullable": true,
-            "type": "boolean"
+            "type": "boolean",
+            "x-omitted-when-null": true
           },
           "sendMedia": {
             "nullable": true,
-            "type": "boolean"
+            "type": "boolean",
+            "x-omitted-when-null": true
           },
           "sendMessages": {
             "nullable": true,
-            "type": "boolean"
+            "type": "boolean",
+            "x-omitted-when-null": true
           }
         },
         "type": "object"
@@ -1542,24 +1552,29 @@
         "properties": {
           "detail": {
             "nullable": true,
-            "type": "string"
+            "type": "string",
+            "x-omitted-when-null": true
           },
           "instance": {
             "nullable": true,
-            "type": "string"
+            "type": "string",
+            "x-omitted-when-null": true
           },
           "status": {
             "format": "int32",
             "nullable": true,
-            "type": "integer"
+            "type": "integer",
+            "x-omitted-when-null": true
           },
           "title": {
             "nullable": true,
-            "type": "string"
+            "type": "string",
+            "x-omitted-when-null": true
           },
           "type": {
             "nullable": true,
-            "type": "string"
+            "type": "string",
+            "x-omitted-when-null": true
           }
         },
         "type": "object"
