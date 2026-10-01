@@ -1,6 +1,4 @@
 using BasicApi.Extensions;
-using BasicApi.Models.Dto.Sync;
-using BasicApi.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -64,8 +62,7 @@ public class SyncController(ISyncService sync) : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Ack([FromBody] SyncAckDto dto, CancellationToken ct)
     {
-        // Tokens without sid (issued before binding to a session) expired long ago;
-        // just in case, a shared "device".
+        // Every current token has a sid; one without it falls back to a shared "device".
         await sync.AckAsync(User.GetUserId(), User.GetSessionFamilyId() ?? Guid.Empty, dto.Pts, ct);
         return NoContent();
     }

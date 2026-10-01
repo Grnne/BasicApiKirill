@@ -1,13 +1,8 @@
 namespace BasicApi.Middleware.Exceptions;
 
-/// <summary>
-/// Base class for all domain-level exceptions.
-/// Enables the middleware to distinguish domain errors from system errors.
-/// </summary>
+/// <summary>Base of expected domain errors, which the middleware answers with their code instead of a 500.</summary>
 public abstract class DomainException(string message, string errorCode) : Exception(message)
 {
-    /// <summary>
-    /// Machine-readable error code for programmatic handling by clients.
-    /// </summary>
+    /// <summary>Machine-readable error code for clients.</summary>
     public string ErrorCode { get; } = errorCode;
 }

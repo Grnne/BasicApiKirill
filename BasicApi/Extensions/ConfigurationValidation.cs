@@ -1,12 +1,11 @@
 using System.Text;
-using BasicApi.Services.Push;
+using BasicApi.Features.Push;
 
 namespace BasicApi.Extensions;
 
 /// <summary>
-/// Configuration check before startup. An application with the default JWT key in prod
-/// makes it possible to forge any user's token, so such a startup
-/// must fail immediately and loudly, not work "somehow".
+/// Fails startup on a dangerous or incomplete configuration: e.g. a known JWT key in prod would let anyone forge
+/// any user's token.
 /// </summary>
 public static class ConfigurationValidation
 {

@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using BasicApi.Features.Auth;
+using BasicApi.Features.Messages;
 using BasicApi.Hubs;
 using BasicApi.Middleware.Exceptions;
 using BasicApi.Services;
@@ -11,9 +13,8 @@ using Moq;
 namespace BasicApi.Tests.Hubs;
 
 /// <summary>
-/// The hub is an adapter: it parses a call and hands it to a service. The rules (membership, text,
-/// presence) are tested in the service tests; here — that the call got where it should,
-/// and what remains with the hub: the session on connect, groups, the call limit.
+/// The hub is an adapter: these tests check that calls reach the right service, plus what the hub
+/// owns itself (the session check on connect, groups, the call limit). The rules are tested in services.
 /// </summary>
 public class ChatHubTests
 {
@@ -66,8 +67,6 @@ public class ChatHubTests
             Groups = _groupsMock.Object
         };
 
-    // ========== Connection ==========
-
     [Fact]
     public async Task OnConnected_LiveSession_ReportsConnectionToPresence()
     {
@@ -108,8 +107,6 @@ public class ChatHubTests
         _presenceMock.Verify(p => p.DisconnectedAsync(_userId, _connectionId), Times.Once);
     }
 
-    // ========== Chat groups ==========
-
     [Fact]
     public async Task JoinChat_Member_AddsConnectionToChatGroup()
     {
@@ -148,8 +145,6 @@ public class ChatHubTests
         _groupsMock.Verify(g => g.RemoveFromGroupAsync(_connectionId, chatId.ToString(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
-
-    // ========== Commands ==========
 
     [Fact]
     public async Task SendMessage_GoesToMessageService()

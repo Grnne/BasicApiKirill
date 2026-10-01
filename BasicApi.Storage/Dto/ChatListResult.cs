@@ -1,9 +1,6 @@
 namespace BasicApi.Storage.Dto;
 
-/// <summary>
-/// Result of the batched chat list query — one row per chat,
-/// with all data needed to build ChatListItemDto.
-/// </summary>
+/// <summary>One chat-list row with everything needed to build ChatListItemDto.</summary>
 public class ChatListResult
 {
     public Guid ChatId { get; set; }

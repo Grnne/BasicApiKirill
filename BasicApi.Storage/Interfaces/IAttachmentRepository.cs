@@ -10,7 +10,6 @@ public interface IAttachmentRepository
     /// <summary>The user's own file, in any state; null when there is none or it is someone else's.</summary>
     Task<Attachment?> GetOwnAsync(Guid ownerId, Guid attachmentId, CancellationToken ct = default);
 
-    /// <summary>How many of the user's uploads are not finished yet.</summary>
     Task<int> CountPendingAsync(Guid ownerId, CancellationToken ct = default);
 
     /// <summary>

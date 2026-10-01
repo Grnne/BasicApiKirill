@@ -35,7 +35,6 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
         m.content::text AS ContentJson,
         " + AttachmentRepository.AttachmentsJsonOf + "m.id)::text AS AttachmentsJson";
 
-    /// <summary>Sender, the answered message with its author, the original author of a forward.</summary>
     private const string Joins = @"
         LEFT JOIN users u ON u.id = m.sender_id
         LEFT JOIN messages r ON r.id = m.reply_to_message_id
@@ -46,16 +45,12 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
     private const string MyReactionColumn = @",
         (SELECT mr.emoji FROM message_reactions mr WHERE mr.message_id = m.id AND mr.user_id = @viewerId) AS MyReaction";
 
-    /// <summary>
-    /// What a member sees: not deleted for everyone and not hidden by them ("delete for me").
-    /// </summary>
+    /// <summary>What a member sees: not deleted for everyone and not hidden by them ("delete for me").</summary>
     private const string VisibleToViewer = @"
         m.deleted_at IS NULL
         AND NOT EXISTS (SELECT 1 FROM hidden_messages h WHERE h.user_id = @viewerId AND h.message_id = m.id)";
 
-    /// <summary>
-    /// Page from newest to oldest by seq; with one extra row — the sign of a next page.
-    /// </summary>
+    /// <summary>Fetches one extra row as the sign of a next page.</summary>
     public async Task<CursorResult<MessageWithSender>> GetMessagesWithSenderCursorAsync(
         Guid chatId, Guid viewerId, long? beforeSeq, int limit, CancellationToken ct = default)
     {
@@ -317,22 +312,13 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
             new { chatId, memberId, fromSeq, toSeq }, ct);
     }
 
-    /// <summary>
-    /// Number of the earliest message strictly after the moment. "Jump to date" builds an exclusive
-    /// cursor from it: the page before it ends with the last message
-    /// at that moment or earlier.
-    /// </summary>
     public Task<long?> GetFirstSeqAfterAsync(Guid chatId, DateTime date, CancellationToken ct = default) =>
         db.QueryFirstOrDefaultAsync<long?>(@"
             SELECT MIN(seq) FROM messages
             WHERE chat_id = @chatId AND created_at > @date AND deleted_at IS NULL",
             new { chatId, date }, ct);
 
-    /// <summary>
-    /// Full-text search within a chat, newest first by seq, with the total number of
-    /// matches (same on every page). The query config must match the one of
-    /// messages.search_vector ('russian').
-    /// </summary>
+    // The tsquery config must match the one of messages.search_vector ('russian').
     public async Task<(CursorResult<MessageWithSender> Result, int TotalCount)> SearchMessagesCursorAsync(
         Guid chatId, Guid viewerId, string query, long? beforeSeq, int limit, CancellationToken ct = default)
     {

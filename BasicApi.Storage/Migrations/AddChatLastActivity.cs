@@ -3,10 +3,8 @@ using FluentMigrator;
 namespace BasicApi.Storage.Migrations;
 
 /// <summary>
-/// The chat list in pages (plan 2, F3.6): chats.last_activity_at — when the chat last got a
-/// message, or was created — is kept by every send, so the list is ordered without looking
-/// into each chat's messages. The same for all members: deleting the last message does not move
-/// the chat down, as in Telegram.
+/// chats.last_activity_at, kept by every send, orders the chat list without looking into messages.
+/// It is the same for all members: deleting the last message does not move the chat down.
 /// </summary>
 [Migration(21)]
 public class AddChatLastActivity : Migration

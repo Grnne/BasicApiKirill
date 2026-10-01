@@ -2,6 +2,8 @@ using System.Collections.Concurrent;
 using System.Security.Claims;
 using System.Threading.RateLimiting;
 using BasicApi.Extensions;
+using BasicApi.Features.Auth;
+using BasicApi.Features.Messages;
 using BasicApi.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
@@ -9,8 +11,8 @@ using Microsoft.AspNetCore.SignalR;
 namespace BasicApi.Hubs;
 
 /// <summary>
-/// SignalR adapter: parses the call and hands it to the domain service. The rules live in the services,
-/// translating domain errors into <see cref="HubException"/> with a code is done by <see cref="HubErrorFilter"/>.
+/// SignalR adapter: hands each call to the domain service; <see cref="HubErrorFilter"/> turns domain errors into coded
+/// <see cref="HubException"/>s.
 /// </summary>
 [Authorize]
 public class ChatHub(
@@ -67,7 +69,7 @@ public class ChatHub(
             catch
             {
                 // SignalR does not call OnDisconnectedAsync when OnConnectedAsync fails — typically the
-                // client left while it ran. Without this the user stayed online until a restart.
+                // client left while it ran. Without this the user would stay online until a restart.
                 connectionRegistry.Remove(Context.ConnectionId);
                 await presence.DisconnectedAsync(userId, Context.ConnectionId);
                 throw;

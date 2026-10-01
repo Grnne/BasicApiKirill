@@ -17,7 +17,6 @@ public interface IMembershipService
     /// <summary>Chat participants: the recipients of its events.</summary>
     Task<IReadOnlyList<Guid>> GetMemberIdsAsync(Guid chatId, CancellationToken ct = default);
 
-    /// <summary>The user's chats.</summary>
     Task<IReadOnlyList<Guid>> GetChatIdsAsync(Guid userId, CancellationToken ct = default);
 
     /// <summary>Everyone the user shares a chat with (excluding the user).</summary>

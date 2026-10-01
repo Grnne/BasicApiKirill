@@ -4,7 +4,6 @@ namespace BasicApi.Storage.Interfaces;
 
 public interface IDraftRepository
 {
-    /// <summary>The user's draft in the chat, or null.</summary>
     Task<Draft?> GetAsync(Guid userId, Guid chatId, CancellationToken ct = default);
 
     /// <summary>Creates or replaces the draft.</summary>

@@ -3,10 +3,8 @@ using FluentMigrator;
 namespace BasicApi.Storage.Migrations;
 
 /// <summary>
-/// Files in messages (plan 2, F4.2): a message points to up to 10 files, in order (an album).
-/// A forward points to the same files — nothing is uploaded again. The chat and the message's
-/// number are copied here, so "the chat's photos" is one index range, not a scan of all messages
-/// (the gallery, F4.3). A file in a message cannot be deleted from under it.
+/// A message points to up to 10 files in order (an album); a forward reuses them. chat_id and seq are copied
+/// so the chat's gallery is one index range. A file in a message cannot be deleted from under it.
 /// </summary>
 [Migration(23)]
 public class AddMessageAttachments : Migration

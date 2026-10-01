@@ -3,18 +3,8 @@ using FluentMigrator;
 namespace BasicApi.Storage.Migrations;
 
 /// <summary>
-/// Refresh-token sessions for custom (non-Identity) auth.
-///
-/// Only the SHA-256 hash of a refresh token is stored — a database dump must not
-/// hand out working sessions, same rule as for password hashes.
-///
-/// Rotation: every refresh issues a new session row and marks the old one as
-/// replaced. All rows produced by one login share a family_id, so presenting an
-/// already-rotated token outside the grace window (token theft) can revoke the
-/// whole chain at once.
-///
-/// Timestamps here are timestamptz on purpose. The older tables use plain
-/// timestamp (see project-analysis.md #6); new tables should not add to that debt.
+/// Refresh-token sessions; all rotations of one login share a family_id, so a reused token revokes the chain.
+/// Only token hashes are stored: a database dump must not hand out working sessions.
 /// </summary>
 [Migration(4)]
 public class AddSessions : Migration
@@ -44,7 +34,7 @@ public class AddSessions : Migration
             CREATE UNIQUE INDEX ix_sessions_refresh_token_hash
             ON sessions (refresh_token_hash)");
 
-        // ""revoke every session of this user"" (logout everywhere, deactivation)
+        // "Revoke every session of this user" (logout everywhere, deactivation).
         Execute.Sql(@"
             CREATE INDEX ix_sessions_user_id
             ON sessions (user_id)

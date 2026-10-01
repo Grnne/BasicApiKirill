@@ -35,7 +35,6 @@ public static class ApiJson
             .Where(u => u.GetProperty("type").GetString() == type)
             .Select(u => u.GetProperty("payload"))];
 
-    /// <summary>The user's current pts.</summary>
     public static async Task<long> PtsAsync(this HttpClient client) =>
         (await client.GetJsonAsync("/api/sync/state")).GetProperty("pts").GetInt64();
 

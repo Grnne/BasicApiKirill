@@ -57,7 +57,7 @@ public class MessageDto
     public MessageForwardDto? ForwardFrom { get; set; }
 
     /// <summary>The files, in album order; empty — none. The bytes are fetched by <c>POST /api/media/links</c>.</summary>
-    public List<Media.AttachmentDto> Attachments { get; set; } = [];
+    public List<AttachmentDto> Attachments { get; set; } = [];
 
     /// <summary>
     /// For a system message (<see cref="Type"/> <c>system</c>) — what happened; the sender is who did

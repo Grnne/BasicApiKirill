@@ -3,10 +3,8 @@ using FluentMigrator;
 namespace BasicApi.Storage.Migrations;
 
 /// <summary>
-/// Devices (plan 2, F7.1, A4). A device is one sign-in: the chain of refresh sessions that one
-/// login starts (<c>sid</c> in the token), so the id is that chain's id. The row appears together
-/// with the first session of the chain; push subscriptions hang off it. Sign-ins made before
-/// this migration get their row here.
+/// A device is one sign-in: the chain of refresh sessions one login starts, so its id is the chain's id.
+/// Existing live sign-ins get their row here.
 /// </summary>
 [Migration(29)]
 public class AddDevices : Migration

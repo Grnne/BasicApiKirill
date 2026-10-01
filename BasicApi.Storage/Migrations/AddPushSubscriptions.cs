@@ -3,7 +3,7 @@ using FluentMigrator;
 namespace BasicApi.Storage.Migrations;
 
 /// <summary>
-/// A WebPush subscription per device (plan 2, F7.2): it goes away with the device. One browser
+/// A WebPush subscription per device: it goes away with the device. One browser
 /// subscription belongs to one device only — whoever signs in there next takes it over.
 /// </summary>
 [Migration(30)]

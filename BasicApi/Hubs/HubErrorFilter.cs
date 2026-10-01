@@ -4,10 +4,8 @@ using Microsoft.AspNetCore.SignalR;
 namespace BasicApi.Hubs;
 
 /// <summary>
-/// Hub errors in one place, the analogue of ExceptionHandlingMiddleware for REST.
-/// A domain error from a service becomes a <see cref="HubException"/> with a code
-/// (<see cref="HubErrors"/>): the client gets the same code REST would return.
-/// Everything else is logged as Error and reaches the client without details.
+/// The hub's ExceptionHandlingMiddleware: a domain error becomes a <see cref="HubException"/> with the REST error code;
+/// anything else is logged and reaches the client without details.
 /// </summary>
 public sealed class HubErrorFilter(ILogger<HubErrorFilter> logger) : IHubFilter
 {

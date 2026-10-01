@@ -69,8 +69,7 @@ public class OutboxTests
             .AddScoped<IOutboxRepository>(_ => _outbox)
             .BuildServiceProvider();
         _dispatcher = new OutboxDispatcher(services.GetRequiredService<IServiceScopeFactory>(), _hub, new HubConnectionRegistry(), _signal,
-            new BasicApi.Services.Push.PushQueue(Microsoft.Extensions.Options.Options.Create(new BasicApi.Services.Push.PushOptions()),
-                Microsoft.Extensions.Logging.Abstractions.NullLogger<BasicApi.Services.Push.PushQueue>.Instance),
+            new PushQueue(false, Microsoft.Extensions.Logging.Abstractions.NullLogger<PushQueue>.Instance),
             new ConfigurationBuilder().Build(), _logger);
     }
 
@@ -105,7 +104,7 @@ public class OutboxTests
     [Fact]
     public async Task Dispatched_Events_AreTheSameOnTheWire_AsDirectSends()
     {
-        // The client must not notice that events now go through the outbox.
+        // The client must not notice that events go through the outbox.
         var message = Message(new string('x', 150));
         Guid[] members = [message.SenderId, Guid.NewGuid()];
         var recipient = Guid.NewGuid();
@@ -132,14 +131,7 @@ public class OutboxTests
     [Fact]
     public async Task NewMessage_GoesToThePushQueue_NotToTheHub()
     {
-        var (publicKey, privateKey) = BasicApi.Services.Push.VapidKeys.Generate();
-        var queue = new BasicApi.Services.Push.PushQueue(
-            Microsoft.Extensions.Options.Options.Create(new BasicApi.Services.Push.PushOptions
-            {
-                VapidPublicKey = publicKey,
-                VapidPrivateKey = privateKey
-            }),
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<BasicApi.Services.Push.PushQueue>.Instance);
+        var queue = new PushQueue(true, Microsoft.Extensions.Logging.Abstractions.NullLogger<PushQueue>.Instance);
         var services = new ServiceCollection()
             .AddScoped<IDbSession>(_ => _db)
             .AddScoped<IOutboxRepository>(_ => _outbox)

@@ -1,6 +1,4 @@
 using BasicApi.Extensions;
-using BasicApi.Models.Dto.Auth;
-using BasicApi.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -166,7 +164,6 @@ public class AuthController(AuthService auth) : ControllerBase
     [ProducesResponseType(typeof(ValidateTokenResponseDto), StatusCodes.Status200OK)]
     public IActionResult ValidateToken()
     {
-        // Extract raw token from Authorization header
         var authHeader = Request.Headers.Authorization.ToString();
         var token = authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
             ? authHeader["Bearer ".Length..]

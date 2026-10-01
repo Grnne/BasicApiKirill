@@ -117,7 +117,6 @@ public class StackE2ETests(E2EUsers users)
         await aliceHub.InvokeAsync("JoinChat", chatId);
         await bobHub.InvokeAsync("JoinChat", chatId);
 
-        // Typing…
         await bobHub.InvokeAsync("Typing", chatId, true);
         await aliceEvents.WaitAsync("TypingChanged", a => (Guid)a[1]! == bob.UserId && (bool)a[2]!);
 
@@ -155,7 +154,6 @@ public class StackE2ETests(E2EUsers users)
             .ReadAsync<JsonElement>();
         Assert.Equal(2, at.GetProperty("items").GetArrayLength());
 
-        // Message search
         var search = await (await aliceApi.GetAsync($"api/chats/{chatId}/messages/search?q=hello")).ReadAsync<JsonElement>();
         Assert.Equal(2, search.GetProperty("totalCount").GetInt32());
 
@@ -173,7 +171,7 @@ public class StackE2ETests(E2EUsers users)
             .Select(u => u.GetProperty("payload").GetProperty("text").GetString()));
         Assert.Equal(0, updates[2].GetProperty("payload").GetProperty("unreadCount").GetInt32());
 
-        // The snapshot holds the whole state of the user (plan 2, F8); the sign-in is a device (F7)
+        // The snapshot holds the whole state of the user; the sign-in is a device
         Assert.Equal(bob.UserId, state.GetProperty("me").GetProperty("userId").GetGuid());
         Assert.Equal(JsonValueKind.Array, state.GetProperty("folders").ValueKind);
         Assert.Equal("everybody", state.GetProperty("privacy").GetProperty("lastSeen").GetString());

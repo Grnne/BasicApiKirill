@@ -1,11 +1,12 @@
+using System.IO.Compression;
 using BasicApi.Extensions;
+using BasicApi.Features.Media;
 using BasicApi.Hubs;
 using BasicApi.Middleware;
 using FluentMigrator.Runner;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.Net.Http.Headers;
-using System.IO.Compression;
 
 namespace BasicApi;
 
@@ -41,7 +42,7 @@ public class Program
         // A key pair for push notifications, in the form .env.prod takes it; nothing else starts.
         if (args.Contains("--generate-vapid-keys"))
         {
-            var (publicKey, privateKey) = Services.Push.VapidKeys.Generate();
+            var (publicKey, privateKey) = Features.Push.VapidKeys.Generate();
             Console.WriteLine($"PUSH_VAPID_PUBLIC_KEY={publicKey}");
             Console.WriteLine($"PUSH_VAPID_PRIVATE_KEY={privateKey}");
             return;
@@ -60,8 +61,6 @@ public class Program
         builder.Logging.AddFilter("Microsoft.AspNetCore.SignalR.Internal.DefaultHubDispatcher", LogLevel.None);
 
         // Compression of frontend static files: the bundle shrinks threefold.
-        // While Kestrel serves them, this is its job; once nginx appears,
-        // compression will move there.
         builder.Services.AddResponseCompression(options =>
         {
             options.EnableForHttps = true;
@@ -81,10 +80,8 @@ public class Program
         // so that logs, limits and sessions see the client, not Caddy.
         app.UseForwardedHeaders();
 
-        // Global error handling — first after forwarded headers
         app.UseMiddleware<ExceptionHandlingMiddleware>();
 
-        // Run migrations
         using (var scope = app.Services.CreateScope())
         {
             scope.ServiceProvider
@@ -95,8 +92,8 @@ public class Program
         // several typical attacks: content type spoofing, embedding the page
         // in a foreign iframe, address leakage via Referer and, through CSP,
         // most of the consequences of XSS.
-        var storage = app.Configuration.GetSection(Services.Media.StorageOptions.Section)
-            .Get<Services.Media.StorageOptions>();
+        var storage = app.Configuration.GetSection(StorageOptions.Section)
+            .Get<StorageOptions>();
         var contentSecurityPolicy = ContentSecurityPolicyWith(storage?.PublicOrigin);
         app.Use(async (context, next) =>
         {
@@ -133,7 +130,6 @@ public class Program
             }
         });
 
-        // CORS
         app.UseCors("Default");
 
         // Swagger is on by default only in Development; in production, with the Swagger:Enabled flag.
@@ -150,8 +146,8 @@ public class Program
         app.UseAuthorization();
 
         // The connection lives as long as the sign-in it was opened from, not the access token:
-        // on reconnect the web client sends the same token, and after being closed on its
-        // expiry it was left without events. The end of a sign-in drops connections immediately
+        // on reconnect the web client sends the same token, so closing on its expiry would
+        // leave it without events. The end of a sign-in drops connections immediately
         // (logout, logout-all) or within a minute (HubSessionMonitor).
         app.MapHub<ChatHub>("/hubs/chat");
         app.MapControllers();

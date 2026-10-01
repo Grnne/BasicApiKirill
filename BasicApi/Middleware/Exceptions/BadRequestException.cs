@@ -1,7 +1,5 @@
 namespace BasicApi.Middleware.Exceptions;
 
-/// <summary>
-/// Thrown when the request is malformed or invalid. Maps to 400 Bad Request.
-/// </summary>
+/// <summary>A malformed or invalid request (400).</summary>
 public class BadRequestException(string message, string errorCode = "BAD_REQUEST")
     : DomainException(message, errorCode);

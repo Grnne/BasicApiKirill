@@ -17,10 +17,8 @@ public interface IPrivacyRepository
     Task<IReadOnlyList<Guid>> GetPresencePeersAsync(
         Guid userId, IReadOnlyCollection<Guid>? among = null, CancellationToken ct = default);
 
-    /// <summary>The two users are in some chat together.</summary>
     Task<bool> ShareChatAsync(Guid userId, Guid otherId, CancellationToken ct = default);
 
-    /// <summary>Whether <paramref name="blockerId"/> blocked <paramref name="blockedId"/>.</summary>
     Task<bool> IsBlockedAsync(Guid blockerId, Guid blockedId, CancellationToken ct = default);
 
     /// <summary>Of <paramref name="userIds"/>, those who blocked <paramref name="userId"/>.</summary>

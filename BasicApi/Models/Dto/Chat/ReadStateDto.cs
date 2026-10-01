@@ -12,9 +12,3 @@ public class ReadStateDto
     public int UnreadMentionCount { get; set; }
     public bool MarkedUnread { get; set; }
 }
-
-public class MarkUnreadDto
-{
-    /// <summary>true — mark the chat as unread, false — remove the mark.</summary>
-    public bool MarkedUnread { get; set; }
-}

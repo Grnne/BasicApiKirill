@@ -3,19 +3,9 @@ using FluentMigrator;
 namespace BasicApi.Storage.Migrations;
 
 /// <summary>
-/// All time columns are timestamptz (in sessions it was like that from the start).
-///
-/// The app wrote UTC into timestamp without zone, but Npgsql passes UTC time as
-/// timestamptz, and on write Postgres converted it to the session time zone. When the
-/// server zone is not UTC, message times were shifted; they reached the client without a zone marker,
-/// and the browser read them as local time.
-///
-/// Existing values are treated as UTC - that is how the app wrote them. ALTER TYPE
-/// rewrites the tables and holds an exclusive lock on them: on a large database it is
-/// a maintenance window (see docs/deploy.md).
-///
-/// Default values are now(): the previous (now() at time zone 'utc') yields timestamp
-/// without zone and, after the type change, would again depend on the session time zone.
+/// All time columns become timestamptz: Npgsql sends UTC as timestamptz, and a timestamp column shifted it
+/// to the session time zone. Existing values are read as UTC (that is how the app wrote them).
+/// ALTER TYPE rewrites the tables under an exclusive lock: on a large database it is a maintenance window.
 /// </summary>
 [Migration(8)]
 public class ConvertTimestampsToTimestamptz : Migration
@@ -34,6 +24,7 @@ public class ConvertTimestampsToTimestamptz : Migration
         foreach (var (table, column, hasDefault) in Columns)
         {
             Execute.Sql($"ALTER TABLE {table} ALTER COLUMN {column} TYPE timestamptz USING {column} AT TIME ZONE 'UTC'");
+            // Not now() at time zone 'utc': that yields timestamp without zone and depends on the session zone again.
             if (hasDefault)
                 Execute.Sql($"ALTER TABLE {table} ALTER COLUMN {column} SET DEFAULT now()");
         }

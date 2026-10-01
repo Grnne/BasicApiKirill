@@ -8,7 +8,7 @@ using Moq;
 
 namespace BasicApi.Tests.Services;
 
-/// <summary>Group roles and permissions (plan 2, F3.2, D8).</summary>
+/// <summary>Group roles and permissions.</summary>
 public class GroupRightsTests
 {
     private static string Patch(PermissionsPatchDto patch) => GroupRights.WritePatch(patch)!;

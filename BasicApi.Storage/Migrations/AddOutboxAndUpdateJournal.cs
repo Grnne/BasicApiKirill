@@ -3,17 +3,8 @@ using FluentMigrator;
 namespace BasicApi.Storage.Migrations;
 
 /// <summary>
-/// Reliable event delivery.
-///
-/// outbox holds events that still have to be broadcast through SignalR. They are written in the
-/// same transaction as the change that caused them: the message is saved, so the event about it
-/// is saved too. A background dispatcher broadcasts them and sets processed_at.
-/// A process crash between saving and broadcasting no longer loses the event.
-///
-/// user_updates is a per-user change journal with its own numbering pts (1, 2, 3, ...;
-/// the counter is user_pts). A client that missed events (offline, reconnect) catches up from
-/// the journal: "everything after my pts". Ephemeral events ("typing") and online status are
-/// not written to the journal.
+/// outbox: events written in the same transaction as their change and broadcast later, so a crash loses none.
+/// user_updates: a per-user journal numbered by pts (counter in user_pts) that a client catches up from.
 /// </summary>
 [Migration(10)]
 public class AddOutboxAndUpdateJournal : Migration

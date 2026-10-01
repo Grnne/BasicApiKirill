@@ -1,6 +1,6 @@
 namespace BasicApi.Storage.Entities;
 
-/// <summary>A user's privacy settings (D11).</summary>
+/// <summary>A user's privacy settings.</summary>
 public class UserPrivacy
 {
     public Guid UserId { get; set; }

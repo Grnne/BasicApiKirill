@@ -5,7 +5,7 @@ using BasicApi.Models.Dto.Message;
 namespace BasicApi.Models;
 
 /// <summary>
-/// Formatting rules (D6, R31): what the server accepts in <c>entities</c>. Checked before saving,
+/// Formatting rules: what the server accepts in <c>entities</c>. Checked before saving,
 /// so every client can render stored entities without re-checking them.
 /// </summary>
 public static partial class MessageEntities

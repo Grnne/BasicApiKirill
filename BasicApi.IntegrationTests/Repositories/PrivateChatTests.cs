@@ -28,8 +28,8 @@ public class PrivateChatTests(PostgresFixture db) : DbTest(db)
     [Fact]
     public async Task GetOrCreate_ParallelCalls_CreateExactlyOneChat()
     {
-        // Double click / two devices: previously the "does the chat exist" check and the insert
-        // were not atomic, and the pair ended up with two private chats.
+        // Double click / two devices: a non-atomic "does the chat exist" check and insert
+        // would give the pair two private chats.
         var alice = await Data.UserAsync("alice");
         var bob = await Data.UserAsync("bob");
 
@@ -47,9 +47,7 @@ public class PrivateChatTests(PostgresFixture db) : DbTest(db)
     }
 }
 
-/// <summary>
-/// Migration of the private chat key on a database where duplicates have already appeared.
-/// </summary>
+/// <summary>Migration of the private chat key on a database where duplicates have already appeared.</summary>
 [Collection(PostgresCollection.Name)]
 public class PrivateChatKeyMigrationTests(PostgresFixture db)
 {

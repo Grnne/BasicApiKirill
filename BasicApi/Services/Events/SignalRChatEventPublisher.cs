@@ -7,8 +7,7 @@ using Microsoft.AspNetCore.SignalR;
 namespace BasicApi.Services.Events;
 
 /// <summary>
-/// Broadcasts events through SignalR immediately, in the former format: event names and arguments
-/// are the same as the client received from the hub. For ephemeral events; the rest go through
+/// Broadcasts events through SignalR immediately; used for ephemeral events, the rest go through
 /// <see cref="OutboxChatEventPublisher"/>.
 /// </summary>
 public sealed class SignalRChatEventPublisher(IHubContext<ChatHub> hub, HubConnectionRegistry connections) : IChatEventPublisher

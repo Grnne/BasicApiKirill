@@ -6,14 +6,12 @@ public enum ReadPointerUpdate
     /// <summary>The message is not in this chat — the pointer is untouched.</summary>
     MessageNotFound,
 
-    /// <summary>The pointer moved forward.</summary>
     Moved,
 
     /// <summary>The pointer is already at this message or beyond — we do not move it back.</summary>
     NotMoved
 }
 
-/// <param name="Update">What happened.</param>
 /// <param name="FromSeq">The pointer before the move.</param>
 /// <param name="ToSeq">The pointer after it; equal to <paramref name="FromSeq"/> when it did not move.</param>
 /// <param name="ClearedMark">The chat was marked as unread, and reading it cleared the mark.</param>

@@ -1,10 +1,12 @@
+using BasicApi.Features.Chats;
+using BasicApi.Features.Messages;
 using BasicApi.Middleware.Exceptions;
 using BasicApi.Services;
 using BasicApi.Services.Events;
 using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
-using Microsoft.Extensions.Logging.Abstractions;
 using BasicApi.Tests.TestDoubles;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 
 namespace BasicApi.Tests.Services;
@@ -73,8 +75,7 @@ public class ChatPolicyTests
 
 /// <summary>
 /// Services do not decide on their own what is allowed: any policy denial, with its code,
-/// reaches the client and nothing is executed. This way the new rules of plan 2 (blocks,
-/// group permissions) will work without changes in the services.
+/// reaches the client and nothing is executed.
 /// </summary>
 public class ChatPolicyEnforcementTests
 {

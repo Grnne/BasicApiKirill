@@ -4,7 +4,7 @@ using BasicApi.Storage.Dto;
 namespace BasicApi.Services;
 
 /// <summary>
-/// Status of a message for the one who looks at it (D1): of one's own — how far the other members
+/// Status of a message for the one who looks at it: of one's own — how far the other members
 /// got; of someone else's — whether the viewer has read it.
 /// </summary>
 public static class MessageStatuses

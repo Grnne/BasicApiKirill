@@ -3,7 +3,7 @@ using FluentMigrator;
 namespace BasicApi.Storage.Migrations;
 
 /// <summary>
-/// Avatars of users and groups (plan 2, F4.4): a photo from <c>attachments</c>, like any other
+/// Avatars of users and groups: a photo from <c>attachments</c>, like any other
 /// file. Removing the file only clears the avatar.
 /// </summary>
 [Migration(25)]

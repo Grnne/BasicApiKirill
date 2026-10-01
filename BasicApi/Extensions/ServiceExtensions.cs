@@ -2,12 +2,20 @@ using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using System.Threading.RateLimiting;
+using BasicApi.Features.Auth;
+using BasicApi.Features.Chats;
+using BasicApi.Features.Devices;
+using BasicApi.Features.Folders;
+using BasicApi.Features.Groups;
+using BasicApi.Features.Media;
+using BasicApi.Features.Messages;
+using BasicApi.Features.Push;
+using BasicApi.Features.Sync;
+using BasicApi.Features.Users;
 using BasicApi.Hubs;
 using BasicApi.Middleware.Exceptions;
 using BasicApi.Services;
 using BasicApi.Services.Events;
-using BasicApi.Services.Media;
-using BasicApi.Services.Push;
 using BasicApi.Storage;
 using BasicApi.Storage.Interfaces;
 using BasicApi.Storage.Migrations;
@@ -15,10 +23,8 @@ using BasicApi.Storage.Repositories;
 using BasicApi.Storage.Services;
 using FluentMigrator.Runner;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
@@ -79,16 +85,13 @@ public static class ServiceExtensions
         services.AddApiRateLimiting(configuration);
         services.AddSignalR(options =>
         {
-            // Domain errors → HubException with a code; anything else goes to the log.
             options.AddFilter<HubErrorFilter>();
-            // Allow parallel handling of calls
             options.MaximumParallelInvocationsPerClient = 2;
             // Exception text goes to the client only in development: in production it
             // reveals internals (SQL, paths, class names).
             options.EnableDetailedErrors = environment.IsDevelopment();
-            // Maximum size of an incoming message. Commands are moving to REST
-            // (POST /api/chats/{id}/messages, /typing); once the front end moves over, the hub
-            // will only need a few KB — then lower this.
+            // Sized for SendMessage over the hub; once clients send commands only over REST,
+            // a few KB will do — lower it then.
             options.MaximumReceiveMessageSize = 128 * 1024;
             // Limit the buffer for commands to avoid piling up hung calls
             options.StreamBufferCapacity = 10;
@@ -116,41 +119,24 @@ public static class ServiceExtensions
         services.AddScoped<IFolderRepository, FolderRepository>();
         services.AddScoped<IDeviceRepository, DeviceRepository>();
 
-        // Domain services: controllers and the hub are only adapters over them.
         services.AddScoped<IMembershipService, MembershipService>();
         services.Configure<MessageOptions>(configuration.GetSection(MessageOptions.Section));
-        services.Configure<GroupOptions>(configuration.GetSection(GroupOptions.Section));
         services.AddScoped<IChatPolicy, ChatPolicy>();
-        services.AddScoped<IChatService, ChatService>();
-        services.AddScoped<IMessageService, MessageService>();
-        services.AddScoped<IReactionService, ReactionService>();
-        services.AddScoped<IReadStateService, ReadStateService>();
-        services.AddScoped<IDraftService, DraftService>();
-        services.AddScoped<IGroupService, GroupService>();
-        // Files: kept in S3-compatible storage; without Storage:Endpoint media is off (503).
-        services.Configure<StorageOptions>(configuration.GetSection(StorageOptions.Section));
-        services.Configure<MediaOptions>(configuration.GetSection(MediaOptions.Section));
-        services.AddSingleton<IObjectStorage, S3ObjectStorage>();
-        services.AddScoped<IMediaService, MediaService>();
-        services.AddSingleton<MediaCleanup>();
-        services.AddHostedService(sp => sp.GetRequiredService<MediaCleanup>());
         services.AddScoped<IPresenceService, PresenceService>();
-        services.AddScoped<IUserService, UserService>();
-        services.AddScoped<IProfileService, ProfileService>();
-        services.AddScoped<IPrivacyService, PrivacyService>();
         services.AddScoped<IChatStateService, ChatStateService>();
-        services.AddScoped<IFolderService, FolderService>();
-        services.AddScoped<ISyncService, SyncService>();
-        services.AddScoped<AuthService>();
-        services.AddScoped<ISessionService, SessionService>();
-        services.AddScoped<IDeviceService, DeviceService>();
-        // Push: WebPush with the VAPID keys from Push:*; without them push is off.
-        services.Configure<PushOptions>(configuration.GetSection(PushOptions.Section));
-        services.AddScoped<IPushService, PushService>();
-        services.AddSingleton<PushQueue>();
-        services.AddHttpClient<IPushTransport, WebPushTransport>(client => client.Timeout = TimeSpan.FromSeconds(10));
-        services.AddSingleton<PushSender>();
-        services.AddHostedService(sp => sp.GetRequiredService<PushSender>());
+
+        services
+            .AddChatsFeature()
+            .AddMessagesFeature()
+            .AddGroupsFeature(configuration)
+            .AddMediaFeature(configuration)
+            .AddUsersFeature()
+            .AddFoldersFeature()
+            .AddSyncFeature()
+            .AddAuthFeature()
+            .AddDevicesFeature()
+            .AddPushFeature(configuration);
+
         // Events: messages and new chats go through the outbox in the transaction of the change,
         // "typing" and online go out immediately (ephemeral).
         services.AddScoped<SignalRChatEventPublisher>();
@@ -164,9 +150,6 @@ public static class ServiceExtensions
         services.AddSingleton<IUserStatusService, UserStatusService>();
         services.AddSingleton<HubConnectionRegistry>();
         services.AddHostedService<HubSessionMonitor>();
-
-        // JWT
-        services.AddScoped<IJwtService, JwtService>();
 
         // Behind a reverse proxy the connection address is the proxy's address. The real
         // client IP (for limits and sessions) is taken from X-Forwarded-For, but only if the
@@ -185,7 +168,6 @@ public static class ServiceExtensions
         services.AddHealthChecks()
             .AddCheck<PostgresHealthCheck>("postgres", tags: [ReadyTag], timeout: TimeSpan.FromSeconds(3));
 
-        // FluentMigrator
         services.AddFluentMigratorCore()
             .ConfigureRunner(rb => rb
                 .AddPostgres()
@@ -258,8 +240,6 @@ public static class ServiceExtensions
                     },
                     OnForbidden = context =>
                     {
-                        // Suppress the default empty 403 from .NET and throw instead,
-                        // so ExceptionHandlingMiddleware answers with ProblemDetails
                         throw new ForbiddenException("Access denied", "ACCESS_DENIED");
                     }
                 };
@@ -370,10 +350,7 @@ public static class ServiceExtensions
         QueueLimit = 0
     };
 
-    /// <summary>
-    /// Maps ASP.NET default validation error messages to machine-readable codes.
-    /// This allows clients to handle validation errors programmatically without parsing human text.
-    /// </summary>
+    /// <summary>Maps ASP.NET validation messages to machine-readable codes, so clients do not parse human text.</summary>
     private static string GetValidationErrorCode(string errorMessage)
     {
         if (errorMessage.Contains("required", StringComparison.OrdinalIgnoreCase) ||

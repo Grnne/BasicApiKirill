@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace BasicApi.Models.Dto.Chat;
 
-/// <summary>What a member of a group may do (D8). In answers — all fields are set.</summary>
+/// <summary>What a member of a group may do. In answers — all fields are set.</summary>
 public class GroupPermissionsDto
 {
     public bool SendMessages { get; set; }
@@ -30,35 +30,6 @@ public class PermissionsPatchDto
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public bool? RemoveMembers { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public bool? DeleteMessages { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public bool? AddAdmins { get; set; }
-}
-
-public class CreateGroupDto
-{
-    /// <summary>1–128 characters after trimming.</summary>
-    public string? Title { get; set; }
-
-    /// <summary>Who to add besides the creator; may be empty.</summary>
-    public List<Guid>? MemberIds { get; set; }
-}
-
-public class AddMembersDto
-{
-    public List<Guid>? UserIds { get; set; }
-}
-
-public class UpdateGroupDto
-{
-    /// <summary>New title, 1–128 characters after trimming; null — unchanged.</summary>
-    public string? Title { get; set; }
-
-    /// <summary>Changes to the permissions members have by default; null — unchanged.</summary>
-    public PermissionsPatchDto? MemberPermissions { get; set; }
-}
-
-public class SetRoleDto
-{
-    /// <summary><c>admin</c>, <c>member</c>, or <c>owner</c> — hand the group over.</summary>
-    public string? Role { get; set; }
 }
 
 /// <summary>A member of a group as others see them.</summary>
@@ -116,38 +87,4 @@ public class ChatUpdatedDto
 public class ChatDeletedDto
 {
     public Guid ChatId { get; set; }
-}
-
-/// <summary>An entry of the group's action log.</summary>
-public class AuditEntryDto
-{
-    public long Id { get; set; }
-
-    /// <summary>
-    /// <c>group_created</c>, <c>title_changed</c>, <c>member_permissions_changed</c>,
-    /// <c>members_added</c>, <c>member_removed</c>, <c>member_left</c>, <c>role_changed</c>,
-    /// <c>permissions_changed</c>, <c>ownership_transferred</c>, <c>message_deleted</c>.
-    /// </summary>
-    public string Action { get; set; } = string.Empty;
-
-    /// <summary>Who did it; null — the account is gone.</summary>
-    public Guid? ActorId { get; set; }
-
-    /// <summary>Whom it concerned, if anyone.</summary>
-    public Guid? TargetUserId { get; set; }
-
-    /// <summary>Details: the title, the role, the permissions, the message.</summary>
-    public System.Text.Json.JsonElement? Data { get; set; }
-
-    public DateTime CreatedAt { get; set; }
-}
-
-public class AuditPageDto
-{
-    public List<AuditEntryDto> Items { get; set; } = [];
-
-    /// <summary>Pass as <c>cursor</c> for older entries; null — no more.</summary>
-    public string? NextCursor { get; set; }
-
-    public bool HasMore { get; set; }
 }

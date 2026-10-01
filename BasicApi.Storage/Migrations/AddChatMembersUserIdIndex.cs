@@ -3,13 +3,8 @@ using FluentMigrator;
 namespace BasicApi.Storage.Migrations;
 
 /// <summary>
-/// Index for "all chats of a user" — the chat list, presence fan-out and hub
-/// connect all start from chat_members by user_id. The primary key
-/// (chat_id, user_id) cannot serve that lookup, so without this index every
-/// such query scans the whole table.
-///
-/// CONCURRENTLY does not lock writes on a live database, but cannot run inside
-/// a transaction — hence TransactionBehavior.None.
+/// "All chats of a user" (chat list, presence, hub connect): the (chat_id, user_id) key cannot serve it.
+/// CONCURRENTLY does not block writes but cannot run in a transaction, hence TransactionBehavior.None.
 /// </summary>
 [Migration(5, TransactionBehavior.None)]
 public class AddChatMembersUserIdIndex : Migration

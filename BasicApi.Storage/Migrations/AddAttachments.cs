@@ -3,11 +3,8 @@ using FluentMigrator;
 namespace BasicApi.Storage.Migrations;
 
 /// <summary>
-/// Files (plan 2, F4.1, A3, D2). A file lives apart from messages: messages, avatars and forwards
-/// only point to it. The object itself is in S3 storage under <c>storage_key</c>; the row keeps
-/// what the server checked after the upload (size, sha256, type, picture size) and where the
-/// file is: <c>pending</c> — waiting for the upload, <c>stored</c>, <c>expired</c> — the original
-/// was removed by the retention policy, the preview is kept.
+/// Files, kept in S3 under <c>storage_key</c>; messages and avatars only point to them.
+/// <c>expired</c>: the retention policy removed the original, the preview is kept.
 /// </summary>
 [Migration(22)]
 public class AddAttachments : Migration

@@ -5,9 +5,8 @@ using BasicApi.Models.Dto.Message;
 namespace BasicApi.Services.Events;
 
 /// <summary>
-/// Events for clients. Domain services report what happened and do not know
-/// how it is delivered: hub event names, groups and the payload format are
-/// the implementation's concern.
+/// Events for clients: services report what happened; hub event names, groups and the payload
+/// format are the implementation's concern.
 /// </summary>
 public interface IChatEventPublisher
 {

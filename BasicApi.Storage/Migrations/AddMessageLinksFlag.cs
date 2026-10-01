@@ -3,9 +3,8 @@ using FluentMigrator;
 namespace BasicApi.Storage.Migrations;
 
 /// <summary>
-/// The "links" tab of a chat's gallery (plan 2, F4.3): whether a message has a web address in its
-/// text or a link in its formatting — computed by the database, so edits keep it right. A partial
-/// index keeps the tab one index range. Rewrites <c>messages</c>, like migration 12.
+/// has_links for the gallery's "links" tab, computed by the database so edits keep it right; a partial index
+/// keeps the tab one index range. Rewrites <c>messages</c>.
 /// </summary>
 [Migration(24)]
 public class AddMessageLinksFlag : Migration

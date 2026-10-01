@@ -1,16 +1,14 @@
 using BasicApi.Models.Dto.Chat;
-using BasicApi.Models.Dto.Users;
 using BasicApi.Models.Dto.Message;
+using BasicApi.Models.Dto.Users;
 using BasicApi.Storage;
 using BasicApi.Storage.Interfaces;
 
 namespace BasicApi.Services.Events;
 
 /// <summary>
-/// Events via the outbox: written into the current transaction together with the change that
-/// caused them, and into the recipients' change journal (for /sync). They are dispatched by
-/// <see cref="OutboxDispatcher"/> in the previous format. "Typing" and online are ephemeral:
-/// they go out immediately and are not written to the journal.
+/// Events via the outbox: written in the same transaction as the change that caused them, and into the
+/// recipients' journal (for /sync). "Typing" and online are ephemeral: sent at once, not journaled.
 /// </summary>
 public sealed class OutboxChatEventPublisher(
     IDbSession db,
@@ -27,7 +25,7 @@ public sealed class OutboxChatEventPublisher(
             await EnqueueAsync(UpdateTypes.MessageCreated, ct,
                 HubSend.Group(message.ChatId, "MessageCreated", message),
                 HubSend.Users(memberIds, "ChatListUpdated", message.ChatId, SignalRChatEventPublisher.Preview(message)),
-                HubSend.Push(message.ChatId, message.SenderId, Push.PushNotifications.Of(message)));
+                HubSend.Push(message.ChatId, message.SenderId, PushNotifications.Of(message)));
             return true;
         }, ct: ct);
 

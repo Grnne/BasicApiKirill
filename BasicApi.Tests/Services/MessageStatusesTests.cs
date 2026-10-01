@@ -4,7 +4,7 @@ using BasicApi.Storage.Dto;
 
 namespace BasicApi.Tests.Services;
 
-/// <summary>Message status for the viewer (plan 2, F2.1, D1).</summary>
+/// <summary>Message status for the viewer.</summary>
 public class MessageStatusesTests
 {
     private static readonly Guid Me = Guid.NewGuid();

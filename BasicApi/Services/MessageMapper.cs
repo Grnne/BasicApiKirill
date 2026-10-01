@@ -1,3 +1,4 @@
+using System.Text.Json;
 using BasicApi.Models;
 using BasicApi.Models.Dto.Message;
 using BasicApi.Services.Events;
@@ -22,7 +23,7 @@ public static class MessageMapper
         Type = m.Type,
         EditedAt = m.EditedAt,
         Entities = MessageEntities.Deserialize(m.EntitiesJson),
-        Reactions = ReactionService.Summary(m.ReactionsJson),
+        Reactions = Reactions(m.ReactionsJson),
         MyReaction = m.MyReaction,
         ReplyTo = m.ReplyToMessageId is { } replyId
             ? new MessageReplyDto
@@ -42,8 +43,14 @@ public static class MessageMapper
             }
             : null,
         Action = SystemMessages.Read(m.ContentJson),
-        Attachments = Media.MessageAttachments.Read(m.AttachmentsJson)
+        Attachments = MessageAttachments.Read(m.AttachmentsJson)
     };
+
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+
+    /// <summary>The reaction counts of a message as the queries return them (JSON).</summary>
+    public static List<ReactionCountDto> Reactions(string? json) =>
+        string.IsNullOrEmpty(json) ? [] : JsonSerializer.Deserialize<List<ReactionCountDto>>(json, Json) ?? [];
 
     private static string Preview(string? text) =>
         text is null ? string.Empty

@@ -1,6 +1,6 @@
 namespace BasicApi.Storage.Interfaces;
 
-/// <summary>How a member keeps their chats: pinned, archived, muted (D9).</summary>
+/// <summary>How a member keeps their chats: pinned, archived, muted.</summary>
 public interface IChatStateRepository
 {
     /// <summary>Serializes changes to one user's pins: the limit holds under concurrent pins.</summary>
@@ -18,10 +18,7 @@ public interface IChatStateRepository
     /// <summary>Mutes until the moment, or unmutes (null); false when it already was so.</summary>
     Task<bool> SetMutedUntilAsync(Guid chatId, Guid userId, DateTime? mutedUntil, CancellationToken ct = default);
 
-    /// <summary>
-    /// A new message brings the chat back from the archive of members who have not muted it (D9);
-    /// returns whose.
-    /// </summary>
+    /// <summary>A new message brings the chat back from the archive of members who have not muted it; returns whose.</summary>
     Task<IReadOnlyList<Guid>> UnarchiveOnMessageAsync(Guid chatId, Guid senderId, DateTime now, CancellationToken ct = default);
 
     /// <summary>The member's state of the chat; null for a non-member.</summary>

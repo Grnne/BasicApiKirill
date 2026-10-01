@@ -1,7 +1,7 @@
 namespace BasicApi.Models.Dto.Users;
 
 /// <summary>
-/// Privacy settings (D11): <c>everybody</c>, <c>contacts</c> (those who share a chat with the user) or
+/// Privacy settings: <c>everybody</c>, <c>contacts</c> (those who share a chat with the user) or
 /// <c>nobody</c>. In a request a null field is left as it is.
 /// </summary>
 public class PrivacySettingsDto

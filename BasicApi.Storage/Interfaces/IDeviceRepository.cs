@@ -42,7 +42,6 @@ public sealed class Device
 {
     public Guid Id { get; set; }
 
-    /// <summary>When the user signed in on it.</summary>
     public DateTime SignedInAt { get; set; }
 
     /// <summary>The last token refresh: an open client does it every few minutes.</summary>
@@ -50,7 +49,6 @@ public sealed class Device
 
     public string? UserAgent { get; set; }
 
-    /// <summary>The device has a push subscription.</summary>
     public bool PushEnabled { get; set; }
 }
 

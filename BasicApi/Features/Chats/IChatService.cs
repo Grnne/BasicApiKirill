@@ -1,0 +1,51 @@
+using BasicApi.Models.Dto.Chat;
+using BasicApi.Models.Dto.Message;
+
+namespace BasicApi.Features.Chats;
+
+public interface IChatService
+{
+    Task<List<ChatListItemDto>> GetUserChatsAsync(Guid userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// The user's chats a page at a time, by last activity; <paramref name="cursor"/> is the
+    /// <c>nextCursor</c> of the previous page. Errors: 400 <c>INVALID_CURSOR</c>.
+    /// </summary>
+    Task<CursorPaginatedResponse<ChatListItemDto>> GetUserChatsPageAsync(
+        Guid userId, string? cursor, int limit, CancellationToken ct = default, bool archived = false);
+    Task<ChatDetailDto> GetChatDetailsAsync(Guid chatId, Guid userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns one chat in the same shape as an entry of <see cref="GetUserChatsAsync"/>,
+    /// resolved for the given viewer. Lets a client that only knows a chatId
+    /// (e.g. after a push or a reconnect) render the chat without refetching the whole list.
+    /// Throws NotFoundException when the chat does not exist and
+    /// ForbiddenException when the caller is not a member.
+    /// </summary>
+    Task<ChatListItemDto> GetChatListItemAsync(Guid chatId, Guid userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the private chat with another user, creating it if needed.
+    /// A new chat is announced to the other user (<c>ChatCreated</c>, built from their
+    /// point of view) and both learn each other's presence.
+    /// Errors: 400 <c>SELF_CHAT</c>, 404 <c>USER_NOT_FOUND</c> (missing or deactivated).
+    /// </summary>
+    Task<PrivateChatResult> GetOrCreatePrivateChatAsync(Guid userId, Guid otherUserId, CancellationToken ct = default);
+
+    /// <summary>
+    /// The user's "Saved Messages" chat (type <c>saved</c>), created on first access. The user's
+    /// other devices learn about a new one through sync, like about a chat they created.
+    /// </summary>
+    Task<PrivateChatResult> GetOrCreateSavedChatAsync(Guid userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Searches groups by title and private chats by the companion's display name or username (ILIKE).
+    /// <paramref name="type"/> is "group", "private", or null/empty for both.
+    /// </summary>
+    Task<SearchChatsResponseDto> SearchChatsAsync(
+        Guid userId, string query, string? type, int limit, CancellationToken ct = default);
+}
+
+/// <param name="Chat">The chat as seen by the caller.</param>
+/// <param name="Created">True when the chat did not exist before this call.</param>
+public sealed record PrivateChatResult(ChatListItemDto Chat, bool Created);

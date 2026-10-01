@@ -3,16 +3,8 @@ using FluentMigrator;
 namespace BasicApi.Storage.Migrations;
 
 /// <summary>
-/// Case-insensitive usernames and emails. "Alice" and "alice" used to be two
-/// different accounts, and login depended on typing the exact case.
-///
-/// username_normalized / email_normalized are generated columns (lower(...)),
-/// so no code path can forget to fill them; unique indexes on them make the
-/// database the single source of truth for "is this name taken".
-///
-/// If the existing data already has case-only duplicates the migration stops
-/// with a report of them instead of picking a winner itself: which account is
-/// the real one is a human decision (rename or merge, then deploy again).
+/// Case-insensitive usernames and emails: generated lower(...) columns under unique indexes.
+/// Existing case-only duplicates stop the migration with a report: which account is real is a human decision.
 /// </summary>
 [Migration(7)]
 public class AddNormalizedUserKeys : Migration

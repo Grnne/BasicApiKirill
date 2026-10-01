@@ -6,7 +6,7 @@ using BasicApi.Storage.Interfaces;
 
 namespace BasicApi.Services;
 
-/// <summary>How the user keeps chats: pinned, archived, muted (D9). The other devices follow by events.</summary>
+/// <summary>How the user keeps chats: pinned, archived, muted. The other devices follow by events.</summary>
 public interface IChatStateService
 {
     /// <summary>

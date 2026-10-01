@@ -1,9 +1,6 @@
 namespace BasicApi.Storage.Dto;
 
-/// <summary>
-/// Message entity joined with sender's display name — returned from batched queries
-/// to avoid N+1 lookups for each message's sender name.
-/// </summary>
+/// <summary>A message joined with its sender's name and reply/forward details in one query, to avoid N+1 lookups.</summary>
 public class MessageWithSender
 {
     public Guid Id { get; set; }

@@ -3,13 +3,8 @@ using FluentMigrator;
 namespace BasicApi.Storage.Migrations;
 
 /// <summary>
-/// Editing and deleting messages (plan 2, F1.1).
-///
-/// type — the kind of message; only 'text' for now, media and system messages come later.
-/// edited_at — when the text was last changed.
-/// deleted_at replaces is_deleted: a message deleted for everyone stays as a tombstone
-/// (its seq, replies and read pointers stay valid), its text is wiped.
-/// hidden_messages — "delete for me": the message disappears only for that user.
+/// Editing and deleting: a message deleted for everyone stays as a tombstone with its text wiped (its seq,
+/// replies and read pointers stay valid); hidden_messages is "delete for me".
 /// </summary>
 [Migration(13)]
 public class AddMessageEditAndDelete : Migration

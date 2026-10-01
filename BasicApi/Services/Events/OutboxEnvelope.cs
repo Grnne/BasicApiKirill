@@ -1,11 +1,11 @@
 using System.Text.Json;
+using BasicApi.Models.Dto.Message;
 
 namespace BasicApi.Services.Events;
 
 /// <summary>
-/// What to dispatch for a single outbox event: one or more SignalR sends.
-/// The arguments are stored as ready-made JSON — the dispatcher hands them to the hub as is, and the client
-/// receives the same as it would with a direct send.
+/// What to dispatch for one outbox event: SignalR sends whose arguments are stored as ready-made JSON,
+/// so the client receives the same as with a direct send.
 /// </summary>
 public sealed record OutboxEnvelope(IReadOnlyList<HubSend> Sends)
 {
@@ -41,7 +41,7 @@ public sealed record HubSend(string Target, IReadOnlyList<string> Ids, string Me
         new("leave-group", [.. userIds.Select(id => id.ToString())], chatId.ToString(), []);
 
     /// <summary>Recipients are chosen when it is sent: members, their devices and settings then.</summary>
-    public static HubSend Push(Guid chatId, Guid senderId, Models.Dto.Push.PushNotificationDto notification) =>
+    public static HubSend Push(Guid chatId, Guid senderId, PushNotificationDto notification) =>
         new("push", [chatId.ToString(), senderId.ToString()], "Push", ToJson([notification]));
 
     private static JsonElement[] ToJson(object?[] args) =>

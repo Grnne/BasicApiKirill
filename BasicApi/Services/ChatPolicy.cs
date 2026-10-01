@@ -16,12 +16,7 @@ public sealed record PolicyDecision(bool Allowed, string? Code = null, string? R
     public static PolicyDecision Deny(string code, string reason) => new(false, code, reason);
 }
 
-/// <summary>
-/// The single place that decides who may do what in a chat. Services ask the
-/// policy and do not check membership themselves. The rules: membership, the author of a message,
-/// and in groups the member's role and permissions (D8); blocks and privacy settings (plan 2, F5)
-/// will go here without touching the calling code.
-/// </summary>
+/// <summary>The single place that decides who may do what in a chat; services ask it instead of checking membership themselves.</summary>
 public interface IChatPolicy
 {
     /// <summary>Read history, search, see the member list, subscribe to chat events, mark as read.</summary>
@@ -54,7 +49,7 @@ public interface IChatPolicy
         Guid userId, Guid chatId, GroupAction action, ChatMember? target = null, CancellationToken ct = default);
 
     /// <summary>
-    /// Start a private chat with <paramref name="otherId"/> (D11): by their <c>messages</c> setting, and
+    /// Start a private chat with <paramref name="otherId"/>: by their <c>messages</c> setting, and
     /// not when they blocked the user. An existing chat is not asked about.
     /// </summary>
     Task<PolicyDecision> CanStartPrivateChatAsync(Guid userId, Guid otherId, CancellationToken ct = default);
@@ -236,7 +231,7 @@ public sealed class ChatPolicy(
         privacy is null || candidateIds.Count == 0 ? [] : await privacy.GetGroupAddRefusalsAsync(userId, candidateIds, ct);
 
     /// <remarks>
-    /// Presence is mutual: contacts who neither hide it (D11) nor blocked one another. Without the
+    /// Presence is mutual: contacts who neither hide it nor blocked one another. Without the
     /// privacy store (unit tests) — all contacts.
     /// </remarks>
     public async Task<IReadOnlyCollection<Guid>> GetPresenceAudienceAsync(Guid userId, CancellationToken ct = default) =>

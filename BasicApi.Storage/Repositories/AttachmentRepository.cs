@@ -105,7 +105,6 @@ public sealed class AttachmentRepository(IDbSession db) : IAttachmentRepository
             LIMIT @limit",
             new { startedBefore, limit }, ct);
 
-    /// <summary>Nothing points to the file: no message, no user or group avatar.</summary>
     private const string Unreferenced = @"
         NOT EXISTS (SELECT 1 FROM message_attachments ma WHERE ma.attachment_id = a.id)
         AND NOT EXISTS (SELECT 1 FROM users u WHERE u.avatar_attachment_id = a.id)

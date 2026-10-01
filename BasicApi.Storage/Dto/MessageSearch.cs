@@ -1,6 +1,6 @@
 namespace BasicApi.Storage.Dto;
 
-/// <summary>What the global search looks for (D10); null filters are not applied.</summary>
+/// <summary>What the global search looks for; null filters are not applied.</summary>
 public sealed class MessageSearchFilter
 {
     public Guid? ChatId { get; set; }

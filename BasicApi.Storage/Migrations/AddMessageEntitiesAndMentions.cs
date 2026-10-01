@@ -3,14 +3,8 @@ using FluentMigrator;
 namespace BasicApi.Storage.Migrations;
 
 /// <summary>
-/// Formatting and mentions (plan 2, F1.3).
-///
-/// entities — formatting of the text: type, offset and length in UTF-16 code units, plus
-/// the link, the mentioned user or the code language. The server checks them before saving.
-///
-/// message_mentions — who is mentioned in which message. The unread-mentions counter is counted
-/// from it like the unread counter: mentions after the member's read pointer. chat_id and seq
-/// are copied from the message so that the count needs no join to find them.
+/// entities: text formatting (offset and length in UTF-16 code units). message_mentions: who is mentioned where;
+/// chat_id and seq are copied from the message so the unread-mentions count needs no join.
 /// </summary>
 [Migration(15)]
 public class AddMessageEntitiesAndMentions : Migration
