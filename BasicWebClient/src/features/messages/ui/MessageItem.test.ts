@@ -83,3 +83,25 @@ describe('the edit window', () => {
     vi.useRealTimers()
   })
 })
+
+describe('the menu from the keyboard', () => {
+  it('opens with the first action focused; Escape closes it and returns to its button', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    useChatsStore().replaceAll([chat()], [])
+    const wrapper = mount(MessageItem, {
+      props: { message: message({ senderId: BOB, text: 'привет' }), meId: ME },
+      global: { plugins: [pinia] },
+      attachTo: document.body,
+    })
+
+    await wrapper.get('button.more').trigger('click')
+    await flushPromises()
+    expect(document.activeElement?.textContent).toBe('Ответить')
+
+    await wrapper.get('.menu').trigger('keydown', { key: 'Escape' })
+
+    expect(wrapper.find('.menu').exists()).toBe(false)
+    expect(document.activeElement).toBe(wrapper.get('button.more').element)
+  })
+})

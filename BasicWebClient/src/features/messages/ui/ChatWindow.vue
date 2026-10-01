@@ -58,7 +58,7 @@ watch(
 <template>
   <section v-if="chatList.selectedChat" class="window">
     <header class="head">
-      <button type="button" class="back" title="К списку чатов" @click="chatList.deselect()">
+      <button type="button" class="back" title="К списку чатов" aria-label="К списку чатов" @click="chatList.deselect()">
         ←
       </button>
       <button type="button" class="about" title="О чате" @click="emit('info')">
@@ -66,7 +66,7 @@ watch(
         <span class="title">{{ chatTitle(chatList.selectedChat) }}</span>
         <span :class="['subtitle', { typing: isTyping }]">{{ subtitle }}</span>
       </button>
-      <button type="button" class="search-toggle" title="Поиск в чате" @click="searching = !searching">🔍</button>
+      <button type="button" class="search-toggle" title="Поиск в чате" aria-label="Поиск в чате" @click="searching = !searching">🔍</button>
     </header>
 
     <ChatSearch v-if="searching" @close="searching = false" />

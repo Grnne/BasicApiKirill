@@ -7,10 +7,12 @@ import * as usersApi from '@/entities/user/api'
 import { describeError } from '@/shared/api/problem'
 import type { AuditEntryDto } from '@/shared/api/schema'
 import { formatDay, formatTime } from '@/shared/lib/date'
+import { useRestoreFocus } from '@/shared/ui/useRestoreFocus'
 import { auditText } from '../lib/audit'
 
 const props = defineProps<{ chatId: string }>()
 const emit = defineEmits<{ close: [] }>()
+useRestoreFocus()
 
 const details = useChatDetailsStore()
 /** Names of people no longer in the group: the log outlives memberships. */
@@ -75,7 +77,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
     <div class="dialog" role="dialog" aria-modal="true" aria-label="Журнал действий">
       <header class="head">
         <h2 class="heading">Журнал действий</h2>
-        <button type="button" class="close" title="Закрыть" @click="emit('close')">✕</button>
+        <button type="button" class="close" title="Закрыть" aria-label="Закрыть" @click="emit('close')">✕</button>
       </header>
 
       <ol class="list">

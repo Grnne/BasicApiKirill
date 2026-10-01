@@ -4,12 +4,14 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { chatTitle } from '@/entities/chat/lib'
 import { useChatsStore } from '@/entities/chat/model/chats.store'
 import type { FolderDto } from '@/shared/api/schema'
+import { useRestoreFocus } from '@/shared/ui/useRestoreFocus'
 import { useChatListStore } from '../model/chat-list.store'
 
 const MAX_TITLE = 64
 
 const props = defineProps<{ folder: FolderDto | null }>()
 const emit = defineEmits<{ close: [] }>()
+useRestoreFocus()
 
 const store = useChatListStore()
 const chats = useChatsStore()

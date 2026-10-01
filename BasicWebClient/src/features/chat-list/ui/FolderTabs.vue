@@ -50,7 +50,7 @@ function onDrop(target: FolderDto): void {
     >
       {{ folder.title }}
     </button>
-    <button type="button" class="tab add" title="Новая папка" @click="editing = null">+</button>
+    <button type="button" class="tab add" title="Новая папка" aria-label="Новая папка" @click="editing = null">+</button>
 
     <FolderEditor v-if="editing !== undefined" :folder="editing" @close="editing = undefined" />
   </nav>

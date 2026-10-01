@@ -7,11 +7,13 @@ import { useConfigStore } from '@/entities/config/config.store'
 import { AVATAR_ACCEPT, rejectAvatar, uploadPhoto } from '@/entities/media/photo'
 import type { UserSearchResult } from '@/entities/user/types'
 import { useNoticesStore } from '@/shared/ui/notices.store'
+import { useRestoreFocus } from '@/shared/ui/useRestoreFocus'
 import { createGroupWithPhoto } from '../model/create-group'
 import { describeAddError } from '../lib/refusal'
 import UserPicker from './UserPicker.vue'
 
 const emit = defineEmits<{ created: [chatId: string]; cancel: [] }>()
+useRestoreFocus()
 
 const config = useConfigStore()
 const chats = useChatsStore()

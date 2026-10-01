@@ -8,9 +8,11 @@ import AvatarCircle from '@/entities/media/ui/AvatarCircle.vue'
 import { describeError } from '@/shared/api/problem'
 import type { GroupMemberDto, PermissionsPatchDto } from '@/shared/api/schema'
 import ConfirmDialog from '@/shared/ui/ConfirmDialog.vue'
+import { useRestoreFocus } from '@/shared/ui/useRestoreFocus'
 
 const props = defineProps<{ chatId: string; meId: string; userId: string }>()
 const emit = defineEmits<{ close: [] }>()
+useRestoreFocus()
 
 const details = useChatDetailsStore()
 

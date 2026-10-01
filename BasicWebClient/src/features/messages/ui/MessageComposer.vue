@@ -443,12 +443,12 @@ function onKeydown(event: KeyboardEvent): void {
     <div v-if="store.editing" class="context">
       <span class="label">Редактирование</span>
       <span class="quote">{{ store.editing.text }}</span>
-      <button type="button" class="close" title="Отменить (Esc)" @click="store.cancelEdit()">✕</button>
+      <button type="button" class="close" title="Отменить (Esc)" aria-label="Отменить правку" @click="store.cancelEdit()">✕</button>
     </div>
     <div v-else-if="store.replyTo" class="context">
       <span class="label">Ответ {{ store.replyTo.senderName }}</span>
       <span class="quote">{{ hideSpoilers(store.replyTo.text, store.replyTo.entities) }}</span>
-      <button type="button" class="close" title="Отменить (Esc)" @click="store.cancelReply()">✕</button>
+      <button type="button" class="close" title="Отменить (Esc)" aria-label="Отменить ответ" @click="store.cancelReply()">✕</button>
     </div>
 
     <div class="tools" role="toolbar" aria-label="Форматирование">
@@ -468,6 +468,7 @@ function onKeydown(event: KeyboardEvent): void {
         type="button"
         class="tool attach"
         :title="mayAttach ? 'Прикрепить файлы' : 'В этой группе файлы отправляют только админы'"
+        aria-label="Прикрепить файлы"
         :disabled="!!store.editing || !mayAttach"
         @click="fileInput?.click()"
       >
@@ -477,7 +478,7 @@ function onKeydown(event: KeyboardEvent): void {
       <button
         type="button"
         class="tool"
-        title="Ссылка (Ctrl+K)"
+        title="Ссылка (Ctrl+K)" aria-label="Ссылка (Ctrl+K)"
         :disabled="!hasSelection"
         @mousedown.prevent
         @click="startLink"

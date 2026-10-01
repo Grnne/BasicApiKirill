@@ -11,10 +11,12 @@ import AvatarCircle from '@/entities/media/ui/AvatarCircle.vue'
 import { describeError } from '@/shared/api/problem'
 import type { ChatUpdatedDto, PermissionsPatchDto } from '@/shared/api/schema'
 import ConfirmDialog from '@/shared/ui/ConfirmDialog.vue'
+import { useRestoreFocus } from '@/shared/ui/useRestoreFocus'
 
 const props = defineProps<{ chatId: string; meId: string }>()
 /** deleting — before the request: ChatDeleted may come before its answer. */
 const emit = defineEmits<{ done: []; deleting: []; deleted: []; cancel: [] }>()
+useRestoreFocus()
 
 const config = useConfigStore()
 const chats = useChatsStore()

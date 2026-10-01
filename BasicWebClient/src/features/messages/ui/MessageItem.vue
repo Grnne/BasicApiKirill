@@ -10,7 +10,7 @@ import AvatarCircle from '@/entities/media/ui/AvatarCircle.vue'
 import type { Message } from '@/entities/message/types'
 import ConfirmDialog from '@/shared/ui/ConfirmDialog.vue'
 import { useNoticesStore } from '@/shared/ui/notices.store'
-import { opensBelow } from '../lib/menu'
+import { opensBelow, opensToStart } from '../lib/menu'
 import { useMessagesStore } from '../model/messages.store'
 import ForwardDialog from './ForwardDialog.vue'
 import MessageBubble from './MessageBubble.vue'
@@ -56,18 +56,33 @@ const isSelected = computed(() => store.selected.has(props.message.id))
 
 const menuOpen = ref(false)
 const menuBelow = ref(false)
+/** Own messages are on the right: their menu opens leftwards, unless there is no room. */
+const menuToStart = ref(false)
 const menu = ref<HTMLElement | null>(null)
+const moreButton = ref<HTMLButtonElement | null>(null)
 
-async function toggleMenu(event: MouseEvent): Promise<void> {
+async function toggleMenu(): Promise<void> {
   menuOpen.value = !menuOpen.value
   if (!menuOpen.value) return
   openedAt.value = Date.now()
   menuBelow.value = false
+  menuToStart.value = own.value
   await nextTick()
-  const button = event.currentTarget as HTMLElement | null
+  const button = moreButton.value
   const list = button?.closest('.viewport')
-  if (!button || !list || !menu.value) return
-  menuBelow.value = opensBelow(button.getBoundingClientRect(), list.getBoundingClientRect(), menu.value.offsetHeight)
+  if (button && list && menu.value) {
+    const at = button.getBoundingClientRect()
+    const area = list.getBoundingClientRect()
+    menuBelow.value = opensBelow(at, area, menu.value.offsetHeight)
+    menuToStart.value = opensToStart(at, area, menu.value.offsetWidth, own.value ? 'start' : 'end')
+  }
+  menu.value?.querySelector<HTMLElement>('[role=menuitem]')?.focus()
+}
+
+/** Escape: the menu closes and the keyboard is back on its button. */
+function escapeMenu(): void {
+  menuOpen.value = false
+  moreButton.value?.focus()
 }
 const forwarding = ref(false)
 const confirmingDelete = ref(false)
@@ -168,16 +183,24 @@ async function confirmDelete(): Promise<void> {
     />
     <div v-if="!selecting" class="tools">
       <button
+        ref="moreButton"
         type="button"
         class="more"
         title="Действия"
+        aria-label="Действия с сообщением"
         aria-haspopup="menu"
         :aria-expanded="menuOpen"
         @click.stop="toggleMenu"
       >
         ⋯
       </button>
-      <ul v-if="menuOpen" ref="menu" :class="['menu', { below: menuBelow }]" role="menu">
+      <ul
+        v-if="menuOpen"
+        ref="menu"
+        :class="['menu', { below: menuBelow, 'to-start': menuToStart }]"
+        role="menu"
+        @keydown.esc.stop="escapeMenu"
+      >
         <li v-if="actions.react" class="emoji-row">
           <button
             v-for="emoji in config.config.messages.reactions"
@@ -298,7 +321,7 @@ async function confirmDelete(): Promise<void> {
   bottom: auto;
   margin: 4px 0 0;
 }
-.item.own .menu {
+.menu.to-start {
   right: 0;
   left: auto;
 }

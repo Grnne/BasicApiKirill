@@ -173,7 +173,7 @@ function startsNewDay(index: number): boolean {
       />
 
       <p v-if="store.isLoadingNewer" class="note">грузим новые…</p>
-      <button v-if="store.hasNewer" type="button" class="to-latest" title="К последним сообщениям" @click="store.backToLatest()">
+      <button v-if="store.hasNewer" type="button" class="to-latest" title="К последним сообщениям" aria-label="К последним сообщениям" @click="store.backToLatest()">
         ↓
       </button>
     </template>

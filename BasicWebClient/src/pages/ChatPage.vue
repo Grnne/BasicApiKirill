@@ -115,8 +115,8 @@ const { logout: onLogout } = useLogout()
         />
         <span class="user-name">{{ account.me?.displayName ?? auth.user?.displayName }}</span>
       </button>
-      <BaseButton variant="ghost" title="Новая группа" @click="creatingGroup = true">＋</BaseButton>
-      <BaseButton variant="ghost" title="Избранное" @click="chatList.openSaved()">★</BaseButton>
+      <BaseButton variant="ghost" title="Новая группа" aria-label="Новая группа" @click="creatingGroup = true">＋</BaseButton>
+      <BaseButton variant="ghost" title="Избранное" aria-label="Избранное" @click="chatList.openSaved()">★</BaseButton>
       <BaseButton variant="ghost" @click="onLogout">Выйти</BaseButton>
     </header>
 

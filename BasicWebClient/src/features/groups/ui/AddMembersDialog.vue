@@ -5,11 +5,13 @@ import * as chatApi from '@/entities/chat/api'
 import { useChatDetailsStore } from '@/entities/chat/model/details.store'
 import { useConfigStore } from '@/entities/config/config.store'
 import type { UserSearchResult } from '@/entities/user/types'
+import { useRestoreFocus } from '@/shared/ui/useRestoreFocus'
 import { describeAddError } from '../lib/refusal'
 import UserPicker from './UserPicker.vue'
 
 const props = defineProps<{ chatId: string; meId: string }>()
 const emit = defineEmits<{ done: [added: number]; cancel: [] }>()
+useRestoreFocus()
 
 const config = useConfigStore()
 const details = useChatDetailsStore()

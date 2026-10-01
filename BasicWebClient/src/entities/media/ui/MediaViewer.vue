@@ -2,11 +2,13 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 
 import type { AttachmentDto } from '@/shared/api/schema'
+import { useRestoreFocus } from '@/shared/ui/useRestoreFocus'
 import { useMediaLinksStore } from '../model/links.store'
 
 /** jumpable: a "show in chat" button that names the shown item by its index. */
 const props = defineProps<{ items: AttachmentDto[]; start: number; jumpable?: boolean }>()
 const emit = defineEmits<{ close: []; jump: [index: number] }>()
+useRestoreFocus()
 
 const links = useMediaLinksStore()
 const index = ref(props.start)
@@ -41,9 +43,9 @@ onUnmounted(() => document.removeEventListener('keydown', onKey))
       <p v-if="link && !link.url" class="expired">Оригинал больше не хранится — показано превью</p>
     </template>
 
-    <button v-if="items.length > 1" type="button" class="nav prev" title="Предыдущее" @click="step(-1)">‹</button>
-    <button v-if="items.length > 1" type="button" class="nav next" title="Следующее" @click="step(1)">›</button>
-    <button type="button" class="close" title="Закрыть (Esc)" @click="emit('close')">✕</button>
+    <button v-if="items.length > 1" type="button" class="nav prev" title="Предыдущее" aria-label="Предыдущее" @click="step(-1)">‹</button>
+    <button v-if="items.length > 1" type="button" class="nav next" title="Следующее" aria-label="Следующее" @click="step(1)">›</button>
+    <button type="button" class="close" title="Закрыть (Esc)" aria-label="Закрыть (Esc)" @click="emit('close')">✕</button>
     <button v-if="jumpable" type="button" class="to-chat" @click="emit('jump', index)">Показать в чате</button>
     <span v-if="items.length > 1" class="counter">{{ index + 1 }} / {{ items.length }}</span>
   </div>

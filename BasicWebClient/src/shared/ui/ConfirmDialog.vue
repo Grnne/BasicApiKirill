@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
 
-defineProps<{
+import { useRestoreFocus } from './useRestoreFocus'
+
+const props = defineProps<{
   title: string
   text?: string
   confirmLabel: string
@@ -10,6 +12,8 @@ defineProps<{
 const emit = defineEmits<{ confirm: []; cancel: [] }>()
 
 const confirmButton = ref<HTMLButtonElement | null>(null)
+const cancelButton = ref<HTMLButtonElement | null>(null)
+useRestoreFocus()
 
 function onKeydown(event: KeyboardEvent): void {
   if (event.key === 'Escape') emit('cancel')
@@ -17,7 +21,8 @@ function onKeydown(event: KeyboardEvent): void {
 
 onMounted(() => {
   document.addEventListener('keydown', onKeydown)
-  confirmButton.value?.focus()
+  // A dangerous action is not the default: Enter pressed once more must not confirm it.
+  ;(props.danger ? cancelButton : confirmButton).value?.focus()
 })
 onUnmounted(() => document.removeEventListener('keydown', onKeydown))
 </script>
@@ -29,7 +34,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
       <p v-if="text" class="text">{{ text }}</p>
       <slot />
       <div class="buttons">
-        <button type="button" class="button" @click="emit('cancel')">Отмена</button>
+        <button ref="cancelButton" type="button" class="button" @click="emit('cancel')">Отмена</button>
         <button
           ref="confirmButton"
           type="button"
