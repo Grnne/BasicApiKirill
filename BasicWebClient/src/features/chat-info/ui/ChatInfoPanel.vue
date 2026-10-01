@@ -36,6 +36,8 @@ const emit = defineEmits<{
   jump: [messageId: string]
   addMembers: []
   openUser: [userId: string]
+  /** Before the request: the chat may vanish from the list before the answer comes. */
+  leaving: []
   left: []
   editGroup: []
   manageMember: [userId: string]
@@ -115,6 +117,7 @@ const leaveText = computed(() => {
 async function confirmLeave(): Promise<void> {
   leaving.value = false
   if (!props.meId) return
+  emit('leaving')
   try {
     await chatApi.removeMember(props.chat.chatId, props.meId)
     emit('left')

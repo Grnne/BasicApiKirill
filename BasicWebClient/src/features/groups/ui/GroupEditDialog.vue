@@ -16,7 +16,8 @@ import type { ChatUpdatedDto, PermissionsPatchDto } from '@/shared/api/schema'
 import ConfirmDialog from '@/shared/ui/ConfirmDialog.vue'
 
 const props = defineProps<{ chatId: string; meId: string }>()
-const emit = defineEmits<{ done: []; deleted: []; cancel: [] }>()
+/** deleting — before the request: ChatDeleted may come before its answer. */
+const emit = defineEmits<{ done: []; deleting: []; deleted: []; cancel: [] }>()
 
 const config = useConfigStore()
 const chats = useChatsStore()
@@ -123,6 +124,7 @@ const confirmingDelete = ref(false)
 async function deleteGroup(): Promise<void> {
   confirmingDelete.value = false
   busy.value = true
+  emit('deleting')
   try {
     await chatApi.deleteGroup(props.chatId)
     emit('deleted')

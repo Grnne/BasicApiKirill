@@ -13,6 +13,9 @@ import type { FolderDto, SaveFolderDto } from '@/shared/api/schema'
 import * as chatsApi from '../api/chats.api'
 import * as foldersApi from '../api/folders.api'
 
+/** Long enough for a request to be answered; a failed one is forgotten by then. */
+const EXPECT_GONE_MS = 10_000
+
 export const useChatListStore = defineStore('chatList', () => {
   const hub = useHubStore()
   const chats = useChatsStore()
@@ -24,14 +27,26 @@ export const useChatListStore = defineStore('chatList', () => {
   const selectedFolder = computed(() => chats.folders.find((f) => f.id === selectedFolderId.value) ?? null)
   const selectedChat = computed(() => chats.get(selectedChatId.value))
 
+  /**
+   * chatId -> until when its going away is the user's own doing (left or deleted the group). The
+   * hub event may come before the answer to the request, so it is marked before the request.
+   */
+  const expectedGone = new Map<string, number>()
+  function expectGone(chatId: string): void {
+    expectedGone.set(chatId, Date.now() + EXPECT_GONE_MS)
+  }
+
   // The open chat left the list (removed from the group, the group deleted): say so and close it.
   watch(selectedChat, (now, before) => {
     if (now || !before || selectedChatId.value !== before.chatId) return
+    const own = (expectedGone.get(before.chatId) ?? 0) > Date.now()
+    expectedGone.delete(before.chatId)
+    void deselect()
+    if (own) return
     notices.push(
       before.type === 'group' ? `Вы больше не участник группы «${before.title ?? ''}»` : 'Чат больше недоступен',
       'info',
     )
-    void deselect()
   })
 
   async function select(chatId: string): Promise<void> {
@@ -173,5 +188,5 @@ export const useChatListStore = defineStore('chatList', () => {
     pinInFolder,
     selectedChatId,
     selectedChat,
-    select, deselect, openPrivateChat, openSaved, markUnread, markRead, pin, reorderPinned, archive, mute, unmute, command, reset }
+    select, deselect, expectGone, openPrivateChat, openSaved, markUnread, markRead, pin, reorderPinned, archive, mute, unmute, command, reset }
 })

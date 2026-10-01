@@ -3,6 +3,7 @@ import { onMounted, onUnmounted, ref, shallowRef } from 'vue'
 
 import * as chatApi from '@/entities/chat/api'
 import { useChatDetailsStore } from '@/entities/chat/model/details.store'
+import * as usersApi from '@/entities/user/api'
 import { describeError } from '@/shared/api/problem'
 import type { AuditEntryDto } from '@/shared/api/schema'
 import { formatDay, formatTime } from '@/shared/lib/date'
@@ -12,7 +13,27 @@ const props = defineProps<{ chatId: string }>()
 const emit = defineEmits<{ close: [] }>()
 
 const details = useChatDetailsStore()
-const nameOf = (userId: string) => details.member(props.chatId, userId)?.displayName ?? null
+/** Names of people no longer in the group: the log outlives memberships. */
+const profiles = ref<Record<string, string>>({})
+const asked = new Set<string>()
+const nameOf = (userId: string) =>
+  details.member(props.chatId, userId)?.displayName ?? profiles.value[userId] ?? null
+
+function mentioned(entry: AuditEntryDto): string[] {
+  const data = entry.data && typeof entry.data === 'object' ? (entry.data as { userIds?: unknown }) : {}
+  const listed = Array.isArray(data.userIds) ? data.userIds.filter((id): id is string => typeof id === 'string') : []
+  return [entry.actorId, entry.targetUserId, ...listed].filter((id): id is string => id !== null)
+}
+
+/** Each unknown person is asked for once; one that is gone stays "участник вне группы". */
+async function nameStrangers(page: readonly AuditEntryDto[]): Promise<void> {
+  const unknown = [...new Set(page.flatMap(mentioned))].filter((id) => !asked.has(id) && nameOf(id) === null)
+  unknown.forEach((id) => asked.add(id))
+  const answers = await Promise.allSettled(unknown.map((id) => usersApi.getUser(id)))
+  const found = { ...profiles.value }
+  for (const answer of answers) if (answer.status === 'fulfilled') found[answer.value.userId] = answer.value.displayName
+  profiles.value = found
+}
 
 const entries = shallowRef<AuditEntryDto[]>([])
 const cursor = ref<string | null>(null)
@@ -25,8 +46,11 @@ async function load(): Promise<void> {
   busy.value = true
   error.value = null
   try {
+    // Members are named from the card: it is needed before telling who is a stranger.
+    if (!details.get(props.chatId)) await details.load(props.chatId)
     const page = await chatApi.getAudit(props.chatId, cursor.value)
     entries.value = [...entries.value, ...page.items]
+    void nameStrangers(page.items)
     cursor.value = page.nextCursor
     done.value = page.nextCursor === null
   } catch (e) {

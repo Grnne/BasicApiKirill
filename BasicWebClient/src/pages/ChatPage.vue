@@ -138,6 +138,7 @@ async function onLogout(): Promise<void> {
           @jump="onInfoJump"
           @add-members="addingMembers = true"
           @open-user="onUserSelected"
+          @leaving="chatList.expectGone(chatList.selectedChatId!)"
           @left="onLeftGroup"
           @edit-group="editingGroup = true"
           @manage-member="managedMemberId = $event"
@@ -162,6 +163,7 @@ async function onLogout(): Promise<void> {
         :chat-id="chatList.selectedChatId"
         :me-id="auth.user.userId"
         @done="editingGroup = false"
+        @deleting="chatList.expectGone(chatList.selectedChatId!)"
         @deleted="editingGroup = false; onLeftGroup()"
         @cancel="editingGroup = false"
       />
