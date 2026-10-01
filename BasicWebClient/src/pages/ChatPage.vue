@@ -14,6 +14,7 @@ import GroupEditDialog from '@/features/groups/ui/GroupEditDialog.vue'
 import MemberDialog from '@/features/groups/ui/MemberDialog.vue'
 import CreateGroupDialog from '@/features/groups/ui/CreateGroupDialog.vue'
 import { useNoticesStore } from '@/shared/ui/notices.store'
+import { useChatDialogs } from './lib/useChatDialogs'
 import { useLogout } from './lib/useLogout'
 import UserSearchPanel from '@/features/user-search/ui/UserSearchPanel.vue'
 import MessageSearchPanel from '@/features/message-search/ui/MessageSearchPanel.vue'
@@ -70,10 +71,7 @@ async function onMessageFound(chatId: string, messageId: string): Promise<void> 
 
 const notices = useNoticesStore()
 const creatingGroup = ref(false)
-const addingMembers = ref(false)
-const editingGroup = ref(false)
-const managedMemberId = ref<string | null>(null)
-const showingAudit = ref(false)
+const { addingMembers, editingGroup, managedMemberId, showingAudit } = useChatDialogs(() => chatList.selectedChatId)
 
 function onMembersAdded(count: number): void {
   addingMembers.value = false
