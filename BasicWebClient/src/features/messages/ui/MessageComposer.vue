@@ -136,6 +136,13 @@ watch(
     }
   },
 )
+// Mounted mid-edit: the chat's draft has just been loaded (the chatId watcher runs at setup).
+onMounted(() => {
+  const message = store.editing
+  if (!message) return
+  draftBeforeEdit = { text: text.value, entities: entities.value }
+  setContent(message.text, message.entities)
+})
 
 watch(
   () => store.replyTo,

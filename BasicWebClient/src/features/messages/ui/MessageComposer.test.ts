@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as chatApi from '@/entities/chat/api'
 import { useChatsStore } from '@/entities/chat/model/chats.store'
 import type { ChatDetail } from '@/entities/chat/types'
-import { chat } from '@/testing/fixtures'
+import { chat, message } from '@/testing/fixtures'
 import * as messagesApi from '../api/messages.api'
 import { useMessagesStore } from '../model/messages.store'
 import MessageComposer from './MessageComposer.vue'
@@ -54,6 +54,25 @@ describe('MessageComposer', () => {
     await area.trigger('keydown', { key: 'Enter' })
     expect(send).toHaveBeenCalledWith('hello world', [{ type: 'bold', offset: 6, length: 5 }], [])
     expect(el.value).toBe('')
+  })
+
+  it('mounted while a message is being edited, it holds that message, not the draft', async () => {
+    // The bug: selection mode swapped the field out; back from it, the field held the draft
+    // under "Редактирование", and Enter saved the draft into the message.
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    useChatsStore().replaceAll([chat({ draft: { text: 'draft', entities: [], replyToMessageId: null, updatedAt: '2026-10-01T12:00:00Z' } })], [])
+    const store = useMessagesStore()
+    store.chatId = 'chat-1'
+    store.startEdit(message({ id: 'm-1', text: 'original' }))
+
+    const wrapper = mount(MessageComposer, { global: { plugins: [pinia] }, attachTo: document.body })
+    await flushPromises()
+
+    expect((wrapper.get('textarea').element as HTMLTextAreaElement).value).toBe('original')
+    store.cancelEdit()
+    await flushPromises()
+    expect((wrapper.get('textarea').element as HTMLTextAreaElement).value).toBe('draft')
   })
 
   it('formatting follows the text as it is edited', async () => {

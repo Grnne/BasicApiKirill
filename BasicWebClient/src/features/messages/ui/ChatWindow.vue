@@ -73,7 +73,8 @@ watch(
 
     <MessageList />
     <SelectionBar v-if="messages.selected.size > 0" />
-    <MessageComposer v-else />
+    <!-- Hidden, not unmounted: an edit and uploads in progress outlive the selection. -->
+    <MessageComposer v-show="messages.selected.size === 0" />
   </section>
 
   <section v-else class="empty">
