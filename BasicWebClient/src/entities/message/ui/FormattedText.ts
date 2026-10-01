@@ -29,7 +29,8 @@ function renderNode(node: FormattedNode, mentionClass: (userId: string | null | 
 
   const children = node.children.map((child) => renderNode(child, mentionClass))
   const { entity } = node
-  const tag = TAGS[entity.type]
+  // An own property only: "constructor" or "toString" would find Object's members.
+  const tag = Object.prototype.hasOwnProperty.call(TAGS, entity.type) ? TAGS[entity.type] : undefined
   if (tag) return h(tag, children)
 
   switch (entity.type) {

@@ -46,6 +46,13 @@ describe('formatText', () => {
     expect(show(formatText('see https://example.com/a?b=1, ok', []))).toBe('see link(https://example.com/a?b=1), ok')
   })
 
+  it('a closing parenthesis that pairs one in the URL is part of it; one around the URL is not', () => {
+    // The bug: every trailing ")" was cut, and the Wikipedia link led to "…Mercury_(planet".
+    const urlOf = (text: string) => formatText(text, []).flatMap((n) => (n.kind === 'entity' ? [n.entity.url] : []))
+    expect(urlOf('https://en.wikipedia.org/wiki/Mercury_(planet)')).toEqual(['https://en.wikipedia.org/wiki/Mercury_(planet)'])
+    expect(urlOf('(see https://example.com/a)')).toEqual(['https://example.com/a'])
+  })
+
   it('does not autolink inside code', () => {
     expect(show(formatText('https://x.y', [e('code', 0, 11)]))).toBe('code(https://x.y)')
   })
