@@ -28,6 +28,7 @@ BasicApi.Tests/            юнит-тесты: Features/<Функция>, Servi
 BasicApi.IntegrationTests/ тесты на реальном Postgres и S3 в контейнерах:
                            Features/<Функция>, Platform (сквозное), Migrations, Repositories, E2E
 tools/BasicApi.LoadTest/   нагрузочный прогон
+BasicWebClient/            веб-клиент: Vue 3 + TypeScript + Pinia, тесты — Vitest
 ```
 
 Функции: **Auth** (вход, сессии, токены), **Devices** (входы пользователя), **Push**,

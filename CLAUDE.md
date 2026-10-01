@@ -7,8 +7,9 @@
 ## Команды
 
 ```powershell
-./scripts/test.ps1                   # сборка, юнит- и интеграционные тесты, аудит пакетов (нужен Docker)
+./scripts/test.ps1                   # сборка, клиент, юнит- и интеграционные тесты, аудит пакетов (нужны Docker и Node.js)
 ./scripts/test.ps1 -SkipIntegration  # быстро, без Docker
+./scripts/test.ps1 -SkipClient       # только бэкенд, без Node.js
 ./scripts/test.ps1 -Image            # плюс сборка прод-образа
 ./scripts/e2e.ps1                    # сквозные тесты против развёрнутого стека
 ```
@@ -17,7 +18,6 @@ CI (`.github/workflows/ci.yml`) запускает тот же `scripts/test.ps1
 
 ## Правила работы
 
-- `BasicWebClient` (фронт) не трогаем.
 - Перед каждым коммитом — `scripts/test.ps1`; строка-итог из конца вывода — в сообщение коммита.
 - Один коммит — один пункт плана. Коммит и push — только по просьбе.
 - Баг сначала воспроизводится тестом, который падает до правки.
@@ -26,6 +26,11 @@ CI (`.github/workflows/ci.yml`) запускает тот же `scripts/test.ps1
   [docs/api-contract-changes.md](docs/api-contract-changes.md). Снимок OpenAPI
   (`BasicApi.IntegrationTests/Snapshots/openapi.json`) обновляется осознанно:
   `UPDATE_OPENAPI_SNAPSHOT=1`, дифф проверяется глазами.
+- Веб-клиент (`BasicWebClient`): импорт только вниз (`app → pages → features → entities →
+  shared`), фича не импортирует модель другой фичи. Тесты — Vitest, рядом с кодом
+  (`*.test.ts`); баг клиента тоже сначала воспроизводится тестом. Без `v-html`; ссылки из
+  сообщений — только `http`/`https`/`mailto`. CSP в `index.html` расширяется только под
+  конкретную нужду.
 - Код функции — в `Features/<Функция>/`, общее — в `Services/` и `Models/`, только если им
   пользуются хотя бы две функции. Namespace = папка. Тесты — по той же раскладке.
 
