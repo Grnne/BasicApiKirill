@@ -1,7 +1,8 @@
 /*
- * The single SignalR connection. The token is fetched on each (re)connect rather than captured;
+ * The single SignalR connection. The token is fetched (and refreshed if stale) on each (re)connect;
  * the open chat is rejoined after a reconnect, because server groups do not survive a dropped
- * connection and messages would silently stop; subscriptions survive connection re-creation.
+ * connection; subscriptions survive connection re-creation. When SignalR's own reconnect gives up,
+ * a retry loop keeps trying for as long as the user is logged in.
  */
 
 import { ref, shallowRef } from 'vue'
@@ -13,7 +14,9 @@ import {
   LogLevel,
 } from '@microsoft/signalr'
 
+import { RetryLoop } from '@/shared/lib/retry'
 import { getAuthBridge } from './http'
+import { freshAccessToken } from './token'
 import {
   HUB_EVENT_NAMES,
   type ConnectionStatus,
@@ -23,8 +26,8 @@ import {
 
 const HUB_URL = '/hubs/chat'
 
-/** After the last delay the client gives up and stays disconnected. */
-const RECONNECT_DELAYS = [0, 2_000, 5_000, 10_000, 30_000]
+/** SignalR's own reconnect; after it gives up, RetryLoop takes over. */
+const RECONNECT_DELAYS = [0, 2_000, 5_000, 10_000]
 
 type AnyHandler = (...args: never[]) => void
 
@@ -63,27 +66,46 @@ export const useHubStore = defineStore('hub', () => {
             handler(...args)
           } catch (error) {
             // One failing handler must not break the others.
-            console.error(`Обработчик ${event} упал:`, error)
+            console.error(`Hub handler ${event} failed:`, error)
           }
         }
       })
     }
   }
 
+  /** true between start() and stop(): the connection should be up. */
+  let wanted = false
+  const retry = new RetryLoop(connect)
+
+  function retryNow(): void {
+    if (wanted && !connection.value && status.value !== 'connecting') retry.now()
+  }
+
+  function onBrowserBack(): void {
+    if (document.visibilityState === 'visible') retryNow()
+  }
+
   async function start(): Promise<void> {
-    if (connection.value || status.value === 'connecting') return
+    if (wanted) return
+    wanted = true
+    window.addEventListener('online', retryNow)
+    document.addEventListener('visibilitychange', onBrowserBack)
+    if (!(await connect())) retry.schedule()
+  }
+
+  async function connect(): Promise<boolean> {
+    if (!wanted) return true
+    if (connection.value || status.value === 'connecting') return true
 
     status.value = 'connecting'
 
     const hub = new HubConnectionBuilder()
       .withUrl(HUB_URL, {
-        // Called on every connect and reconnect, so the token is always current.
+        // Called on every connect and reconnect: a token that expired while the tab was idle
+        // would get 401 and end the session's realtime until F5.
         accessTokenFactory: async () => {
           const bridge = getAuthBridge()
-          if (!bridge) return ''
-
-          if (!bridge.getAccessToken()) await bridge.refreshTokens()
-          return bridge.getAccessToken() ?? ''
+          return bridge ? freshAccessToken(bridge) : ''
         },
       })
       .withAutomaticReconnect(RECONNECT_DELAYS)
@@ -103,23 +125,35 @@ export const useHubStore = defineStore('hub', () => {
     })
 
     hub.onclose(() => {
+      if (connection.value !== hub) return
       status.value = 'disconnected'
       connection.value = null
+      // SignalR's reconnect gave up (or the server closed it): keep trying while logged in.
+      if (wanted) retry.schedule()
     })
 
     try {
       await hub.start()
+      if (!wanted) {
+        await hub.stop()
+        return true
+      }
       connection.value = hub
       status.value = 'connected'
       if (joinedChatId.value) await invokeSafe('JoinChat', joinedChatId.value)
+      return true
     } catch (error) {
       status.value = 'disconnected'
-      connection.value = null
-      console.error('Не удалось подключиться к хабу:', error)
+      console.warn('Hub connection failed:', error)
+      return false
     }
   }
 
   async function stop(): Promise<void> {
+    wanted = false
+    retry.cancel()
+    window.removeEventListener('online', retryNow)
+    document.removeEventListener('visibilitychange', onBrowserBack)
     const hub = connection.value
     connection.value = null
     joinedChatId.value = null
@@ -136,7 +170,7 @@ export const useHubStore = defineStore('hub', () => {
       await hub.invoke(method, ...args)
       return true
     } catch (error) {
-      console.error(`Вызов ${method} не прошёл:`, error)
+      console.error(`Hub call ${method} failed:`, error)
       return false
     }
   }
@@ -170,6 +204,7 @@ export const useHubStore = defineStore('hub', () => {
     on,
     start,
     stop,
+    retryNow,
     joinChat,
     leaveChat,
     sendMessage,
