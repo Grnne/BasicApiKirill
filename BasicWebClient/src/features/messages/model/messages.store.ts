@@ -57,6 +57,9 @@ export const useMessagesStore = defineStore('messages', () => {
   const current = computed(() => history.get(chatId.value))
   const messages = computed(() => current.value?.messages ?? [])
   const hasMore = computed(() => current.value?.hasOlder ?? false)
+  /** The loaded part is in the middle: newer pages load as the list scrolls down. */
+  const hasNewer = computed(() => current.value?.hasNewer ?? false)
+  const isLoadingNewer = ref(false)
   const pending = computed(() => current.value?.pending ?? [])
 
   /** Aborted when switching to another chat. */
@@ -196,15 +199,55 @@ export const useMessagesStore = defineStore('messages', () => {
     }
   }
 
-  /** Scroll to a message; older pages are loaded until it is found (or the history ends). */
+  /** Scroll to a message; one not loaded opens the history around it. */
   async function jumpTo(messageId: string): Promise<void> {
-    const MAX_PAGES = 10
-    for (let page = 0; page < MAX_PAGES && !messages.value.some((m) => m.id === messageId); page++) {
-      if (!hasMore.value) break
-      await loadOlder()
+    const id = chatId.value
+    if (!id) return
+    if (!messages.value.some((m) => m.id === messageId)) {
+      try {
+        await history.loadContext(id, messageId)
+      } catch (e) {
+        notices.push(describeError(e), 'info')
+        return
+      }
     }
-    if (messages.value.some((m) => m.id === messageId)) jumpTarget.value = messageId
-    else notices.push('Исходное сообщение не найдено', 'info')
+    if (chatId.value === id) jumpTarget.value = messageId
+  }
+
+  /** The history at a moment: the last message at or before it comes into view. */
+  async function jumpToDate(date: Date): Promise<void> {
+    const id = chatId.value
+    if (!id) return
+    try {
+      await history.loadAt(id, date.toISOString(), chats.get(id)?.lastMessage?.seq ?? 0)
+      const target = messages.value.at(-1)
+      if (target && chatId.value === id) jumpTarget.value = target.id
+      else if (!target) notices.push('В этот день сообщений ещё не было', 'info')
+    } catch (e) {
+      notices.push(describeError(e))
+    }
+  }
+
+  async function loadNewer(): Promise<void> {
+    const id = chatId.value
+    if (!id || isLoadingNewer.value || !hasNewer.value) return
+    isLoadingNewer.value = true
+    try {
+      await history.loadNewer(id)
+    } catch {
+      // Scrolling down again retries.
+    } finally {
+      isLoadingNewer.value = false
+    }
+  }
+
+  /** Back from a window in the middle to the newest messages. */
+  async function backToLatest(): Promise<void> {
+    const id = chatId.value
+    if (!id) return
+    await loadLatest(id)
+    const last = messages.value.at(-1)
+    if (last) jumpTarget.value = last.id
   }
 
   function startEdit(message: Message): void {
@@ -311,6 +354,8 @@ export const useMessagesStore = defineStore('messages', () => {
     chatId,
     messages,
     hasMore,
+    hasNewer,
+    isLoadingNewer,
     pending,
     editing,
     replyTo,
@@ -331,6 +376,9 @@ export const useMessagesStore = defineStore('messages', () => {
     clearSelection,
     forward,
     jumpTo,
+    jumpToDate,
+    loadNewer,
+    backToLatest,
     react,
     drafts,
     cancelEdit,

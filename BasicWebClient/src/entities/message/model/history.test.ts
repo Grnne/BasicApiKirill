@@ -8,7 +8,9 @@ import {
   emptyHistory,
   messageStored,
   putLatestPage,
+  putNewerPage,
   putOlderPage,
+  putWindow,
   type HistoryState,
 } from './history'
 
@@ -121,5 +123,39 @@ describe('events', () => {
     applyHistoryEvent(state, 'ReactionsChanged', { chatId: 'chat-1', messageId: m1.id, userId: ME, emoji: '👍', reactions }, ctx)
     expect(state.byChat['chat-1']!.messages[0]!.myReaction).toBe('👍')
     expect(state.byChat['chat-1']!.messages[0]!.reactions).toEqual(reactions)
+  })
+})
+
+describe('a window in the middle', () => {
+  const win = (items: MessageDto[], hasNewer: boolean) => ({ items, nextCursor: 'c', hasMore: true, hasNewer })
+
+  it('a live message past the window is not appended over the gap', () => {
+    const state = emptyHistory()
+    putWindow(state, 'chat-1', win([message({ seq: 10 }), message({ seq: 11 })], true))
+
+    messageStored(state, message({ seq: 50 }))
+
+    expect(seqs(state)).toEqual([10, 11])
+  })
+
+  it('newer pages follow the window until it reaches the newest; then live ones append', () => {
+    const state = emptyHistory()
+    putWindow(state, 'chat-1', win([message({ seq: 10 })], true))
+
+    putNewerPage(state, 'chat-1', win([message({ seq: 11 }), message({ seq: 12 })], false))
+    messageStored(state, message({ seq: 13 }))
+
+    expect(seqs(state)).toEqual([10, 11, 12, 13])
+    expect(state.byChat['chat-1']!.hasNewer).toBe(false)
+  })
+
+  it('going back to the latest page replaces a window far behind', () => {
+    const state = emptyHistory()
+    putWindow(state, 'chat-1', win([message({ seq: 10 })], true))
+
+    putLatestPage(state, 'chat-1', page([message({ seq: 99 }), message({ seq: 100 })], true, 'c99'))
+
+    expect(seqs(state)).toEqual([99, 100])
+    expect(state.byChat['chat-1']!.hasNewer).toBe(false)
   })
 })

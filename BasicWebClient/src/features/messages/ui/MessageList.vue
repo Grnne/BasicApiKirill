@@ -49,6 +49,7 @@ function onScroll(): void {
   const element = viewport.value
   if (!element) return
   if (element.scrollTop < LOAD_OLDER_THRESHOLD_PX) void loadOlderKeepingPosition()
+  if (store.hasNewer && isNearBottom()) void store.loadNewer()
   noteSeenIfVisible()
 }
 
@@ -56,13 +57,15 @@ onMounted(() => document.addEventListener('visibilitychange', noteSeenIfVisible)
 onUnmounted(() => document.removeEventListener('visibilitychange', noteSeenIfVisible))
 
 // Follow new messages only when already at the bottom, not while the user reads history.
+// Only a list that already reached the newest message sticks to the bottom: in a window in the
+// middle, sticking would load every newer page one after another.
 watch(
-  () => store.messages.length + store.pending.length,
-  async (length, previousLength) => {
-    const isAppend = length > previousLength
+  () => ({ length: store.messages.length + store.pending.length, window: store.hasNewer }),
+  async (now, before) => {
+    const isAppend = now.length > before.length
     const stick = isNearBottom()
     await nextTick()
-    if (isAppend && stick) {
+    if (isAppend && stick && !before.window) {
       scrollToBottom()
       noteSeenIfVisible()
     }
@@ -133,11 +136,28 @@ function startsNewDay(index: number): boolean {
         @retry="store.retry(message.clientMessageId)"
         @discard="store.discard(message.clientMessageId)"
       />
+
+      <p v-if="store.isLoadingNewer" class="note">грузим новые…</p>
+      <button v-if="store.hasNewer" type="button" class="to-latest" title="К последним сообщениям" @click="store.backToLatest()">
+        ↓
+      </button>
     </template>
   </div>
 </template>
 
 <style scoped>
+.to-latest {
+  position: sticky;
+  bottom: 8px;
+  align-self: flex-end;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface-solid);
+  color: var(--text);
+  box-shadow: 0 2px 8px #0008;
+}
 .viewport {
   display: flex;
   flex-direction: column;

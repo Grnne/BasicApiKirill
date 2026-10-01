@@ -22,7 +22,12 @@ vi.mock('../api/messages.api', () => ({
   saveDraft: vi.fn(async () => null),
   removeDraft: vi.fn(async () => {}),
 }))
-vi.mock('@/entities/message/api', () => ({ getMessagesPage: vi.fn(), PAGE_SIZE: 30 }))
+vi.mock('@/entities/message/api', () => ({
+  getMessagesPage: vi.fn(),
+  getMessageContext: vi.fn(),
+  getMessagesAfter: vi.fn(),
+  PAGE_SIZE: 30,
+}))
 vi.mock('@/entities/chat/api', () => ({ getChatItem: vi.fn(() => new Promise(() => {})) }))
 
 const m1 = message({ seq: 1 })
@@ -172,5 +177,29 @@ describe('reactions', () => {
     expect(messagesApi.removeReaction).toHaveBeenCalledWith('chat-1', m1.id)
     expect(store.messages[0]!.myReaction).toBeNull()
     expect(store.messages[0]!.reactions).toEqual([{ emoji: '🔥', count: 1 }])
+  })
+})
+
+describe('jumping in the history', () => {
+  it('a message not loaded opens the history around it, and newer pages follow', async () => {
+    const { store } = await openChatWithUnread()
+    const far = message({ seq: 500 })
+    vi.mocked(messageEntityApi.getMessageContext).mockResolvedValue({
+      items: [message({ seq: 499 }), far, message({ seq: 501 })], nextCursor: 'c', hasMore: true, hasNewer: true,
+    })
+    vi.mocked(messageEntityApi.getMessagesAfter).mockResolvedValue({
+      items: [message({ seq: 502 })], nextCursor: null, hasMore: true, hasNewer: false,
+    })
+
+    await store.jumpTo(far.id)
+
+    expect(store.jumpTarget).toBe(far.id)
+    expect(store.messages.map((m) => m.seq)).toEqual([499, 500, 501])
+    expect(store.hasNewer).toBe(true)
+
+    await store.loadNewer()
+    expect(messageEntityApi.getMessagesAfter).toHaveBeenCalledWith('chat-1', 501)
+    expect(store.messages.map((m) => m.seq)).toEqual([499, 500, 501, 502])
+    expect(store.hasNewer).toBe(false)
   })
 })

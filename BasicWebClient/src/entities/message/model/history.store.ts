@@ -10,7 +10,9 @@ import {
   emptyHistory,
   messageStored,
   putLatestPage,
+  putNewerPage,
   putOlderPage,
+  putWindow,
   removePending,
   updatePending,
   type ChatHistory,
@@ -40,6 +42,24 @@ export const useHistoryStore = defineStore('history', () => {
     putOlderPage(state.value, chatId, page)
   }
 
+  async function loadContext(chatId: string, messageId: string): Promise<void> {
+    putWindow(state.value, chatId, await messageApi.getMessageContext(chatId, messageId))
+  }
+
+  async function loadNewer(chatId: string): Promise<void> {
+    const history = state.value.byChat[chatId]
+    const last = history?.messages.at(-1)
+    if (!history?.hasNewer || !last) return
+    putNewerPage(state.value, chatId, await messageApi.getMessagesAfter(chatId, last.seq))
+  }
+
+  /** newestSeq: the chat's last message, to know whether the page reaches it. */
+  async function loadAt(chatId: string, date: string, newestSeq: number): Promise<void> {
+    const page = await messageApi.getMessagesAt(chatId, date)
+    const last = page.items.at(-1)
+    putWindow(state.value, chatId, { ...page, hasNewer: !!last && last.seq < newestSeq })
+  }
+
   function apply<K extends JournaledEventName>(type: K, payload: JournaledEvents[K], ctx: HistoryContext): void {
     applyHistoryEvent(state.value, type, payload, ctx)
   }
@@ -57,6 +77,9 @@ export const useHistoryStore = defineStore('history', () => {
     get,
     loadLatest,
     loadOlder,
+    loadContext,
+    loadNewer,
+    loadAt,
     apply,
     invalidate,
     stored: (message: Message) => messageStored(state.value, message),

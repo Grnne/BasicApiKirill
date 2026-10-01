@@ -1,7 +1,12 @@
 // Loaded message history per chat as a pure state machine: pages + events -> state.
 // Events are idempotent (by message id) because they may arrive twice: live and on catch-up.
 
-import type { MessageDto, MessageEntityDto, MessageDtoCursorPaginatedResponse } from '@/shared/api/schema'
+import type {
+  MessageDto,
+  MessageEntityDto,
+  MessageDtoCursorPaginatedResponse,
+  MessageWindowDto,
+} from '@/shared/api/schema'
 import type { JournaledEvents } from '@/shared/api/hub.types'
 
 /** A message sent from this device that the server has not confirmed yet. */
@@ -24,6 +29,8 @@ export interface ChatHistory {
   /** Cursor to the page before messages[0]. */
   olderCursor: string | null
   hasOlder: boolean
+  /** The loaded part ends before the newest message (opened at a search hit or a date). */
+  hasNewer: boolean
 }
 
 export interface HistoryState {
@@ -41,7 +48,7 @@ export function emptyHistory(): HistoryState {
 function historyOf(state: HistoryState, chatId: string): ChatHistory {
   let history = state.byChat[chatId]
   if (!history) {
-    history = { messages: [], pending: [], olderCursor: null, hasOlder: false }
+    history = { messages: [], pending: [], olderCursor: null, hasOlder: false, hasNewer: false }
     state.byChat[chatId] = history
   }
   return history
@@ -63,6 +70,7 @@ export function putLatestPage(state: HistoryState, chatId: string, page: Message
   if (!first || !last) {
     // No messages at all (or all deleted).
     history.messages = []
+    history.hasNewer = false
     history.olderCursor = page.nextCursor
     history.hasOlder = page.hasMore
     return
@@ -74,6 +82,7 @@ export function putLatestPage(state: HistoryState, chatId: string, page: Message
   const newer = cached.filter((m) => m.seq > last.seq)
 
   history.messages = [...older, ...items, ...newer]
+  history.hasNewer = false
   if (older.length === 0) {
     history.olderCursor = page.nextCursor
     history.hasOlder = page.hasMore
@@ -89,6 +98,24 @@ export function putOlderPage(state: HistoryState, chatId: string, page: MessageD
   history.messages = [...older, ...history.messages].sort(bySeq)
   history.olderCursor = page.nextCursor
   history.hasOlder = page.hasMore
+}
+
+/** A window in the middle of the history (around a message, at a date): replaces what was loaded. */
+export function putWindow(state: HistoryState, chatId: string, window: MessageWindowDto): void {
+  const history = historyOf(state, chatId)
+  history.messages = [...window.items].sort(bySeq)
+  history.olderCursor = window.nextCursor
+  history.hasOlder = window.hasMore
+  history.hasNewer = window.hasNewer
+}
+
+/** The next page after the loaded window. */
+export function putNewerPage(state: HistoryState, chatId: string, page: MessageWindowDto): void {
+  const history = historyOf(state, chatId)
+  const known = new Set(history.messages.map((m) => m.id))
+  history.messages = [...history.messages, ...page.items.filter((m) => !known.has(m.id))].sort(bySeq)
+  history.hasNewer = page.hasNewer
+  dropConfirmedPending(history)
 }
 
 export function addPending(state: HistoryState, pending: PendingMessage): void {
@@ -131,9 +158,11 @@ export function messageStored(state: HistoryState, message: MessageDto): void {
     return
   }
 
-  // Older than everything loaded: it belongs to a page not loaded yet.
+  // Outside the loaded part: it belongs to a page not loaded yet (older, or newer past a gap).
   const first = history.messages[0]
+  const last = history.messages.at(-1)
   if (first && message.seq < first.seq && history.hasOlder) return
+  if (last && message.seq > last.seq && history.hasNewer) return
 
   history.messages.push(message)
   history.messages.sort(bySeq)
