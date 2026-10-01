@@ -79,7 +79,7 @@ services:
       resources:
         limits:             # 🛡 protect the server from overload
           cpus: "1.0"
-          memory: ${POSTGRES_MEMORY:-320M}
+          memory: ${POSTGRES_MEMORY:-288M}
           pids: 100
         reservations:
           memory: 128M
@@ -197,6 +197,10 @@ services:
     environment:
       AWS_ACCESS_KEY_ID: ${STORAGE_ACCESS_KEY}
       AWS_SECRET_ACCESS_KEY: ${STORAGE_SECRET_KEY}
+      # Go does not see the container's limit: a 60 MB upload next to others made the heap outgrow
+      # 256M, and the kernel killed the storage. A soft limit of its own (~80% of STORAGE_MEMORY)
+      # makes the collector work harder instead.
+      GOMEMLIMIT: ${STORAGE_GOMEMLIMIT:-256MiB}
     volumes:
       - media_data:/data     # the files themselves — back up together with the database
     tmpfs:
@@ -231,7 +235,7 @@ services:
       resources:
         limits:
           cpus: "1.0"
-          memory: ${STORAGE_MEMORY:-256M}
+          memory: ${STORAGE_MEMORY:-320M}
           pids: 200
         reservations:
           memory: 64M
@@ -280,12 +284,12 @@ services:
 
     # Caddy needs ~220-250 KB of memory per open WebSocket. With 128M, 1000 clients
     # drove it into constant GC at its CPU limit (latency x4) and to the edge of an
-    # OOM kill (docs/load-testing.md). 192M is for ~100-300 clients; 512M — for ~2000.
+    # OOM kill (docs/load-testing.md). 160M is for ~100-300 clients; 512M — for ~2000.
     deploy:
       resources:
         limits:
           cpus: "1.0"
-          memory: ${CADDY_MEMORY:-192M}
+          memory: ${CADDY_MEMORY:-160M}
           pids: 100
 
     networks:
