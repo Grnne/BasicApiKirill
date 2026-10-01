@@ -3,7 +3,17 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 
 import * as chatApi from '@/entities/chat/api'
 import { chatInitial, chatTitle } from '@/entities/chat/lib'
-import { ROLE_LABELS, canAddMembers, canRemoveMember, sortedMembers } from '@/entities/chat/members'
+import {
+  ROLE_LABELS,
+  canAddMembers,
+  canDeleteGroup,
+  canEditDefaults,
+  canEditInfo,
+  canRemoveMember,
+  canSeeAudit,
+  memberActions,
+  sortedMembers,
+} from '@/entities/chat/members'
 import { useChatDetailsStore } from '@/entities/chat/model/details.store'
 import type { ChatListItem, ChatParticipant } from '@/entities/chat/types'
 import { formatDuration } from '@/entities/media/lib'
@@ -27,6 +37,9 @@ const emit = defineEmits<{
   addMembers: []
   openUser: [userId: string]
   left: []
+  editGroup: []
+  manageMember: [userId: string]
+  audit: []
 }>()
 
 const details = useChatDetailsStore()
@@ -68,6 +81,15 @@ const members = computed(() => (detail.value ? sortedMembers(detail.value.partic
 const mayAdd = computed(() => !!detail.value && canAddMembers(detail.value))
 const mayRemove = (member: ChatParticipant) =>
   !!detail.value && !!props.meId && canRemoveMember(detail.value, props.meId, member)
+const mayManage = (member: ChatParticipant) => {
+  if (!detail.value || !props.meId) return false
+  const a = memberActions(detail.value, props.meId, member)
+  return a.makeAdmin || a.makeMember || a.handOver || a.permissions.length > 0
+}
+const mayEdit = computed(
+  () => !!detail.value && (canEditInfo(detail.value) || canEditDefaults(detail.value) || canDeleteGroup(detail.value)),
+)
+const mayAudit = computed(() => !!detail.value && canSeeAudit(detail.value))
 
 const removing = ref<ChatParticipant | null>(null)
 const leaving = ref(false)
@@ -139,6 +161,10 @@ function onScroll(event: Event): void {
       <AvatarCircle :avatar-id="chat.avatarId" :initial="chatInitial(chat)" :size="72" />
       <span class="title">{{ chatTitle(chat) }}</span>
       <span v-if="subtitle" class="subtitle">{{ subtitle }}</span>
+      <span v-if="mayEdit || mayAudit" class="card-actions">
+        <button v-if="mayEdit" type="button" class="jump" @click="emit('editGroup')">Настройки</button>
+        <button v-if="mayAudit" type="button" class="jump" @click="emit('audit')">Журнал действий</button>
+      </span>
     </div>
 
     <nav class="tabs" role="tablist">
@@ -177,6 +203,7 @@ function onScroll(event: Event): void {
           </span>
           <span v-if="ROLE_LABELS[m.role]" class="role">{{ ROLE_LABELS[m.role] }}</span>
         </button>
+        <button v-if="mayManage(m)" type="button" class="remove" title="Роль и права" @click="emit('manageMember', m.userId)">⋯</button>
         <button v-if="mayRemove(m)" type="button" class="remove" title="Исключить" @click="removing = m">✕</button>
       </div>
       <button v-if="detail" type="button" class="action danger" @click="leaving = true">Покинуть группу</button>
@@ -305,6 +332,10 @@ function onScroll(event: Event): void {
   font-weight: 600;
   text-align: center;
   overflow-wrap: anywhere;
+}
+.card-actions {
+  display: flex;
+  gap: 6px;
 }
 .subtitle {
   color: var(--text-dim);

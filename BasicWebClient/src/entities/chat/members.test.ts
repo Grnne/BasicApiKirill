@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { GroupPermissionsDto } from '@/shared/api/schema'
-import { canAddMembers, canRemoveMember, sortedMembers } from './members'
+import { MEMBER_PERMISSIONS, canAddMembers, canEditDefaults, canRemoveMember, memberActions, sortedMembers } from './members'
 import type { ChatDetail, ChatParticipant } from './types'
 
 const perms = (p: Partial<GroupPermissionsDto> = {}): GroupPermissionsDto => ({
@@ -37,6 +37,31 @@ describe('group members', () => {
     expect(canRemoveMember(detail('member', { removeMembers: true }), 'member', ADMIN)).toBe(false)
     expect(canAddMembers(detail('member'))).toBe(false)
     expect(canAddMembers(detail('member', { addMembers: true }))).toBe(true)
+  })
+
+  it('the owner makes admins, members again, hands the group over and sets anything for an admin', () => {
+    const owner = detail('owner')
+    expect(memberActions(owner, 'owner', MEMBER)).toMatchObject({ makeAdmin: true, makeMember: false, handOver: true })
+    expect(memberActions(owner, 'owner', MEMBER).permissions).toEqual(MEMBER_PERMISSIONS)
+    expect(memberActions(owner, 'owner', ADMIN)).toMatchObject({ makeAdmin: false, makeMember: true })
+    expect(memberActions(owner, 'owner', ADMIN).permissions).toContain('addAdmins')
+  })
+
+  it('an admin: admins only with addAdmins, member permissions only with removeMembers, nothing about other admins', () => {
+    expect(memberActions(detail('admin', { addAdmins: true }), 'admin', MEMBER)).toMatchObject({
+      makeAdmin: true, handOver: false, permissions: [],
+    })
+    expect(memberActions(detail('admin', { removeMembers: true }), 'admin', MEMBER).permissions).toEqual(MEMBER_PERMISSIONS)
+    const other = person('admin2', 'admin')
+    expect(memberActions(detail('admin', { addAdmins: true, removeMembers: true }), 'admin', other)).toEqual({
+      makeAdmin: false, makeMember: false, handOver: false, permissions: [],
+    })
+    expect(canEditDefaults(detail('admin'))).toBe(false)
+    expect(canEditDefaults(detail('admin', { removeMembers: true }))).toBe(true)
+  })
+
+  it('nobody changes the owner', () => {
+    expect(memberActions(detail('admin', { addAdmins: true, removeMembers: true }), 'admin', OWNER).permissions).toEqual([])
   })
 
   it('the owner first, then admins, then members by name', () => {

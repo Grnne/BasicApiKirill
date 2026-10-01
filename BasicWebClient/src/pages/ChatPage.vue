@@ -9,6 +9,9 @@ import FolderTabs from '@/features/chat-list/ui/FolderTabs.vue'
 import ChatWindow from '@/features/messages/ui/ChatWindow.vue'
 import ChatInfoPanel from '@/features/chat-info/ui/ChatInfoPanel.vue'
 import AddMembersDialog from '@/features/groups/ui/AddMembersDialog.vue'
+import AuditLogDialog from '@/features/groups/ui/AuditLogDialog.vue'
+import GroupEditDialog from '@/features/groups/ui/GroupEditDialog.vue'
+import MemberDialog from '@/features/groups/ui/MemberDialog.vue'
 import CreateGroupDialog from '@/features/groups/ui/CreateGroupDialog.vue'
 import { useNoticesStore } from '@/shared/ui/notices.store'
 import UserSearchPanel from '@/features/user-search/ui/UserSearchPanel.vue'
@@ -54,6 +57,9 @@ async function onMessageFound(chatId: string, messageId: string): Promise<void> 
 const notices = useNoticesStore()
 const creatingGroup = ref(false)
 const addingMembers = ref(false)
+const editingGroup = ref(false)
+const managedMemberId = ref<string | null>(null)
+const showingAudit = ref(false)
 
 function onMembersAdded(count: number): void {
   addingMembers.value = false
@@ -133,6 +139,9 @@ async function onLogout(): Promise<void> {
           @add-members="addingMembers = true"
           @open-user="onUserSelected"
           @left="onLeftGroup"
+          @edit-group="editingGroup = true"
+          @manage-member="managedMemberId = $event"
+          @audit="showingAudit = true"
         />
       </main>
 
@@ -147,6 +156,24 @@ async function onLogout(): Promise<void> {
       @done="onMembersAdded"
       @cancel="addingMembers = false"
     />
+    <template v-if="chatList.selectedChatId && auth.user">
+      <GroupEditDialog
+        v-if="editingGroup"
+        :chat-id="chatList.selectedChatId"
+        :me-id="auth.user.userId"
+        @done="editingGroup = false"
+        @deleted="editingGroup = false; onLeftGroup()"
+        @cancel="editingGroup = false"
+      />
+      <MemberDialog
+        v-if="managedMemberId"
+        :chat-id="chatList.selectedChatId"
+        :me-id="auth.user.userId"
+        :user-id="managedMemberId"
+        @close="managedMemberId = null"
+      />
+      <AuditLogDialog v-if="showingAudit" :chat-id="chatList.selectedChatId" @close="showingAudit = false" />
+    </template>
   </div>
 </template>
 

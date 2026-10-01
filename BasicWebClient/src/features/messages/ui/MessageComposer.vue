@@ -55,6 +55,15 @@ const input = ref<HTMLTextAreaElement | null>(null)
 const hasSelection = ref(false)
 
 const uploads = useUploads()
+
+/** A group may be read-only for members, or take no files from them; the server checks again. */
+const groupRights = computed(() => {
+  const chatId = store.chatId
+  if (!chatId || chats.get(chatId)?.type !== 'group') return null
+  return details.get(chatId)?.myPermissions ?? null
+})
+const mayWrite = computed(() => groupRights.value?.sendMessages !== false)
+const mayAttach = computed(() => groupRights.value?.sendMedia !== false)
 const fileInput = ref<HTMLInputElement | null>(null)
 
 const maxLength = computed(() => config.config.messages.maxLength)
@@ -72,14 +81,14 @@ function onFilesChosen(event: Event): void {
 
 function onPaste(event: ClipboardEvent): void {
   const files = event.clipboardData?.files
-  if (!files || files.length === 0 || store.editing) return
+  if (!files || files.length === 0 || store.editing || !mayAttach.value) return
   event.preventDefault()
   uploads.add(files)
 }
 
 function onDrop(event: DragEvent): void {
   const files = event.dataTransfer?.files
-  if (files && files.length > 0 && !store.editing) uploads.add(files)
+  if (files && files.length > 0 && !store.editing && mayAttach.value) uploads.add(files)
 }
 
 function setContent(nextText: string, nextEntities: readonly Entity[]): void {
@@ -378,7 +387,8 @@ function onKeydown(event: KeyboardEvent): void {
 </script>
 
 <template>
-  <form class="composer" @submit.prevent="submit" @dragover.prevent @drop.prevent="onDrop">
+  <p v-if="!mayWrite" class="read-only">В этой группе писать могут только админы</p>
+  <form v-else class="composer" @submit.prevent="submit" @dragover.prevent @drop.prevent="onDrop">
     <div v-if="store.editing" class="context">
       <span class="label">Редактирование</span>
       <span class="quote">{{ store.editing.text }}</span>
@@ -406,8 +416,8 @@ function onKeydown(event: KeyboardEvent): void {
       <button
         type="button"
         class="tool attach"
-        title="Прикрепить файлы"
-        :disabled="!!store.editing"
+        :title="mayAttach ? 'Прикрепить файлы' : 'В этой группе файлы отправляют только админы'"
+        :disabled="!!store.editing || !mayAttach"
         @click="fileInput?.click()"
       >
         📎
@@ -528,6 +538,13 @@ function onKeydown(event: KeyboardEvent): void {
 .tool:hover:not(:disabled) {
   border-color: var(--border);
   color: var(--text);
+}
+.read-only {
+  margin: 0;
+  padding: 14px 16px;
+  border-top: 1px solid var(--border);
+  color: var(--text-dim);
+  text-align: center;
 }
 .tool.attach {
   margin-right: 6px;

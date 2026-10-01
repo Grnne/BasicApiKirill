@@ -1,5 +1,5 @@
 import { http } from '@/shared/api/http'
-import type { GroupMemberDto } from '@/shared/api/schema'
+import type { AuditPageDto, ChatUpdatedDto, GroupMemberDto, PermissionsPatchDto } from '@/shared/api/schema'
 import type { ChatDetail, ChatListItem } from './types'
 
 export function getChatItem(chatId: string): Promise<ChatListItem> {
@@ -34,4 +34,37 @@ export function addMembers(chatId: string, userIds: string[]): Promise<GroupMemb
 /** Removes a member; the caller's own id — leaves the group. */
 export function removeMember(chatId: string, userId: string): Promise<void> {
   return http.delete<void>(`/api/chats/${chatId}/members/${userId}`)
+}
+
+/** Members with what each may do now (role, group defaults and own overrides together). */
+export function getMembers(chatId: string): Promise<GroupMemberDto[]> {
+  return http.get<GroupMemberDto[]>(`/api/chats/${chatId}/members`)
+}
+
+/** Only the given fields change. Answers the title and defaults now; members get ChatUpdated. */
+export function updateGroup(
+  chatId: string,
+  body: { title?: string; memberPermissions?: PermissionsPatchDto },
+): Promise<ChatUpdatedDto> {
+  return http.patch<ChatUpdatedDto>(`/api/chats/${chatId}`, body)
+}
+
+/** The owner only: gone for everyone, with its history. */
+export function deleteGroup(chatId: string): Promise<void> {
+  return http.delete<void>(`/api/chats/${chatId}`)
+}
+
+/** `admin`, `member`, or `owner` — hand the group over. */
+export function setRole(chatId: string, userId: string, role: 'owner' | 'admin' | 'member'): Promise<GroupMemberDto> {
+  return http.put<GroupMemberDto>(`/api/chats/${chatId}/members/${userId}/role`, { role })
+}
+
+/** Replaces the member's overrides; `{}` removes them all. */
+export function setMemberPermissions(chatId: string, userId: string, patch: PermissionsPatchDto): Promise<GroupMemberDto> {
+  return http.put<GroupMemberDto>(`/api/chats/${chatId}/members/${userId}/permissions`, patch)
+}
+
+/** For the owner and admins, newest first. */
+export function getAudit(chatId: string, cursor: string | null): Promise<AuditPageDto> {
+  return http.get<AuditPageDto>(`/api/chats/${chatId}/audit`, { query: { cursor: cursor ?? undefined, limit: 50 } })
 }
