@@ -11,6 +11,8 @@ import MessageList from './MessageList.vue'
 import MessageComposer from './MessageComposer.vue'
 import SelectionBar from './SelectionBar.vue'
 
+const emit = defineEmits<{ info: [] }>()
+
 const chatList = useChatListStore()
 const messages = useMessagesStore()
 const presence = usePresenceStore()
@@ -52,9 +54,11 @@ watch(
       <button type="button" class="back" title="К списку чатов" @click="chatList.deselect()">
         ←
       </button>
-      <AvatarCircle :avatar-id="chatList.selectedChat.avatarId" :initial="chatInitial(chatList.selectedChat)" :size="32" />
-      <span class="title">{{ chatTitle(chatList.selectedChat) }}</span>
-      <span :class="['subtitle', { typing: isTyping }]">{{ subtitle }}</span>
+      <button type="button" class="about" title="О чате" @click="emit('info')">
+        <AvatarCircle :avatar-id="chatList.selectedChat.avatarId" :initial="chatInitial(chatList.selectedChat)" :size="32" />
+        <span class="title">{{ chatTitle(chatList.selectedChat) }}</span>
+        <span :class="['subtitle', { typing: isTyping }]">{{ subtitle }}</span>
+      </button>
       <button type="button" class="search-toggle" title="Поиск в чате" @click="searching = !searching">🔍</button>
     </header>
 
@@ -109,8 +113,22 @@ watch(
   background: none;
   color: var(--text-dim);
 }
+.about {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  text-align: left;
+}
 .title {
+  overflow: hidden;
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .subtitle {
   color: var(--text-dim);

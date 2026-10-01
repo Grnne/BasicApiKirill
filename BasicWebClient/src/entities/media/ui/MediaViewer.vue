@@ -4,8 +4,9 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import type { AttachmentDto } from '@/shared/api/schema'
 import { useMediaLinksStore } from '../model/links.store'
 
-const props = defineProps<{ items: AttachmentDto[]; start: number }>()
-const emit = defineEmits<{ close: [] }>()
+/** jumpable: a "show in chat" button that names the shown item by its index. */
+const props = defineProps<{ items: AttachmentDto[]; start: number; jumpable?: boolean }>()
+const emit = defineEmits<{ close: []; jump: [index: number] }>()
 
 const links = useMediaLinksStore()
 const index = ref(props.start)
@@ -43,6 +44,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKey))
     <button v-if="items.length > 1" type="button" class="nav prev" title="Предыдущее" @click="step(-1)">‹</button>
     <button v-if="items.length > 1" type="button" class="nav next" title="Следующее" @click="step(1)">›</button>
     <button type="button" class="close" title="Закрыть (Esc)" @click="emit('close')">✕</button>
+    <button v-if="jumpable" type="button" class="to-chat" @click="emit('jump', index)">Показать в чате</button>
     <span v-if="items.length > 1" class="counter">{{ index + 1 }} / {{ items.length }}</span>
   </div>
 </template>
@@ -87,6 +89,18 @@ onUnmounted(() => document.removeEventListener('keydown', onKey))
   top: 8px;
   right: 12px;
   font-size: 22px;
+}
+.to-chat {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  padding: 4px 10px;
+  border: 1px solid #fff6;
+  border-radius: var(--radius-sm);
+  background: #0008;
+  color: #fff;
+  font-size: 12px;
+  transform: translateX(-50%);
 }
 .counter {
   position: absolute;

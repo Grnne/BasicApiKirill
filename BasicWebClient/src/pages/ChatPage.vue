@@ -7,6 +7,7 @@ import ConnectionStatus from '@/features/realtime/ui/ConnectionStatus.vue'
 import ChatListPanel from '@/features/chat-list/ui/ChatListPanel.vue'
 import FolderTabs from '@/features/chat-list/ui/FolderTabs.vue'
 import ChatWindow from '@/features/messages/ui/ChatWindow.vue'
+import ChatInfoPanel from '@/features/chat-info/ui/ChatInfoPanel.vue'
 import UserSearchPanel from '@/features/user-search/ui/UserSearchPanel.vue'
 import MessageSearchPanel from '@/features/message-search/ui/MessageSearchPanel.vue'
 import { useAuthStore } from '@/features/auth/model/auth.store'
@@ -45,6 +46,15 @@ async function onMessageFound(chatId: string, messageId: string): Promise<void> 
   }
   messages.requestJump(chatId, messageId)
   await chatList.select(chatId)
+}
+
+// The chat card stays open while the user goes from chat to chat.
+const infoOpen = ref(false)
+
+/** A file or a link of the card: the chat scrolls to its message; a narrow screen shows the chat. */
+async function onInfoJump(messageId: string): Promise<void> {
+  if (window.matchMedia('(max-width: 1000px)').matches) infoOpen.value = false
+  await messages.jumpTo(messageId)
 }
 
 async function onLogout(): Promise<void> {
@@ -87,7 +97,15 @@ async function onLogout(): Promise<void> {
       </aside>
 
       <main class="main">
-        <ChatWindow />
+        <ChatWindow @info="infoOpen = !infoOpen" />
+        <ChatInfoPanel
+          v-if="infoOpen && chatList.selectedChat"
+          class="info-panel"
+          :chat="chatList.selectedChat"
+          :me-id="auth.user?.userId ?? null"
+          @close="infoOpen = false"
+          @jump="onInfoJump"
+        />
       </main>
 
       <component :is="EventLog" v-if="EventLog" />
@@ -177,7 +195,23 @@ async function onLogout(): Promise<void> {
   overflow-y: auto;
 }
 .main {
+  position: relative;
   display: grid;
+  grid-auto-flow: column;
+  grid-template-columns: minmax(0, 1fr);
   overflow: hidden;
+}
+.info-panel {
+  width: 320px;
+}
+/* No room beside the chat: the card lies over it. */
+@media (max-width: 1000px) {
+  .info-panel {
+    position: absolute;
+    inset: 0 0 0 auto;
+    z-index: 20;
+    width: min(340px, 100%);
+    box-shadow: -4px 0 16px #0006;
+  }
 }
 </style>
