@@ -12,6 +12,7 @@ const pending: PendingMessage = {
   text: 'hi',
   entities: [],
   replyToMessageId: null,
+  attachments: [],
   createdAt: new Date().toISOString(),
   state: 'sending',
   error: null,

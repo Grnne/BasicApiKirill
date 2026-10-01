@@ -38,6 +38,7 @@ export class Outbox {
       clientMessageId: pending.clientMessageId,
       entities: pending.entities,
       replyToMessageId: pending.replyToMessageId,
+      ...(pending.attachments.length > 0 ? { attachmentIds: pending.attachments.map((a) => a.id) } : {}),
     }
     this.sink.sending(pending.chatId, pending.clientMessageId)
 

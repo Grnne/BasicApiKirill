@@ -7,7 +7,7 @@ import { useChatsStore } from '@/entities/chat/model/chats.store'
 import { useHistoryStore } from '@/entities/message/model/history.store'
 import { useAuthStore } from '@/features/auth/model/auth.store'
 import type { Message } from '@/entities/message/types'
-import type { MessageEntityDto } from '@/shared/api/schema'
+import type { AttachmentDto, MessageEntityDto } from '@/shared/api/schema'
 import { describeError } from '@/shared/api/problem'
 import { uuid } from '@/shared/lib/uuid'
 import { useNoticesStore } from '@/shared/ui/notices.store'
@@ -141,9 +141,10 @@ export const useMessagesStore = defineStore('messages', () => {
    * Shows the message at once as "sending"; the stored one replaces it by clientMessageId.
    * The text goes as typed: the server trims it and moves the entities with it.
    */
-  function send(text: string, entities: MessageEntityDto[] = []): boolean {
+  function send(text: string, entities: MessageEntityDto[] = [], attachments: AttachmentDto[] = []): boolean {
     const id = chatId.value
-    if (!id || text.trim().length === 0) return false
+    // With files the text is a caption and may be empty.
+    if (!id || (text.trim().length === 0 && attachments.length === 0)) return false
 
     const message = {
       clientMessageId: uuid(),
@@ -151,6 +152,7 @@ export const useMessagesStore = defineStore('messages', () => {
       text,
       entities,
       replyToMessageId: replyTo.value?.chatId === id ? replyTo.value.id : null,
+      attachments,
       createdAt: new Date().toISOString(),
       state: 'sending' as const,
       error: null,

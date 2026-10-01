@@ -10,8 +10,10 @@ import FormattedText from '@/entities/message/ui/FormattedText'
 import { useAuthStore } from '@/features/auth/model/auth.store'
 import * as messagesApi from '../api/messages.api'
 import { adjustEntities, insertMention, mentionQuery, setLink, toggleEntity, type Entity } from '../lib/compose'
+import { useUploads } from '../lib/useUploads'
 import { sameDraft, type DraftContent } from '../model/drafts'
 import { useMessagesStore } from '../model/messages.store'
+import UploadTray from './UploadTray.vue'
 
 /**
  * Typing shares the per-user command limit with sending (20 per 10 s): repeat it only while
@@ -51,8 +53,33 @@ const entities = ref<Entity[]>([])
 const input = ref<HTMLTextAreaElement | null>(null)
 const hasSelection = ref(false)
 
+const uploads = useUploads()
+const fileInput = ref<HTMLInputElement | null>(null)
+
 const maxLength = computed(() => config.config.messages.maxLength)
-const canSend = computed(() => text.value.trim().length > 0)
+/** Text, or files that all finished uploading (then the text is an optional caption). */
+const canSend = computed(() => {
+  if (uploads.items.value.length > 0) return uploads.ready.value
+  return text.value.trim().length > 0
+})
+
+function onFilesChosen(event: Event): void {
+  const input = event.target as HTMLInputElement
+  if (input.files) uploads.add(input.files)
+  input.value = ''
+}
+
+function onPaste(event: ClipboardEvent): void {
+  const files = event.clipboardData?.files
+  if (!files || files.length === 0 || store.editing) return
+  event.preventDefault()
+  uploads.add(files)
+}
+
+function onDrop(event: DragEvent): void {
+  const files = event.dataTransfer?.files
+  if (files && files.length > 0 && !store.editing) uploads.add(files)
+}
 
 function setContent(nextText: string, nextEntities: readonly Entity[]): void {
   text.value = nextText
@@ -117,6 +144,8 @@ watch(
   () => store.chatId,
   (chatId, previous) => {
     if (previous) void store.drafts.flush(previous)
+    // Files chosen in one chat do not travel to another.
+    for (const item of [...uploads.items.value]) uploads.remove(item.key)
     if (chatId) loadDraft(chatId)
   },
   { immediate: true },
@@ -301,8 +330,9 @@ async function submit(): Promise<void> {
     return
   }
   // Sending failures show on the message itself, with a retry.
-  if (store.send(text.value, entities.value)) {
+  if (store.send(text.value, entities.value, uploads.attachments.value)) {
     setContent('', [])
+    uploads.clear()
     stopTyping()
   }
 }
@@ -357,7 +387,7 @@ function onKeydown(event: KeyboardEvent): void {
 </script>
 
 <template>
-  <form class="composer" @submit.prevent="submit">
+  <form class="composer" @submit.prevent="submit" @dragover.prevent @drop.prevent="onDrop">
     <div v-if="store.editing" class="context">
       <span class="label">Редактирование</span>
       <span class="quote">{{ store.editing.text }}</span>
@@ -384,6 +414,16 @@ function onKeydown(event: KeyboardEvent): void {
       </button>
       <button
         type="button"
+        class="tool attach"
+        title="Прикрепить файлы"
+        :disabled="!!store.editing"
+        @click="fileInput?.click()"
+      >
+        📎
+      </button>
+      <input ref="fileInput" type="file" multiple hidden @change="onFilesChosen" />
+      <button
+        type="button"
         class="tool"
         title="Ссылка (Ctrl+K)"
         :disabled="!hasSelection"
@@ -405,6 +445,8 @@ function onKeydown(event: KeyboardEvent): void {
       />
       <button type="button" class="tool" @click="applyLink">OK</button>
     </div>
+
+    <UploadTray v-if="uploads.items.value.length > 0" :items="uploads.items.value" @remove="uploads.remove" />
 
     <ul v-if="suggestions.length > 0" class="suggestions" role="listbox">
       <li v-for="(member, index) in suggestions" :key="member.userId">
@@ -431,6 +473,7 @@ function onKeydown(event: KeyboardEvent): void {
       @keyup="onSelect"
       @click="onSelect"
       @keydown="onKeydown"
+      @paste="onPaste"
     />
     <button type="submit" class="send" :disabled="!canSend">
       {{ store.editing ? 'Сохранить' : 'Отправить' }}
@@ -494,6 +537,9 @@ function onKeydown(event: KeyboardEvent): void {
 .tool:hover:not(:disabled) {
   border-color: var(--border);
   color: var(--text);
+}
+.tool.attach {
+  margin-right: 6px;
 }
 .tool:disabled {
   opacity: 0.35;

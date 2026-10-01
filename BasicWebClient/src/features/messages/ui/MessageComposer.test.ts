@@ -45,7 +45,7 @@ describe('MessageComposer', () => {
     expect(wrapper.find('.preview strong').text()).toBe('world')
 
     await area.trigger('keydown', { key: 'Enter' })
-    expect(send).toHaveBeenCalledWith('hello world', [{ type: 'bold', offset: 6, length: 5 }])
+    expect(send).toHaveBeenCalledWith('hello world', [{ type: 'bold', offset: 6, length: 5 }], [])
     expect(el.value).toBe('')
   })
 
@@ -60,7 +60,7 @@ describe('MessageComposer', () => {
     await area.setValue('hello world')
     await area.trigger('keydown', { key: 'Enter' })
 
-    expect(send).toHaveBeenCalledWith('hello world', [{ type: 'italic', offset: 6, length: 5 }])
+    expect(send).toHaveBeenCalledWith('hello world', [{ type: 'italic', offset: 6, length: 5 }], [])
   })
 
   it('Shift+Enter is a new line, not sending', async () => {

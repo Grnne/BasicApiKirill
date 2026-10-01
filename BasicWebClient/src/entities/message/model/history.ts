@@ -2,6 +2,7 @@
 // Events are idempotent (by message id) because they may arrive twice: live and on catch-up.
 
 import type {
+  AttachmentDto,
   MessageDto,
   MessageEntityDto,
   MessageDtoCursorPaginatedResponse,
@@ -16,6 +17,8 @@ export interface PendingMessage {
   text: string
   entities: MessageEntityDto[]
   replyToMessageId: string | null
+  /** Uploaded files of the message (an album), in order. */
+  attachments: AttachmentDto[]
   createdAt: string
   state: 'sending' | 'failed'
   /** Why the last attempt failed, for the user. */

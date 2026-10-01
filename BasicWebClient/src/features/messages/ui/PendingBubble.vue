@@ -7,7 +7,8 @@ defineEmits<{ retry: []; discard: [] }>()
 
 <template>
   <article :class="['bubble', message.state]">
-    <p class="text">{{ message.text }}</p>
+    <p v-if="message.attachments.length > 0" class="files">📎 Файлов: {{ message.attachments.length }}</p>
+    <p v-if="message.text" class="text">{{ message.text }}</p>
     <span v-if="message.state === 'sending'" class="status">отправляется…</span>
     <span v-else class="status failed" role="alert">
       Не отправлено: {{ message.error }}
@@ -31,6 +32,11 @@ defineEmits<{ retry: []; discard: [] }>()
 }
 .bubble.failed {
   border: 1px solid var(--danger);
+}
+.files {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 12px;
 }
 .text {
   margin: 0;

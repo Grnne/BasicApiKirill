@@ -74,7 +74,7 @@ describe('events', () => {
     const state = emptyHistory()
     putLatestPage(state, 'chat-1', page([]))
     addPending(state, {
-      clientMessageId: 'cm-1', chatId: 'chat-1', text: 'hi', entities: [], replyToMessageId: null,
+      clientMessageId: 'cm-1', chatId: 'chat-1', text: 'hi', entities: [], replyToMessageId: null, attachments: [],
       createdAt: new Date().toISOString(), state: 'sending', error: null,
     })
 
