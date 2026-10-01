@@ -131,6 +131,9 @@ public class SessionService(
         return session.FamilyId;
     }
 
+    public Task RevokeFamilyAsync(Guid sessionFamilyId, CancellationToken ct = default)
+        => sessionRepository.RevokeFamilyAsync(sessionFamilyId, DateTime.UtcNow, ct);
+
     public Task RevokeAllForUserAsync(Guid userId, CancellationToken ct = default)
         => sessionRepository.RevokeAllForUserAsync(userId, DateTime.UtcNow, ct);
 

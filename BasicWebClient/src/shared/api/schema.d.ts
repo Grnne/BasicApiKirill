@@ -86,9 +86,9 @@ export interface paths {
         put?: never;
         /**
          * Log out of the current session.
-         * @description Send the session's `refreshToken` in the body — that is what actually gets revoked.
-         *     Without it the server has nothing to invalidate and the session stays alive until
-         *     it expires.
+         * @description Ends the sign-in of the access token the request carries, and the session of the
+         *     `refreshToken` in the body, if one is sent. A refresh token that was rotated meanwhile
+         *     does not matter: the sign-in still ends.
          *
          *     Idempotent: an unknown or already-revoked token also returns 200, so the endpoint
          *     cannot be used to find out which tokens exist. The access token keeps working until

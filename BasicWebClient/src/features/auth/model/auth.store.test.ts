@@ -65,6 +65,17 @@ describe('a session that ends by itself', () => {
     expect(auth.sessionLost).toBe(true)
   })
 
+  it('a logout names the refresh token another tab rotated, not the one this tab started with', async () => {
+    vi.mocked(authApi.logout).mockResolvedValue(undefined)
+    localStorage.setItem(KEY, 'token-1')
+    const auth = useAuthStore()
+    localStorage.setItem(KEY, 'token-2')
+
+    await auth.logout()
+
+    expect(authApi.logout).toHaveBeenCalledWith('token-2')
+  })
+
   it('an own logout is not a lost session', async () => {
     vi.mocked(authApi.refresh).mockResolvedValue(answer('token-2'))
     vi.mocked(authApi.logout).mockResolvedValue(undefined)

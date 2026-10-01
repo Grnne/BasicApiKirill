@@ -6,6 +6,7 @@ import { useChatListStore } from '@/features/chat-list/model/chat-list.store'
 import { useMessagesStore } from '@/features/messages/model/messages.store'
 import { usePushStore } from '@/features/push/model/push.store'
 import { useSyncStore } from '@/features/realtime/model/sync.store'
+import { useHubStore } from '@/shared/api/hub.store'
 import { useNoticesStore } from '@/shared/ui/notices.store'
 
 /** Logging out from any page: nothing of the user may survive it, so stores go before the tokens. */
@@ -17,6 +18,7 @@ export function useLogout() {
   const router = useRouter()
   const notices = useNoticesStore()
   const push = usePushStore()
+  const hub = useHubStore()
 
   async function logout(): Promise<void> {
     // While the token still works: the next user of this browser gets nothing of this one's.
@@ -24,13 +26,15 @@ export function useLogout() {
     messages.reset()
     chatList.reset()
     sync.stop()
+    // Before the request: the server drops this sign-in's connection, and a hub still running
+    // would reconnect, find the session revoked and report it as lost elsewhere.
+    await hub.stop()
     await auth.logout()
     await router.replace({ name: 'login' })
   }
 
   /** Every device; throws if the server did not take it, and then this one stays signed in too. */
   async function logoutEverywhere(): Promise<void> {
-    await push.forget()
     await authApi.logoutAll()
     await logout()
   }

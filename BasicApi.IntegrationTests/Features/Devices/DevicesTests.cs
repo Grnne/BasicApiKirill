@@ -56,6 +56,28 @@ public class DevicesTests(PostgresFixture db) : DbTest(db)
     }
 
     [Fact]
+    public async Task Logout_WithAnAlreadyRotatedRefreshToken_StillEndsThisSignIn()
+    {
+        // A tab whose access token expired: the logout got 401, the client refreshed the pair and
+        // retried with the refresh token it had read before — now rotated. The sign-in must end anyway.
+        await using var factory = new ApiFactory(Db.ConnectionString);
+        var alice = await factory.RegisterAsync("alice");
+        var other = await LoginFromAsync(factory, "alice", "Other/1.0");
+        using var anonymous = factory.CreateClient();
+        var refreshed = await (await anonymous.PostAsJsonAsync("/api/auth/refresh", new { refreshToken = alice.RefreshToken }))
+            .Content.ReadFromJsonAsync<AuthResult>(Json);
+
+        using var api = factory.CreateClient(refreshed!.Token);
+        (await api.PostAsJsonAsync("/api/auth/logout", new { refreshToken = alice.RefreshToken })).EnsureSuccessStatusCode();
+
+        var again = await anonymous.PostAsJsonAsync("/api/auth/refresh", new { refreshToken = refreshed.RefreshToken });
+        Assert.Equal(HttpStatusCode.Unauthorized, again.StatusCode);
+        using var otherApi = factory.CreateClient(other.Token);
+        var devices = await DevicesAsync(otherApi);
+        Assert.Equal([ApiClient.SessionFamilyOf(other.Token)], devices.Select(d => d.Id()));
+    }
+
+    [Fact]
     public async Task Refresh_KeepsTheDevice_AndMovesItsLastActivity()
     {
         await using var factory = new ApiFactory(Db.ConnectionString);

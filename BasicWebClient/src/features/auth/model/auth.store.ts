@@ -128,7 +128,8 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function logout(): Promise<void> {
-    const token = refreshToken.value
+    // Another tab may have rotated the pair since this one last refreshed.
+    const token = (isStorageAvailable() ? readLocal(REFRESH_TOKEN_KEY) : null) ?? refreshToken.value
     try {
       await authApi.logout(token)
     } catch {

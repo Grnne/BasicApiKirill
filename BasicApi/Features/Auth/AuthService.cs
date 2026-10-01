@@ -97,19 +97,27 @@ public sealed class AuthService(
         sessionService.RefreshAsync(refreshToken, userAgent, ip, ct);
 
     /// <summary>
-    /// Ends the session behind the supplied refresh token.
-    /// Idempotent: an unknown or already-revoked token still returns 200, so the
-    /// endpoint cannot be used to probe which tokens exist.
+    /// Ends the sign-in of the caller's access token and the session behind the supplied refresh
+    /// token. Idempotent: an unknown or already-revoked token still returns 200, so the endpoint
+    /// cannot be used to probe which tokens exist.
     /// </summary>
-    public async Task LogoutAsync(string? refreshToken, CancellationToken ct = default)
+    public async Task LogoutAsync(string? refreshToken, Guid? callerSessionFamilyId = null, CancellationToken ct = default)
     {
-        // We also close this sign-in's hub connections: otherwise the "signed-out" device
-        // would keep receiving messages as long as it holds the connection.
-        var familyId = await sessionService.RevokeAsync(refreshToken, ct);
-        if (familyId is null)
-            return;
-        await devices.DeleteAsync(familyId.Value, ct);
-        hubConnections.AbortSessionFamily(familyId.Value);
+        // The refresh token alone is not enough: a client whose access token expired refreshes the
+        // pair on the 401 and retries with the token it had read before, which is rotated by then.
+        var families = new HashSet<Guid>();
+        if (await sessionService.RevokeAsync(refreshToken, ct) is { } byToken)
+            families.Add(byToken);
+        if (callerSessionFamilyId is { } caller && families.Add(caller))
+            await sessionService.RevokeFamilyAsync(caller, ct);
+
+        // We also close the hub connections: otherwise the "signed-out" device would keep
+        // receiving messages as long as it holds the connection.
+        foreach (var familyId in families)
+        {
+            await devices.DeleteAsync(familyId, ct);
+            hubConnections.AbortSessionFamily(familyId);
+        }
     }
 
     /// <summary>
