@@ -19,6 +19,8 @@ vi.mock('../api/messages.api', () => ({
   deleteMessage: vi.fn(async () => {}),
   sendMessage: vi.fn(),
   sendTyping: vi.fn(async () => {}),
+  saveDraft: vi.fn(async () => null),
+  removeDraft: vi.fn(async () => {}),
 }))
 vi.mock('@/entities/message/api', () => ({ getMessagesPage: vi.fn(), PAGE_SIZE: 30 }))
 vi.mock('@/entities/chat/api', () => ({ getChatItem: vi.fn(() => new Promise(() => {})) }))

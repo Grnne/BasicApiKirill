@@ -1,6 +1,6 @@
 // The open chat: its history (from the history entity) and the commands on it.
 
-import { computed, ref, shallowRef, watch } from 'vue'
+import { computed, markRaw, ref, shallowRef, watch } from 'vue'
 import { defineStore } from 'pinia'
 
 import { useChatsStore } from '@/entities/chat/model/chats.store'
@@ -12,6 +12,7 @@ import { describeError } from '@/shared/api/problem'
 import { uuid } from '@/shared/lib/uuid'
 import { useNoticesStore } from '@/shared/ui/notices.store'
 import * as messagesApi from '../api/messages.api'
+import { DraftSaver } from './drafts'
 import { Outbox } from './outbox'
 
 export const useMessagesStore = defineStore('messages', () => {
@@ -31,6 +32,13 @@ export const useMessagesStore = defineStore('messages', () => {
       sending: (chatId, id) => history.updatePending(chatId, id, { state: 'sending', error: null }),
       failed: (chatId, id, error) => history.updatePending(chatId, id, { state: 'failed', error }),
     },
+  )
+
+  const drafts = markRaw(
+    new DraftSaver(
+      { save: messagesApi.saveDraft, remove: messagesApi.removeDraft },
+      (id, draft) => chats.patch(id, { draft }),
+    ),
   )
 
   const chatId = ref<string | null>(null)
@@ -137,6 +145,9 @@ export const useMessagesStore = defineStore('messages', () => {
     }
     history.addPending(message)
     replyTo.value = null
+    // Sending removes the draft on the server (and DraftUpdated tells the other devices).
+    drafts.cancel(id)
+    chats.patch(id, { draft: null })
     void outbox.deliver(message)
     return true
   }
@@ -321,6 +332,7 @@ export const useMessagesStore = defineStore('messages', () => {
     forward,
     jumpTo,
     react,
+    drafts,
     cancelEdit,
     saveEdit,
     remove,

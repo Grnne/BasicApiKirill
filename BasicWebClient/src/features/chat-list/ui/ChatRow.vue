@@ -28,6 +28,7 @@ const initial = computed(() => chatInitial(props.chat))
 
 const preview = computed(() => {
   if (isTyping.value) return 'печатает…'
+  if (props.chat.draft && !props.active) return props.chat.draft.text
 
   const message = props.chat.lastMessage
   if (!message) return 'нет сообщений'
@@ -53,7 +54,9 @@ const time = computed(() =>
     <span class="middle">
       <!-- Interpolation only: names and texts come from other users. -->
       <span class="title">{{ title }}</span>
-      <span :class="['preview', { typing: isTyping }]">{{ preview }}</span>
+      <span :class="['preview', { typing: isTyping }]">
+        <span v-if="chat.draft && !active && !isTyping" class="draft">Черновик: </span>{{ preview }}
+      </span>
     </span>
 
     <span class="right">
@@ -123,6 +126,9 @@ const time = computed(() =>
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.draft {
+  color: var(--danger);
 }
 .preview.typing {
   color: var(--accent);

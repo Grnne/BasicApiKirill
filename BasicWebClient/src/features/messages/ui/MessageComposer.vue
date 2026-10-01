@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 
 import * as chatApi from '@/entities/chat/api'
 import { useChatsStore } from '@/entities/chat/model/chats.store'
@@ -10,6 +10,7 @@ import FormattedText from '@/entities/message/ui/FormattedText'
 import { useAuthStore } from '@/features/auth/model/auth.store'
 import * as messagesApi from '../api/messages.api'
 import { adjustEntities, insertMention, mentionQuery, setLink, toggleEntity, type Entity } from '../lib/compose'
+import { sameDraft, type DraftContent } from '../model/drafts'
 import { useMessagesStore } from '../model/messages.store'
 
 /**
@@ -83,6 +84,73 @@ watch(
     input.value?.focus()
   },
 )
+
+/* ── Draft ── */
+
+const content = (): DraftContent => ({
+  text: text.value,
+  entities: entities.value,
+  replyToMessageId: store.replyTo?.id ?? null,
+})
+
+/** A reply of the loaded draft whose message is not in the loaded history yet. */
+let replyToRestore: string | null = null
+
+function restoreReply(): void {
+  if (!replyToRestore) return
+  const message = store.messages.find((m) => m.id === replyToRestore)
+  if (message) {
+    replyToRestore = null
+    store.startReply(message)
+  }
+}
+
+function loadDraft(chatId: string): void {
+  const draft = chats.get(chatId)?.draft ?? null
+  setContent(draft?.text ?? '', draft?.entities ?? [])
+  replyToRestore = draft?.replyToMessageId ?? null
+  restoreReply()
+}
+
+// Leaving a chat saves its draft at once; the next chat's draft fills the field.
+watch(
+  () => store.chatId,
+  (chatId, previous) => {
+    if (previous) void store.drafts.flush(previous)
+    if (chatId) loadDraft(chatId)
+  },
+  { immediate: true },
+)
+
+watch(() => store.messages.length, restoreReply)
+
+// Every change of what is typed (text, formatting, reply) is saved after a pause.
+watch([text, entities, () => store.replyTo], () => {
+  const chatId = store.chatId
+  if (!chatId || store.editing) return
+  const current = content()
+  if (!store.drafts.isDirty(chatId) && sameDraft(current, chats.get(chatId)?.draft ?? null)) return
+  store.drafts.schedule(chatId, current)
+})
+
+// A draft saved on another device replaces the field only when nothing unsaved is typed here.
+watch(
+  () => (store.chatId ? chats.get(store.chatId)?.draft : undefined),
+  (draft) => {
+    const chatId = store.chatId
+    if (!chatId || draft === undefined || store.editing || store.drafts.isDirty(chatId)) return
+    if (!sameDraft(content(), draft)) loadDraft(chatId)
+  },
+)
+
+function onHidden(): void {
+  if (document.visibilityState === 'hidden') store.drafts.flushAll()
+}
+onMounted(() => document.addEventListener('visibilitychange', onHidden))
+onUnmounted(() => {
+  document.removeEventListener('visibilitychange', onHidden)
+  store.drafts.flushAll()
+})
 
 /* ── Typing ── */
 

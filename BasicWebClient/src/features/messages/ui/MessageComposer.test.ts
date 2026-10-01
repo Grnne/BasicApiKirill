@@ -1,15 +1,25 @@
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { useChatsStore } from '@/entities/chat/model/chats.store'
+import { chat } from '@/testing/fixtures'
+import * as messagesApi from '../api/messages.api'
 import { useMessagesStore } from '../model/messages.store'
 import MessageComposer from './MessageComposer.vue'
 
-vi.mock('../api/messages.api', () => ({ sendTyping: vi.fn(async () => {}), sendMessage: vi.fn() }))
+vi.mock('../api/messages.api', () => ({
+  sendTyping: vi.fn(async () => {}),
+  sendMessage: vi.fn(),
+  saveDraft: vi.fn(async () => null),
+  removeDraft: vi.fn(async () => {}),
+}))
 
-function setup() {
+function setup(draftText: string | null = null) {
   const pinia = createPinia()
   setActivePinia(pinia)
+  const draft = draftText === null ? null : { text: draftText, entities: [], replyToMessageId: null, updatedAt: '2026-10-01T12:00:00Z' }
+  useChatsStore().replaceAll([chat({ draft })], [])
   const store = useMessagesStore()
   store.chatId = 'chat-1'
   const send = vi.fn(() => true)
@@ -59,5 +69,27 @@ describe('MessageComposer', () => {
     await area.setValue('line')
     await area.trigger('keydown', { key: 'Enter', shiftKey: true })
     expect(send).not.toHaveBeenCalled()
+  })
+})
+
+describe('drafts', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+
+  it('the saved draft fills the field when the chat opens', () => {
+    const { wrapper } = setup('не дописал')
+    expect((wrapper.get('textarea').element as HTMLTextAreaElement).value).toBe('не дописал')
+  })
+
+  it('what is typed is saved as the draft after a pause', async () => {
+    const { wrapper } = setup()
+    await wrapper.get('textarea').setValue('черно')
+    await wrapper.get('textarea').setValue('черновик')
+    expect(messagesApi.saveDraft).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(1_500)
+
+    expect(messagesApi.saveDraft).toHaveBeenCalledTimes(1)
+    expect(messagesApi.saveDraft).toHaveBeenCalledWith('chat-1', { text: 'черновик', entities: [], replyToMessageId: null })
   })
 })

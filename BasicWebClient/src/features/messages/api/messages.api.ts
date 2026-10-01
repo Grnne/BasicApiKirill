@@ -1,10 +1,12 @@
 import { http } from '@/shared/api/http'
 import type {
+  DraftDto,
   EditMessageDto,
   ForwardMessagesDto,
   ForwardMessagesResponseDto,
   MessageDto,
   MessageReactionsDto,
+  SaveDraftDto,
   SendMessageDto,
 } from '@/shared/api/schema'
 
@@ -45,4 +47,13 @@ export function setReaction(chatId: string, messageId: string, emoji: string): P
 
 export function removeReaction(chatId: string, messageId: string): Promise<void> {
   return http.delete<void>(`/api/chats/${chatId}/messages/${messageId}/reactions`)
+}
+
+/** 200 with the draft, or 204 when the text is empty without a reply (the draft is removed). */
+export async function saveDraft(chatId: string, body: SaveDraftDto): Promise<DraftDto | null> {
+  return (await http.put<DraftDto | undefined>(`/api/chats/${chatId}/draft`, body)) ?? null
+}
+
+export function removeDraft(chatId: string): Promise<void> {
+  return http.delete<void>(`/api/chats/${chatId}/draft`)
 }
