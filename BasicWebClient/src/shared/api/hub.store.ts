@@ -190,14 +190,6 @@ export const useHubStore = defineStore('hub', () => {
     if (chatId) await invokeSafe('LeaveChat', chatId)
   }
 
-  function sendMessage(chatId: string, text: string): Promise<boolean> {
-    return invokeSafe('SendMessage', chatId, text)
-  }
-
-  function sendTyping(chatId: string, isTyping: boolean): Promise<boolean> {
-    return invokeSafe('Typing', chatId, isTyping)
-  }
-
   return {
     status,
     joinedChatId,
@@ -207,7 +199,5 @@ export const useHubStore = defineStore('hub', () => {
     retryNow,
     joinChat,
     leaveChat,
-    sendMessage,
-    sendTyping,
   }
 })

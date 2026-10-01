@@ -5,13 +5,27 @@ import { defineStore } from 'pinia'
 
 import { useChatsStore } from '@/entities/chat/model/chats.store'
 import { useHistoryStore } from '@/entities/message/model/history.store'
-import { useHubStore } from '@/shared/api/hub.store'
+import { useAuthStore } from '@/features/auth/model/auth.store'
+import { uuid } from '@/shared/lib/uuid'
 import * as messagesApi from '../api/messages.api'
+import { Outbox } from './outbox'
 
 export const useMessagesStore = defineStore('messages', () => {
-  const hub = useHubStore()
+  const auth = useAuthStore()
   const chats = useChatsStore()
   const history = useHistoryStore()
+
+  const outbox = new Outbox(
+    { send: messagesApi.sendMessage },
+    {
+      stored: (message) => {
+        history.stored(message)
+        chats.preview(message, { meId: auth.user?.userId ?? '' })
+      },
+      sending: (chatId, id) => history.updatePending(chatId, id, { state: 'sending', error: null }),
+      failed: (chatId, id, error) => history.updatePending(chatId, id, { state: 'failed', error }),
+    },
+  )
 
   const chatId = ref<string | null>(null)
   const isLoading = ref(false)
@@ -21,6 +35,7 @@ export const useMessagesStore = defineStore('messages', () => {
   const current = computed(() => history.get(chatId.value))
   const messages = computed(() => current.value?.messages ?? [])
   const hasMore = computed(() => current.value?.hasOlder ?? false)
+  const pending = computed(() => current.value?.pending ?? [])
 
   /** Aborted when switching to another chat. */
   let inFlight: AbortController | null = null
@@ -79,13 +94,34 @@ export const useMessagesStore = defineStore('messages', () => {
     }
   }
 
-  /** Sent through the hub; the message itself comes back as MessageCreated. */
-  async function send(text: string): Promise<boolean> {
+  /** Shows the message at once as "sending"; the stored one replaces it by clientMessageId. */
+  function send(text: string): boolean {
     const id = chatId.value
     const trimmed = text.trim()
     if (!id || trimmed.length === 0) return false
 
-    return hub.sendMessage(id, trimmed)
+    const message = {
+      clientMessageId: uuid(),
+      chatId: id,
+      text: trimmed,
+      entities: [],
+      replyToMessageId: null,
+      createdAt: new Date().toISOString(),
+      state: 'sending' as const,
+      error: null,
+    }
+    history.addPending(message)
+    void outbox.deliver(message)
+    return true
+  }
+
+  function retry(clientMessageId: string): void {
+    const message = pending.value.find((p) => p.clientMessageId === clientMessageId)
+    if (message && message.state === 'failed') void outbox.deliver(message)
+  }
+
+  function discard(clientMessageId: string): void {
+    if (chatId.value) history.removePending(chatId.value, clientMessageId)
   }
 
   async function markReadUpToLast(): Promise<void> {
@@ -105,12 +141,15 @@ export const useMessagesStore = defineStore('messages', () => {
     chatId,
     messages,
     hasMore,
+    pending,
     isLoading,
     isLoadingOlder,
     error,
     openChat,
     loadOlder,
     send,
+    retry,
+    discard,
     markReadUpToLast,
     reset,
   }

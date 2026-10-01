@@ -2,6 +2,7 @@ import { watch } from 'vue'
 import { defineStore } from 'pinia'
 
 import { useChatsStore } from '@/entities/chat/model/chats.store'
+import { useConfigStore } from '@/entities/config/config.store'
 import { useHistoryStore } from '@/entities/message/model/history.store'
 import { useAccountStore } from '@/entities/user/model/account.store'
 import { usePresenceStore } from '@/entities/user/presence.store'
@@ -20,6 +21,7 @@ export const useSyncStore = defineStore('sync', () => {
   const history = useHistoryStore()
   const account = useAccountStore()
   const presence = usePresenceStore()
+  const config = useConfigStore()
 
   const ctx = () => ({ meId: auth.user?.userId ?? '' })
 
@@ -65,6 +67,7 @@ export const useSyncStore = defineStore('sync', () => {
     )
     presence.subscribeToHub()
 
+    void config.load()
     // The snapshot does not wait for the hub; every (re)connection may have missed events.
     void engine.sync()
     stopWatch = watch(
@@ -89,6 +92,7 @@ export const useSyncStore = defineStore('sync', () => {
     history.reset()
     account.reset()
     presence.reset()
+    config.reset()
   }
 
   return { start, stop, syncNow: () => engine.sync() }

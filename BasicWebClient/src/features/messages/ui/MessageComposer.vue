@@ -1,33 +1,33 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref } from 'vue'
 
-import { useHubStore } from '@/shared/api/hub.store'
+import { useConfigStore } from '@/entities/config/config.store'
+import * as messagesApi from '../api/messages.api'
 import { useMessagesStore } from '../model/messages.store'
 
-const MAX_LENGTH = 4000
-
 /**
- * The hub rate-limits calls; sending typing on every keystroke would eat the budget needed for
- * sending messages.
+ * Typing shares the per-user command limit with sending (20 per 10 s): repeat it only while
+ * typing goes on; the server drops it after 6 s without a repeat.
  */
 const TYPING_THROTTLE_MS = 3_000
 
 const TYPING_STOP_DELAY_MS = 3_000
 
-const hub = useHubStore()
 const store = useMessagesStore()
+const config = useConfigStore()
 
 const text = ref('')
-const errorText = ref('')
-
-const canSend = computed(
-  () => hub.status === 'connected' && text.value.trim().length > 0 && !isSending.value,
-)
-
-const isSending = ref(false)
+const maxLength = computed(() => config.config.messages.maxLength)
+const canSend = computed(() => text.value.trim().length > 0)
 
 let lastTypingSentAt = 0
 let stopTypingTimer: ReturnType<typeof setTimeout> | undefined
+
+function typing(chatId: string, isTyping: boolean): void {
+  messagesApi.sendTyping(chatId, isTyping).catch(() => {
+    // Typing is cosmetic: a lost one is not worth an error.
+  })
+}
 
 function stopTyping(): void {
   clearTimeout(stopTypingTimer)
@@ -36,7 +36,7 @@ function stopTyping(): void {
   const chatId = store.chatId
   if (chatId && lastTypingSentAt > 0) {
     lastTypingSentAt = 0
-    void hub.sendTyping(chatId, false)
+    typing(chatId, false)
   }
 }
 
@@ -47,7 +47,7 @@ function onInput(): void {
   const now = Date.now()
   if (now - lastTypingSentAt > TYPING_THROTTLE_MS) {
     lastTypingSentAt = now
-    void hub.sendTyping(chatId, true)
+    typing(chatId, true)
   }
 
   clearTimeout(stopTypingTimer)
@@ -56,30 +56,19 @@ function onInput(): void {
 
 onUnmounted(stopTyping)
 
-async function submit(): Promise<void> {
+function submit(): void {
   if (!canSend.value) return
-
-  isSending.value = true
-  errorText.value = ''
-
-  const value = text.value
-  // Cleared before awaiting, so typing the next message is not overwritten.
-  text.value = ''
-  stopTyping()
-
-  const ok = await store.send(value)
-  if (!ok) {
-    text.value = value
-    errorText.value = 'Сообщение не ушло. Проверь связь и попробуй ещё раз.'
+  // Sending failures show on the message itself, with a retry.
+  if (store.send(text.value)) {
+    text.value = ''
+    stopTyping()
   }
-
-  isSending.value = false
 }
 
 function onKeydown(event: KeyboardEvent): void {
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault()
-    void submit()
+    submit()
   }
 }
 </script>
@@ -90,14 +79,12 @@ function onKeydown(event: KeyboardEvent): void {
       v-model="text"
       class="input"
       rows="1"
-      :maxlength="MAX_LENGTH"
-      :placeholder="hub.status === 'connected' ? 'Написать сообщение' : 'Нет связи с сервером'"
-      :disabled="hub.status !== 'connected'"
+      :maxlength="maxLength"
+      placeholder="Написать сообщение"
       @input="onInput"
       @keydown="onKeydown"
     />
     <button type="submit" class="send" :disabled="!canSend">Отправить</button>
-    <p v-if="errorText" class="error" role="alert">{{ errorText }}</p>
   </form>
 </template>
 
@@ -138,11 +125,5 @@ function onKeydown(event: KeyboardEvent): void {
   background: var(--surface-hover);
   color: var(--text-faint);
   cursor: default;
-}
-.error {
-  grid-column: 1 / -1;
-  margin: 0;
-  color: var(--danger);
-  font-size: 12px;
 }
 </style>

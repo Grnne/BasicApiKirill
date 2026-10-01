@@ -5,6 +5,7 @@ import { useAuthStore } from '@/features/auth/model/auth.store'
 import { formatDay, parseApiDate } from '@/shared/lib/date'
 import { useMessagesStore } from '../model/messages.store'
 import MessageBubble from './MessageBubble.vue'
+import PendingBubble from './PendingBubble.vue'
 
 const STICK_THRESHOLD_PX = 120
 
@@ -47,7 +48,7 @@ function onScroll(): void {
 
 // Follow new messages only when already at the bottom, not while the user reads history.
 watch(
-  () => store.messages.length,
+  () => store.messages.length + store.pending.length,
   async (length, previousLength) => {
     const isAppend = length > previousLength
     const stick = isNearBottom()
@@ -96,6 +97,14 @@ function startsNewDay(index: number): boolean {
         <p v-if="startsNewDay(index)" class="day">{{ formatDay(message.createdAt) }}</p>
         <MessageBubble :message="message" :own="message.senderId === auth.user?.userId" />
       </template>
+
+      <PendingBubble
+        v-for="message in store.pending"
+        :key="message.clientMessageId"
+        :message="message"
+        @retry="store.retry(message.clientMessageId)"
+        @discard="store.discard(message.clientMessageId)"
+      />
     </template>
   </div>
 </template>
