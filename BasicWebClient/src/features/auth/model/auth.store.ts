@@ -11,7 +11,7 @@ import { defineStore } from 'pinia'
 import type { AuthResponse, LoginRequest, RegisterRequest } from '@/entities/user/auth.types'
 import type { OwnProfile } from '@/entities/user/types'
 import { ApiError } from '@/shared/api/problem'
-import { readLocal, removeLocal, writeLocal } from '@/shared/lib/storage'
+import { isStorageAvailable, readLocal, removeLocal, writeLocal } from '@/shared/lib/storage'
 import * as authApi from '../api/auth.api'
 
 const REFRESH_TOKEN_KEY = 'basicchat.refreshToken'
@@ -55,9 +55,27 @@ export const useAuthStore = defineStore('auth', () => {
    */
   const pendingRefresh = shallowRef<Promise<boolean> | null>(null)
 
+  /**
+   * Tabs of the app share the refresh token through localStorage, and every refresh rotates it:
+   * one tab must not present a token another tab already used (the server would revoke the whole
+   * sign-in). So the token is read fresh, under a lock that puts the tabs' refreshes in a row.
+   */
+  function withRefreshLock<T>(run: () => Promise<T>): Promise<T> {
+    const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined
+    return locks ? locks.request('basicchat.refresh', run) : run()
+  }
+
   async function performRefresh(): Promise<boolean> {
-    const token = refreshToken.value
-    if (!token) return false
+    return withRefreshLock(refreshOnce)
+  }
+
+  async function refreshOnce(): Promise<boolean> {
+    const token = isStorageAvailable() ? readLocal(REFRESH_TOKEN_KEY) : refreshToken.value
+    if (!token) {
+      // Logged out in another tab.
+      if (refreshToken.value) clearSession()
+      return false
+    }
 
     try {
       applyAuth(await authApi.refresh(token))

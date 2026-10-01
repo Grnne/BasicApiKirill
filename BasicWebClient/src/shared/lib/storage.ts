@@ -24,3 +24,15 @@ export function removeLocal(key: string): void {
     // Storage unavailable.
   }
 }
+
+/** Whether localStorage works at all (it throws in some private modes and with site data blocked). */
+export function isStorageAvailable(): boolean {
+  try {
+    const probe = '__storage_probe__'
+    localStorage.setItem(probe, probe)
+    localStorage.removeItem(probe)
+    return true
+  } catch {
+    return false
+  }
+}
