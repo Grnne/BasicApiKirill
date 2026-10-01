@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 
+import { useChatsStore } from '@/entities/chat/model/chats.store'
 import { useAuthStore } from '@/features/auth/model/auth.store'
 import { formatDay, parseApiDate } from '@/shared/lib/date'
+import { closesRun } from '../lib/runs'
 import { useMessagesStore } from '../model/messages.store'
 import MessageItem from './MessageItem.vue'
 import PendingBubble from './PendingBubble.vue'
@@ -13,6 +15,8 @@ const LOAD_OLDER_THRESHOLD_PX = 150
 
 const auth = useAuthStore()
 const store = useMessagesStore()
+const chats = useChatsStore()
+const isGroup = computed(() => chats.get(store.chatId)?.type === 'group')
 
 const viewport = ref<HTMLElement | null>(null)
 
@@ -126,7 +130,11 @@ function startsNewDay(index: number): boolean {
 
       <template v-for="(message, index) in store.messages" :key="message.id">
         <p v-if="startsNewDay(index)" class="day">{{ formatDay(message.createdAt) }}</p>
-        <MessageItem :message="message" :me-id="auth.user?.userId ?? null" />
+        <MessageItem
+          :message="message"
+          :me-id="auth.user?.userId ?? null"
+          :avatar="isGroup ? (closesRun(store.messages, index) ? 'show' : 'space') : null"
+        />
       </template>
 
       <PendingBubble

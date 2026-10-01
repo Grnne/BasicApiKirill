@@ -2,6 +2,7 @@ import { watch } from 'vue'
 import { defineStore } from 'pinia'
 
 import { useChatsStore } from '@/entities/chat/model/chats.store'
+import { useChatDetailsStore } from '@/entities/chat/model/details.store'
 import { useConfigStore } from '@/entities/config/config.store'
 import { useMediaLinksStore } from '@/entities/media/model/links.store'
 import { useHistoryStore } from '@/entities/message/model/history.store'
@@ -19,6 +20,7 @@ export const useSyncStore = defineStore('sync', () => {
   const auth = useAuthStore()
   const hub = useHubStore()
   const chats = useChatsStore()
+  const details = useChatDetailsStore()
   const history = useHistoryStore()
   const account = useAccountStore()
   const presence = usePresenceStore()
@@ -31,6 +33,7 @@ export const useSyncStore = defineStore('sync', () => {
     chats.replaceAll(state.chats, state.folders)
     account.replaceAll(state.me, state.privacy, state.blockedUserIds)
     history.invalidate()
+    details.invalidate()
 
     // Online changes from before the connection were missed: ask for the current statuses.
     const companions = state.chats.map((c) => c.companionId).filter((id): id is string => id !== null)
@@ -40,6 +43,7 @@ export const useSyncStore = defineStore('sync', () => {
 
   function apply<K extends JournaledEventName>(type: K, payload: JournaledEvents[K]): void {
     chats.apply(type, payload, ctx())
+    details.apply(type, payload, ctx().meId)
     history.apply(type, payload, ctx())
     account.apply(type, payload)
   }
@@ -91,6 +95,7 @@ export const useSyncStore = defineStore('sync', () => {
 
     engine.stop()
     chats.reset()
+    details.reset()
     history.reset()
     account.reset()
     presence.reset()

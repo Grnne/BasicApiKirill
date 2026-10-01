@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 
-import * as chatApi from '@/entities/chat/api'
 import { useChatsStore } from '@/entities/chat/model/chats.store'
+import { useChatDetailsStore } from '@/entities/chat/model/details.store'
 import type { ChatParticipant } from '@/entities/chat/types'
 import { useConfigStore } from '@/entities/config/config.store'
 import { safeUrl } from '@/entities/message/lib/formatted'
@@ -46,6 +46,7 @@ const HOTKEYS: Record<string, string> = {
 const store = useMessagesStore()
 const config = useConfigStore()
 const chats = useChatsStore()
+const details = useChatDetailsStore()
 const auth = useAuthStore()
 
 const text = ref('')
@@ -275,24 +276,14 @@ function applyLink(): void {
 
 /* ── Mentions ── */
 
-const members = shallowRef<ChatParticipant[]>([])
+const members = computed<ChatParticipant[]>(() => {
+  const chatId = store.chatId
+  if (!chatId || chats.get(chatId)?.type !== 'group') return []
+  // Not loaded yet or failed: no suggestions, a name can still be typed as text.
+  return details.get(chatId)?.participants ?? []
+})
 const mention = ref<{ start: number; query: string } | null>(null)
 const activeSuggestion = ref(0)
-
-watch(
-  () => store.chatId,
-  async (chatId) => {
-    members.value = []
-    if (!chatId || chats.get(chatId)?.type !== 'group') return
-    try {
-      const detail = await chatApi.getChatDetail(chatId)
-      if (store.chatId === chatId) members.value = detail.participants
-    } catch {
-      // No suggestions then; a name can still be typed as text.
-    }
-  },
-  { immediate: true },
-)
 
 const suggestions = computed(() => {
   const m = mention.value

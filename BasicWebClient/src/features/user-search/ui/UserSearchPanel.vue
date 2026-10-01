@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 
+import AvatarCircle from '@/entities/media/ui/AvatarCircle.vue'
 import type { UserSearchResult } from '@/entities/user/types'
 import { useDebounced } from '@/shared/lib/useDebounced'
 import * as usersApi from '../api/users.api'
@@ -45,7 +46,7 @@ watch(debouncedQuery, async (query) => {
       class="row"
       @click="emit('select', user.userId)"
     >
-      <span class="avatar">{{ user.displayName.charAt(0).toUpperCase() }}</span>
+      <AvatarCircle :avatar-id="user.avatarId" :initial="user.displayName.charAt(0).toUpperCase() || '?'" :size="30" />
       <span class="middle">
         <span class="name">{{ user.displayName }}</span>
         <span class="username">@{{ user.username }}</span>
@@ -81,16 +82,6 @@ watch(debouncedQuery, async (query) => {
 }
 .row:hover {
   background: var(--surface-hover);
-}
-.avatar {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  border: 1px dashed var(--border);
-  color: var(--text-dim);
-  font-weight: 700;
 }
 .middle {
   display: grid;

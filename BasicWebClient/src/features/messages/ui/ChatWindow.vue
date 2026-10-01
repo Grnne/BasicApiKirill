@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 
-import { chatTitle } from '@/entities/chat/lib'
+import { chatInitial, chatTitle } from '@/entities/chat/lib'
+import AvatarCircle from '@/entities/media/ui/AvatarCircle.vue'
 import { usePresenceStore } from '@/entities/user/presence.store'
 import { useChatListStore } from '@/features/chat-list/model/chat-list.store'
 import { useMessagesStore } from '../model/messages.store'
@@ -51,6 +52,7 @@ watch(
       <button type="button" class="back" title="К списку чатов" @click="chatList.deselect()">
         ←
       </button>
+      <AvatarCircle :avatar-id="chatList.selectedChat.avatarId" :initial="chatInitial(chatList.selectedChat)" :size="32" />
       <span class="title">{{ chatTitle(chatList.selectedChat) }}</span>
       <span :class="['subtitle', { typing: isTyping }]">{{ subtitle }}</span>
       <button type="button" class="search-toggle" title="Поиск в чате" @click="searching = !searching">🔍</button>

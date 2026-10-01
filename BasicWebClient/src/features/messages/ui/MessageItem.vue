@@ -2,9 +2,11 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 
 import { useChatsStore } from '@/entities/chat/model/chats.store'
+import { useChatDetailsStore } from '@/entities/chat/model/details.store'
 import { useConfigStore } from '@/entities/config/config.store'
 import { ownStatus } from '@/entities/message/lib/status'
 import { messageActions } from '@/entities/message/lib/actions'
+import AvatarCircle from '@/entities/media/ui/AvatarCircle.vue'
 import type { Message } from '@/entities/message/types'
 import ConfirmDialog from '@/shared/ui/ConfirmDialog.vue'
 import { useNoticesStore } from '@/shared/ui/notices.store'
@@ -12,15 +14,27 @@ import { useMessagesStore } from '../model/messages.store'
 import ForwardDialog from './ForwardDialog.vue'
 import MessageBubble from './MessageBubble.vue'
 
-const props = defineProps<{ message: Message; meId: string | null }>()
+const props = withDefaults(
+  defineProps<{
+    message: Message
+    meId: string | null
+    /** Groups: the sender's photo by the last message of their run, its place by the others. */
+    avatar?: 'show' | 'space' | null
+  }>(),
+  { avatar: null },
+)
 
 const store = useMessagesStore()
 const config = useConfigStore()
 const notices = useNoticesStore()
 const chats = useChatsStore()
+const details = useChatDetailsStore()
 const status = computed(() => ownStatus(props.message, chats.get(props.message.chatId), props.meId))
 
 const own = computed(() => props.message.senderId === props.meId)
+const sender = computed(() =>
+  props.avatar === 'show' ? details.member(props.message.chatId, props.message.senderId) : null,
+)
 const system = computed(() => props.message.type === 'system')
 const actions = computed(() =>
   messageActions(props.message, {
@@ -115,6 +129,15 @@ async function confirmDelete(): Promise<void> {
     @click.capture="onClick"
   >
     <span v-if="selecting" class="check" aria-hidden="true">{{ isSelected ? '✓' : '' }}</span>
+    <template v-if="avatar && !own">
+      <AvatarCircle
+        v-if="avatar === 'show'"
+        :avatar-id="sender?.avatarId ?? null"
+        :initial="(sender?.displayName ?? message.senderName).charAt(0).toUpperCase() || '?'"
+        :size="28"
+      />
+      <span v-else class="avatar-space" />
+    </template>
     <MessageBubble
       :message="message"
       :own="own"
@@ -191,6 +214,10 @@ async function confirmDelete(): Promise<void> {
 }
 .item :deep(.bubble) {
   max-width: min(560px, 75vw);
+}
+.avatar-space {
+  flex-shrink: 0;
+  width: 28px;
 }
 .item.selecting {
   cursor: pointer;

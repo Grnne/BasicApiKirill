@@ -3,6 +3,7 @@ import { computed } from 'vue'
 
 import type { ChatListItem } from '@/entities/chat/types'
 import { chatInitial, chatTitle, isMutedNow } from '@/entities/chat/lib'
+import AvatarCircle from '@/entities/media/ui/AvatarCircle.vue'
 import { usePresenceStore } from '@/entities/user/presence.store'
 import { messagePreview } from '@/entities/message/lib/preview'
 import { STATUS_MARKS, ownStatus } from '@/entities/message/lib/status'
@@ -55,7 +56,7 @@ const time = computed(() =>
 <template>
   <button type="button" :class="['row', { active }]">
     <span class="avatar">
-      {{ initial }}
+      <AvatarCircle :avatar-id="chat.avatarId" :initial="initial" />
       <span v-if="isCompanionOnline" class="online" title="в сети" />
     </span>
 
@@ -112,14 +113,7 @@ const time = computed(() =>
 }
 .avatar {
   position: relative;
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: var(--surface-hover);
-  color: var(--accent);
-  font-weight: 700;
+  align-self: center;
 }
 .online {
   position: absolute;
