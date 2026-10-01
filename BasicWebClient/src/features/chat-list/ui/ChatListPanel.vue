@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 
 import type { ChatListItem } from '@/entities/chat/types'
 import { useChatsStore } from '@/entities/chat/model/chats.store'
+import { folderChats } from '@/entities/chat/model/folders'
 import { useDebounced } from '@/shared/lib/useDebounced'
 import * as chatsApi from '../api/chats.api'
 import { useChatListStore } from '../model/chat-list.store'
@@ -15,7 +16,11 @@ const store = useChatListStore()
 const chats = useChatsStore()
 
 const showArchive = ref(false)
-const visible = computed(() => (showArchive.value ? chats.archivedList : chats.mainList))
+const visible = computed(() => {
+  const folder = store.selectedFolder
+  if (folder) return folderChats(folder, chats.list)
+  return showArchive.value ? chats.archivedList : chats.mainList
+})
 const archiveUnread = computed(() => chats.archivedList.reduce((n, c) => n + c.unreadCount, 0))
 
 /** The chat whose menu is open and where (right click or long press on a row). */
@@ -89,7 +94,7 @@ watch(debouncedQuery, async (query) => {
   <section class="panel">
     <h2 class="heading">
       <button v-if="showArchive && !query.trim()" type="button" class="back" @click="showArchive = false">←</button>
-      {{ query.trim() ? 'Найденные чаты' : showArchive ? 'Архив' : 'Чаты' }}
+      {{ query.trim() ? 'Найденные чаты' : store.selectedFolder?.title ?? (showArchive ? 'Архив' : 'Чаты') }}
     </h2>
 
     <p v-if="!chats.loaded" class="note">загрузка…</p>
@@ -108,7 +113,7 @@ watch(debouncedQuery, async (query) => {
 
     <template v-else>
       <button
-        v-if="!showArchive && chats.archivedList.length > 0"
+        v-if="!showArchive && !store.selectedFolder && chats.archivedList.length > 0"
         type="button"
         class="archive-row"
         @click="showArchive = true"
@@ -122,7 +127,7 @@ watch(debouncedQuery, async (query) => {
         :key="chat.chatId"
         :chat="chat"
         :active="chat.chatId === store.selectedChatId"
-        :draggable="chat.pinnedPosition !== null"
+        :draggable="chat.pinnedPosition !== null && !store.selectedFolder"
         @click="store.select(chat.chatId)"
         @contextmenu.prevent="openMenu(chat, $event)"
         @dragstart="onDragStart(chat, $event)"

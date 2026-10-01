@@ -6,8 +6,15 @@ import { ApiError } from '@/shared/api/problem'
 import { useNoticesStore } from '@/shared/ui/notices.store'
 import { chat, message } from '@/testing/fixtures'
 import * as chatsApi from '../api/chats.api'
+import * as foldersApi from '../api/folders.api'
 import { useChatListStore } from './chat-list.store'
 
+vi.mock('../api/folders.api', () => ({
+  createFolder: vi.fn(),
+  updateFolder: vi.fn(),
+  deleteFolder: vi.fn(async () => {}),
+  reorderFolders: vi.fn(),
+}))
 vi.mock('../api/chats.api', () => ({
   setMarkedUnread: vi.fn(async () => {}),
   markRead: vi.fn(async () => {}),
@@ -105,5 +112,46 @@ describe('archive and mute', () => {
     await useChatListStore().mute('chat-1', null)
     expect(chatsApi.setMuted).toHaveBeenLastCalledWith('chat-1', true, undefined)
     expect(chats.get('chat-1')!.isMuted).toBe(true)
+  })
+})
+
+describe('folders', () => {
+  const f = (id: string, title = id) => ({
+    id, title, includePrivate: true, includeGroups: false, onlyUnread: false, chatIds: [], pinnedChatIds: [],
+  })
+
+  it('a new folder goes last; an edited one keeps its place', async () => {
+    const chats = useChatsStore()
+    chats.replaceAll([], [f('a'), f('b')])
+    vi.mocked(foldersApi.createFolder).mockResolvedValue(f('c'))
+    vi.mocked(foldersApi.updateFolder).mockResolvedValue(f('a', 'Работа'))
+
+    await useChatListStore().saveFolder(null, { title: 'c' })
+    await useChatListStore().saveFolder('a', { title: 'Работа' })
+
+    expect(chats.folders.map((x) => x.title)).toEqual(['Работа', 'b', 'c'])
+  })
+
+  it('deleting the open folder goes back to all chats', async () => {
+    const chats = useChatsStore()
+    chats.replaceAll([], [f('a')])
+    const store = useChatListStore()
+    store.selectedFolderId = 'a'
+
+    await store.deleteFolder('a')
+
+    expect(chats.folders).toEqual([])
+    expect(store.selectedFolderId).toBeNull()
+  })
+
+  it('pinning in a folder puts the chat on top of the folder pins', async () => {
+    const chats = useChatsStore()
+    chats.replaceAll([], [{ ...f('a'), pinnedChatIds: ['x'] }])
+    vi.mocked(foldersApi.updateFolder).mockImplementation(async (_id, body) => ({ ...f('a'), pinnedChatIds: body.pinnedChatIds ?? [] }))
+
+    await useChatListStore().pinInFolder(chats.folders[0]!, 'y', true)
+
+    expect(foldersApi.updateFolder).toHaveBeenCalledWith('a', { pinnedChatIds: ['y', 'x'] })
+    expect(chats.folders[0]!.pinnedChatIds).toEqual(['y', 'x'])
   })
 })

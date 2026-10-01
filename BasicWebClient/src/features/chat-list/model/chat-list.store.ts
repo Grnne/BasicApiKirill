@@ -9,7 +9,9 @@ import { useAuthStore } from '@/features/auth/model/auth.store'
 import { useHubStore } from '@/shared/api/hub.store'
 import { describeError } from '@/shared/api/problem'
 import { useNoticesStore } from '@/shared/ui/notices.store'
+import type { FolderDto, SaveFolderDto } from '@/shared/api/schema'
 import * as chatsApi from '../api/chats.api'
+import * as foldersApi from '../api/folders.api'
 
 export const useChatListStore = defineStore('chatList', () => {
   const hub = useHubStore()
@@ -17,6 +19,9 @@ export const useChatListStore = defineStore('chatList', () => {
   const notices = useNoticesStore()
 
   const selectedChatId = ref<string | null>(null)
+  /** The folder tab shown; null — all chats. */
+  const selectedFolderId = ref<string | null>(null)
+  const selectedFolder = computed(() => chats.folders.find((f) => f.id === selectedFolderId.value) ?? null)
   const selectedChat = computed(() => chats.get(selectedChatId.value))
 
   async function select(chatId: string): Promise<void> {
@@ -105,9 +110,58 @@ export const useChatListStore = defineStore('chatList', () => {
     return command(async () => chats.apply('ChatStateChanged', await chatsApi.setMuted(chatId, false), ctx()))
   }
 
-  function reset(): void {
-    selectedChatId.value = null
+  function setFolders(folders: FolderDto[]): void {
+    chats.apply('FoldersChanged', { folders }, ctx())
+    if (selectedFolderId.value && !folders.some((f) => f.id === selectedFolderId.value)) selectedFolderId.value = null
   }
 
-  return { selectedChatId, selectedChat, select, deselect, openPrivateChat, openSaved, markUnread, markRead, pin, reorderPinned, archive, mute, unmute, command, reset }
+  /** Saves a new folder (no id) or changes one; FoldersChanged brings the same to other devices. */
+  async function saveFolder(id: string | null, body: SaveFolderDto): Promise<boolean> {
+    try {
+      const saved = id ? await foldersApi.updateFolder(id, body) : await foldersApi.createFolder(body)
+      const others = chats.folders.filter((f) => f.id !== saved.id)
+      const index = chats.folders.findIndex((f) => f.id === saved.id)
+      setFolders(index === -1 ? [...others, saved] : chats.folders.map((f) => (f.id === saved.id ? saved : f)))
+      return true
+    } catch (e) {
+      notices.push(describeError(e))
+      return false
+    }
+  }
+
+  function deleteFolder(id: string): Promise<void> {
+    return command(async () => {
+      await foldersApi.deleteFolder(id)
+      setFolders(chats.folders.filter((f) => f.id !== id))
+    })
+  }
+
+  function reorderFolders(ids: string[]): Promise<void> {
+    setFolders(ids.map((id) => chats.folders.find((f) => f.id === id)).filter((f): f is FolderDto => !!f))
+    return command(async () => setFolders(await foldersApi.reorderFolders(ids)))
+  }
+
+  /** Pinned inside the folder (on top of it), apart from the global pins. */
+  function pinInFolder(folder: FolderDto, chatId: string, pinned: boolean): Promise<void> {
+    const pinnedChatIds = pinned
+      ? [chatId, ...folder.pinnedChatIds.filter((id) => id !== chatId)]
+      : folder.pinnedChatIds.filter((id) => id !== chatId)
+    return saveFolder(folder.id, { pinnedChatIds }).then(() => {})
+  }
+
+  function reset(): void {
+    selectedChatId.value = null
+    selectedFolderId.value = null
+  }
+
+  return {
+    selectedFolderId,
+    selectedFolder,
+    saveFolder,
+    deleteFolder,
+    reorderFolders,
+    pinInFolder,
+    selectedChatId,
+    selectedChat,
+    select, deselect, openPrivateChat, openSaved, markUnread, markRead, pin, reorderPinned, archive, mute, unmute, command, reset }
 })

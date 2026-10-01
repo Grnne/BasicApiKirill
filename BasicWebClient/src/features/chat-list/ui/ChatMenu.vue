@@ -12,6 +12,8 @@ const store = useChatListStore()
 
 const unread = computed(() => props.chat.unreadCount > 0 || props.chat.markedUnread)
 const pinned = computed(() => props.chat.pinnedPosition !== null)
+const folder = computed(() => store.selectedFolder)
+const pinnedInFolder = computed(() => !!folder.value?.pinnedChatIds.includes(props.chat.chatId))
 const muted = computed(() => isMutedNow(props.chat))
 const choosingMute = ref(false)
 
@@ -63,7 +65,16 @@ onUnmounted(() => {
     </li>
   </ul>
   <ul v-else class="menu" role="menu" :style="style" @click.stop>
-    <li>
+    <li v-if="folder">
+      <button
+        type="button"
+        role="menuitem"
+        @click="run(() => store.pinInFolder(folder!, chat.chatId, !pinnedInFolder))"
+      >
+        {{ pinnedInFolder ? 'Открепить в папке' : 'Закрепить в папке' }}
+      </button>
+    </li>
+    <li v-else>
       <button type="button" role="menuitem" @click="run(() => store.pin(chat.chatId, !pinned))">
         {{ pinned ? 'Открепить' : 'Закрепить' }}
       </button>

@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 import BaseButton from '@/shared/ui/BaseButton.vue'
 import ConnectionStatus from '@/features/realtime/ui/ConnectionStatus.vue'
 import ChatListPanel from '@/features/chat-list/ui/ChatListPanel.vue'
+import FolderTabs from '@/features/chat-list/ui/FolderTabs.vue'
 import ChatWindow from '@/features/messages/ui/ChatWindow.vue'
 import UserSearchPanel from '@/features/user-search/ui/UserSearchPanel.vue'
 import { useAuthStore } from '@/features/auth/model/auth.store'
@@ -66,6 +67,7 @@ async function onLogout(): Promise<void> {
             autocomplete="off"
           />
         </div>
+        <FolderTabs v-if="!query.trim()" />
         <div class="panels">
           <ChatListPanel :query="query" />
           <UserSearchPanel :query="query" @select="onUserSelected" />
@@ -137,8 +139,8 @@ async function onLogout(): Promise<void> {
   }
 }
 .sidebar {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   border-right: 1px solid var(--border);
 }
@@ -158,6 +160,8 @@ async function onLogout(): Promise<void> {
   outline: none;
 }
 .panels {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 .main {
