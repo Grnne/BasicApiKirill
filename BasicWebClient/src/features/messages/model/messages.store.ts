@@ -241,18 +241,28 @@ export const useMessagesStore = defineStore('messages', () => {
     selected.value = new Set()
   }
 
+  /**
+   * clientMessageIds of a forward that failed: the same forward again reuses them, so if the
+   * first one did reach the server it answers with the copies it made instead of new ones.
+   */
+  const forwardIds = new Map<string, string[]>()
+
   /** Forwards the given messages of the open chat; returns how many arrived. */
   async function forward(targetChatId: string, ids: readonly string[]): Promise<number> {
     const fromChatId = chatId.value
     if (!fromChatId || ids.length === 0) return 0
     // The server keeps the source order (by seq) whatever the order here; clientMessageIds go with it.
     const ordered = messages.value.filter((m) => ids.includes(m.id)).map((m) => m.id)
+    const key = `${fromChatId}>${targetChatId}:${ordered.join(',')}`
+    const clientMessageIds = forwardIds.get(key) ?? ordered.map(() => uuid())
+    forwardIds.set(key, clientMessageIds)
     try {
       const response = await messagesApi.forwardMessages(targetChatId, {
         fromChatId,
         messageIds: ordered,
-        clientMessageIds: ordered.map(() => uuid()),
+        clientMessageIds,
       })
+      forwardIds.delete(key)
       for (const message of response.items) {
         history.stored(message)
         chats.messageStored(message, ctx())

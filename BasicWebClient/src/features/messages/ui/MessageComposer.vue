@@ -215,7 +215,7 @@ watch(
 )
 
 function onHidden(): void {
-  if (document.visibilityState === 'hidden') store.drafts.flushAll()
+  if (document.visibilityState === 'hidden') store.drafts.flushAll(true)
 }
 onMounted(() => document.addEventListener('visibilitychange', onHidden))
 onUnmounted(() => {
@@ -227,6 +227,8 @@ onUnmounted(() => {
 
 let lastTypingSentAt = 0
 let stopTypingTimer: ReturnType<typeof setTimeout> | undefined
+/** Where "typing" was sent: the stop goes there, whichever chat is open by then. */
+let typingChatId: string | null = null
 
 function typing(chatId: string, isTyping: boolean): void {
   messagesApi.sendTyping(chatId, isTyping).catch(() => {
@@ -238,7 +240,8 @@ function stopTyping(): void {
   clearTimeout(stopTypingTimer)
   stopTypingTimer = undefined
 
-  const chatId = store.chatId
+  const chatId = typingChatId
+  typingChatId = null
   if (chatId && lastTypingSentAt > 0) {
     lastTypingSentAt = 0
     typing(chatId, false)
@@ -248,10 +251,12 @@ function stopTyping(): void {
 function noteTyping(): void {
   const chatId = store.chatId
   if (!chatId || store.editing) return
+  if (typingChatId && typingChatId !== chatId) stopTyping()
 
   const now = Date.now()
   if (now - lastTypingSentAt > TYPING_THROTTLE_MS) {
     lastTypingSentAt = now
+    typingChatId = chatId
     typing(chatId, true)
   }
   clearTimeout(stopTypingTimer)
@@ -259,6 +264,8 @@ function noteTyping(): void {
 }
 
 onUnmounted(stopTyping)
+// Leaving the chat ends typing in it at once, not after the pause.
+watch(() => store.chatId, stopTyping)
 
 /* ── Text and formatting ── */
 
@@ -405,6 +412,8 @@ function onFormatKey(event: KeyboardEvent): boolean {
 }
 
 function onKeydown(event: KeyboardEvent): void {
+  // An input method's own keys (Enter confirms a candidate); 229 — older browsers.
+  if (event.isComposing || event.keyCode === 229) return
   if (onSuggestionKey(event) || onFormatKey(event)) {
     event.preventDefault()
     return

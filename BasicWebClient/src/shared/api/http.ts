@@ -28,6 +28,8 @@ export interface RequestOptions {
   /** false: no token is sent and a 401 does not trigger a refresh (login, register, refresh). */
   auth?: boolean
   signal?: AbortSignal
+  /** The request outlives the page: for what is sent as the tab is hidden or closed. */
+  keepalive?: boolean
 }
 
 function buildPath(path: string, query?: QueryParams): string {
@@ -68,6 +70,7 @@ async function send(
   const init: RequestInit = { method, headers }
   if (body !== undefined) init.body = JSON.stringify(body)
   if (options.signal) init.signal = options.signal
+  if (options.keepalive) init.keepalive = true
 
   try {
     return await fetch(url, init)

@@ -209,6 +209,19 @@ describe('reply and forward', () => {
     )
   })
 
+  it('forwarding again after a failure that may have gone through makes no copies', async () => {
+    // The bug: every attempt had new clientMessageIds, so the server could not tell a repeat.
+    const { store } = await openChatWithUnread()
+    vi.mocked(messagesApi.forwardMessages).mockRejectedValueOnce(new Error('offline'))
+    vi.mocked(messagesApi.forwardMessages).mockResolvedValueOnce({ items: [] })
+
+    await store.forward('chat-2', [m1.id])
+    await store.forward('chat-2', [m1.id])
+
+    const [first, second] = vi.mocked(messagesApi.forwardMessages).mock.calls
+    expect(second![1].clientMessageIds).toEqual(first![1].clientMessageIds)
+  })
+
   it('forwards the selected messages in the chat order with a clientMessageId each', async () => {
     const { store } = await openChatWithUnread()
     const m2 = message({ seq: 2 })

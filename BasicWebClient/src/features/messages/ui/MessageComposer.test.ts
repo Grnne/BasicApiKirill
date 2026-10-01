@@ -89,6 +89,36 @@ describe('MessageComposer', () => {
     expect(send).toHaveBeenCalledWith('hello world', [{ type: 'italic', offset: 6, length: 5 }], [])
   })
 
+  it('Enter that picks a word in an input method does not send', async () => {
+    // Chinese, Japanese, Korean input: Enter confirms the candidate, the text is not finished.
+    const { wrapper, send } = setup()
+    const area = wrapper.get('textarea')
+    await area.setValue('ni')
+
+    await area.trigger('keydown', { key: 'Enter', isComposing: true })
+
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it('"stopped typing" goes to the chat that was typed in, not the one opened since', async () => {
+    // The bug: the stop went to the new chat, the old one showed "печатает…" for seconds more,
+    // and typing in the new one within 3 s sent no indicator.
+    vi.useFakeTimers()
+    const { wrapper } = setup()
+    useChatsStore().put(chat({ chatId: 'chat-2' }))
+    const store = useMessagesStore()
+    await wrapper.get('textarea').setValue('h')
+    vi.mocked(messagesApi.sendTyping).mockClear()
+
+    store.chatId = 'chat-2'
+    await flushPromises()
+    await wrapper.get('textarea').setValue('x')
+
+    expect(messagesApi.sendTyping).toHaveBeenCalledWith('chat-1', false)
+    expect(messagesApi.sendTyping).toHaveBeenCalledWith('chat-2', true)
+    vi.useRealTimers()
+  })
+
   it('Shift+Enter is a new line, not sending', async () => {
     const { wrapper, send } = setup()
     const area = wrapper.get('textarea')
@@ -145,6 +175,6 @@ describe('drafts', () => {
     await vi.advanceTimersByTimeAsync(1_500)
 
     expect(messagesApi.saveDraft).toHaveBeenCalledTimes(1)
-    expect(messagesApi.saveDraft).toHaveBeenCalledWith('chat-1', { text: 'черновик', entities: [], replyToMessageId: null })
+    expect(messagesApi.saveDraft).toHaveBeenCalledWith('chat-1', { text: 'черновик', entities: [], replyToMessageId: null }, false)
   })
 })
