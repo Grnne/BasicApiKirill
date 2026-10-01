@@ -1,5 +1,5 @@
 import { http } from '@/shared/api/http'
-import type { MessageDto, SendMessageDto } from '@/shared/api/schema'
+import type { EditMessageDto, MessageDto, SendMessageDto } from '@/shared/api/schema'
 
 /** 201 — stored now, 200 — a repeat of the same clientMessageId: the message stored before. */
 export function sendMessage(chatId: string, body: SendMessageDto): Promise<MessageDto> {
@@ -14,4 +14,14 @@ export function sendTyping(chatId: string, isTyping: boolean): Promise<void> {
 /** Marks everything up to and including the given message as read. */
 export function markRead(chatId: string, lastMessageId: string): Promise<void> {
   return http.post<void>(`/api/chats/${chatId}/read`, { lastMessageId })
+}
+
+/** Replaces text and formatting; the same text again is a no-op (200 without an event). */
+export function editMessage(chatId: string, messageId: string, body: EditMessageDto): Promise<MessageDto> {
+  return http.patch<MessageDto>(`/api/chats/${chatId}/messages/${messageId}`, body)
+}
+
+/** forEveryone: for all members (the author, within the window); otherwise only for the caller. */
+export function deleteMessage(chatId: string, messageId: string, forEveryone: boolean): Promise<void> {
+  return http.delete<void>(`/api/chats/${chatId}/messages/${messageId}`, forEveryone ? { query: { forEveryone } } : {})
 }

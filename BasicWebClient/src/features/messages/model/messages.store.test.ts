@@ -6,14 +6,19 @@ import { useAuthStore } from '@/features/auth/model/auth.store'
 import { ME, chat, message } from '@/testing/fixtures'
 import * as messagesApi from '../api/messages.api'
 import * as messageEntityApi from '@/entities/message/api'
+import { ApiError } from '@/shared/api/problem'
+import { useNoticesStore } from '@/shared/ui/notices.store'
 import { useMessagesStore } from './messages.store'
 
 vi.mock('../api/messages.api', () => ({
   markRead: vi.fn(async () => {}),
+  editMessage: vi.fn(),
+  deleteMessage: vi.fn(async () => {}),
   sendMessage: vi.fn(),
   sendTyping: vi.fn(async () => {}),
 }))
 vi.mock('@/entities/message/api', () => ({ getMessagesPage: vi.fn(), PAGE_SIZE: 30 }))
+vi.mock('@/entities/chat/api', () => ({ getChatItem: vi.fn(() => new Promise(() => {})) }))
 
 const m1 = message({ seq: 1 })
 
@@ -67,5 +72,39 @@ describe('reading the open chat', () => {
     await vi.advanceTimersByTimeAsync(1_000)
 
     expect(messagesApi.markRead).not.toHaveBeenCalled()
+  })
+})
+
+describe('edit and delete', () => {
+  it('an edit applies the server answer to the history and the list preview', async () => {
+    const { store, chats } = await openChatWithUnread()
+    vi.mocked(messagesApi.editMessage).mockResolvedValue({ ...m1, text: 'fixed', editedAt: m1.createdAt })
+
+    store.startEdit(m1)
+    expect(await store.saveEdit('fixed')).toBe(true)
+
+    expect(store.messages[0]!.text).toBe('fixed')
+    expect(chats.get('chat-1')!.lastMessage!.text).toBe('fixed')
+    expect(store.editing).toBeNull()
+  })
+
+  it('a refused edit keeps the editor open and tells why', async () => {
+    const { store } = await openChatWithUnread()
+    vi.mocked(messagesApi.editMessage).mockRejectedValue(new ApiError(403, { errorCode: 'EDIT_WINDOW_EXPIRED' }))
+
+    store.startEdit(m1)
+    expect(await store.saveEdit('late')).toBe(false)
+
+    expect(store.editing).not.toBeNull()
+    expect(useNoticesStore().items[0]!.text).toContain('нельзя изменить')
+  })
+
+  it('a deletion removes the message at once', async () => {
+    const { store } = await openChatWithUnread()
+
+    await store.remove(m1, true)
+
+    expect(messagesApi.deleteMessage).toHaveBeenCalledWith('chat-1', m1.id, true)
+    expect(store.messages).toEqual([])
   })
 })

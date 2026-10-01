@@ -1,12 +1,15 @@
 // The open chat: its history (from the history entity) and the commands on it.
 
-import { computed, ref, watch } from 'vue'
+import { computed, ref, shallowRef, watch } from 'vue'
 import { defineStore } from 'pinia'
 
 import { useChatsStore } from '@/entities/chat/model/chats.store'
 import { useHistoryStore } from '@/entities/message/model/history.store'
 import { useAuthStore } from '@/features/auth/model/auth.store'
+import type { Message } from '@/entities/message/types'
+import { describeError } from '@/shared/api/problem'
 import { uuid } from '@/shared/lib/uuid'
+import { useNoticesStore } from '@/shared/ui/notices.store'
 import * as messagesApi from '../api/messages.api'
 import { Outbox } from './outbox'
 
@@ -14,13 +17,15 @@ export const useMessagesStore = defineStore('messages', () => {
   const auth = useAuthStore()
   const chats = useChatsStore()
   const history = useHistoryStore()
+  const notices = useNoticesStore()
+  const ctx = () => ({ meId: auth.user?.userId ?? '' })
 
   const outbox = new Outbox(
     { send: messagesApi.sendMessage },
     {
       stored: (message) => {
         history.stored(message)
-        chats.preview(message, { meId: auth.user?.userId ?? '' })
+        chats.preview(message, ctx())
       },
       sending: (chatId, id) => history.updatePending(chatId, id, { state: 'sending', error: null }),
       failed: (chatId, id, error) => history.updatePending(chatId, id, { state: 'failed', error }),
@@ -31,6 +36,8 @@ export const useMessagesStore = defineStore('messages', () => {
   const isLoading = ref(false)
   const isLoadingOlder = ref(false)
   const error = ref('')
+  /** The message being edited in the composer. */
+  const editing = shallowRef<Message | null>(null)
 
   const current = computed(() => history.get(chatId.value))
   const messages = computed(() => current.value?.messages ?? [])
@@ -44,6 +51,7 @@ export const useMessagesStore = defineStore('messages', () => {
     inFlight?.abort()
     inFlight = null
     clearTimeout(readTimer)
+    editing.value = null
     chatId.value = null
     error.value = ''
     isLoading.value = false
@@ -69,6 +77,7 @@ export const useMessagesStore = defineStore('messages', () => {
   }
 
   async function openChat(id: string): Promise<void> {
+    if (chatId.value !== id) editing.value = null
     chatId.value = id
     await loadLatest(id)
   }
@@ -116,6 +125,47 @@ export const useMessagesStore = defineStore('messages', () => {
     return true
   }
 
+  function startEdit(message: Message): void {
+    editing.value = message
+  }
+
+  function cancelEdit(): void {
+    editing.value = null
+  }
+
+  /** The server's answer is applied at once; MessageUpdated brings the same to other devices. */
+  async function saveEdit(text: string): Promise<boolean> {
+    const target = editing.value
+    const trimmed = text.trim()
+    if (!target || trimmed.length === 0) return false
+    if (trimmed === target.text) {
+      editing.value = null
+      return true
+    }
+    try {
+      const updated = await messagesApi.editMessage(target.chatId, target.id, { text: trimmed })
+      history.apply('MessageUpdated', updated, ctx())
+      chats.apply('MessageUpdated', updated, ctx())
+      editing.value = null
+      return true
+    } catch (e) {
+      notices.push(describeError(e))
+      return false
+    }
+  }
+
+  async function remove(message: Message, forEveryone: boolean): Promise<void> {
+    try {
+      await messagesApi.deleteMessage(message.chatId, message.id, forEveryone)
+      const deleted = { chatId: message.chatId, messageId: message.id, seq: message.seq, forEveryone }
+      history.apply('MessageDeleted', deleted, ctx())
+      chats.apply('MessageDeleted', deleted, ctx())
+      if (editing.value?.id === message.id) editing.value = null
+    } catch (e) {
+      notices.push(describeError(e))
+    }
+  }
+
   function retry(clientMessageId: string): void {
     const message = pending.value.find((p) => p.clientMessageId === clientMessageId)
     if (message && message.state === 'failed') void outbox.deliver(message)
@@ -159,6 +209,7 @@ export const useMessagesStore = defineStore('messages', () => {
     messages,
     hasMore,
     pending,
+    editing,
     isLoading,
     isLoadingOlder,
     error,
@@ -167,6 +218,10 @@ export const useMessagesStore = defineStore('messages', () => {
     send,
     retry,
     discard,
+    startEdit,
+    cancelEdit,
+    saveEdit,
+    remove,
     markReadUpToLast,
     seen,
     reset,

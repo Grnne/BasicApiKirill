@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 
 import { useConfigStore } from '@/entities/config/config.store'
 import * as messagesApi from '../api/messages.api'
@@ -17,6 +17,24 @@ const store = useMessagesStore()
 const config = useConfigStore()
 
 const text = ref('')
+const input = ref<HTMLTextAreaElement | null>(null)
+
+// Editing puts the message into the field; the draft typed before comes back after.
+let draftBeforeEdit = ''
+watch(
+  () => store.editing,
+  async (message, previous) => {
+    if (message) {
+      if (!previous) draftBeforeEdit = text.value
+      text.value = message.text
+      await nextTick()
+      input.value?.focus()
+    } else if (previous) {
+      text.value = draftBeforeEdit
+      draftBeforeEdit = ''
+    }
+  },
+)
 const maxLength = computed(() => config.config.messages.maxLength)
 const canSend = computed(() => text.value.trim().length > 0)
 
@@ -56,8 +74,12 @@ function onInput(): void {
 
 onUnmounted(stopTyping)
 
-function submit(): void {
+async function submit(): Promise<void> {
   if (!canSend.value) return
+  if (store.editing) {
+    await store.saveEdit(text.value)
+    return
+  }
   // Sending failures show on the message itself, with a retry.
   if (store.send(text.value)) {
     text.value = ''
@@ -68,14 +90,22 @@ function submit(): void {
 function onKeydown(event: KeyboardEvent): void {
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault()
-    submit()
+    void submit()
+  } else if (event.key === 'Escape' && store.editing) {
+    store.cancelEdit()
   }
 }
 </script>
 
 <template>
   <form class="composer" @submit.prevent="submit">
+    <div v-if="store.editing" class="context">
+      <span class="label">Редактирование</span>
+      <span class="quote">{{ store.editing.text }}</span>
+      <button type="button" class="close" title="Отменить (Esc)" @click="store.cancelEdit()">✕</button>
+    </div>
     <textarea
+      ref="input"
       v-model="text"
       class="input"
       rows="1"
@@ -84,7 +114,9 @@ function onKeydown(event: KeyboardEvent): void {
       @input="onInput"
       @keydown="onKeydown"
     />
-    <button type="submit" class="send" :disabled="!canSend">Отправить</button>
+    <button type="submit" class="send" :disabled="!canSend">
+      {{ store.editing ? 'Сохранить' : 'Отправить' }}
+    </button>
   </form>
 </template>
 
@@ -96,6 +128,32 @@ function onKeydown(event: KeyboardEvent): void {
   padding: 10px 12px;
   border-top: 1px solid var(--border);
   background: var(--surface-solid);
+}
+.context {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-left: 2px solid var(--accent);
+  background: var(--surface-hover);
+  font-size: 12px;
+}
+.label {
+  color: var(--accent);
+  font-weight: 600;
+}
+.quote {
+  overflow: hidden;
+  flex: 1;
+  color: var(--text-dim);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.close {
+  border: none;
+  background: none;
+  color: var(--text-dim);
 }
 .input {
   min-height: 38px;

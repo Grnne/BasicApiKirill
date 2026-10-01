@@ -4,7 +4,7 @@ import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useAuthStore } from '@/features/auth/model/auth.store'
 import { formatDay, parseApiDate } from '@/shared/lib/date'
 import { useMessagesStore } from '../model/messages.store'
-import MessageBubble from './MessageBubble.vue'
+import MessageItem from './MessageItem.vue'
 import PendingBubble from './PendingBubble.vue'
 
 const STICK_THRESHOLD_PX = 120
@@ -107,11 +107,7 @@ function startsNewDay(index: number): boolean {
 
       <template v-for="(message, index) in store.messages" :key="message.id">
         <p v-if="startsNewDay(index)" class="day">{{ formatDay(message.createdAt) }}</p>
-        <MessageBubble
-          :message="message"
-          :own="message.senderId === auth.user?.userId"
-          :me-id="auth.user?.userId ?? null"
-        />
+        <MessageItem :message="message" :me-id="auth.user?.userId ?? null" />
       </template>
 
       <PendingBubble
