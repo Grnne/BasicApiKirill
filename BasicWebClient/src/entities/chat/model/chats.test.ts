@@ -169,4 +169,14 @@ describe('chat state', () => {
 
     expect(sortedChats(state).map((c) => c.chatId)).toEqual(['pin-a', 'pin-b', 'new', 'old'])
   })
+
+  it('pinned positions count from 1, as the server sends them', () => {
+    // The snapshot has 1-based positions; an event that set 0-based ones would mix the two.
+    const state = fromSnapshot([chat({ chatId: 'a', pinnedPosition: 1 }), chat({ chatId: 'b' })])
+
+    apply(state, 'PinnedChatsChanged', { chatIds: ['b', 'a'] })
+
+    expect(state.byId['b']!.pinnedPosition).toBe(1)
+    expect(state.byId['a']!.pinnedPosition).toBe(2)
+  })
 })

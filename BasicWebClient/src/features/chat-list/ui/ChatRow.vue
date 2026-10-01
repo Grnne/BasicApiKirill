@@ -53,7 +53,9 @@ const time = computed(() =>
 
     <span class="middle">
       <!-- Interpolation only: names and texts come from other users. -->
-      <span class="title">{{ title }}</span>
+      <span class="title">
+        <span v-if="chat.pinnedPosition !== null" class="pin" title="Закреплён">📌</span>{{ title }}
+      </span>
       <span :class="['preview', { typing: isTyping }]">
         <span v-if="chat.draft && !active && !isTyping" class="draft">Черновик: </span>{{ preview }}
       </span>
@@ -126,6 +128,10 @@ const time = computed(() =>
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.pin {
+  margin-right: 4px;
+  font-size: 11px;
 }
 .draft {
   color: var(--danger);

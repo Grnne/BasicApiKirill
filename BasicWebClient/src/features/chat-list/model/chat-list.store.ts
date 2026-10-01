@@ -4,6 +4,7 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import { useChatsStore } from '@/entities/chat/model/chats.store'
+import { useAuthStore } from '@/features/auth/model/auth.store'
 import { useHubStore } from '@/shared/api/hub.store'
 import { describeError } from '@/shared/api/problem'
 import { useNoticesStore } from '@/shared/ui/notices.store'
@@ -59,9 +60,27 @@ export const useChatListStore = defineStore('chatList', () => {
     )
   }
 
+  const auth = useAuthStore()
+  const ctx = () => ({ meId: auth.user?.userId ?? '' })
+
+  function pin(chatId: string, pinned: boolean): Promise<void> {
+    return command(async () => {
+      const result = await chatsApi.setPinned(chatId, pinned)
+      chats.apply('PinnedChatsChanged', result, ctx())
+      // Pinning takes the chat out of the archive.
+      if (pinned) chats.patch(chatId, { archived: false })
+    })
+  }
+
+  /** Drag and drop of pinned chats: shown at once, the server keeps it. */
+  function reorderPinned(chatIds: string[]): Promise<void> {
+    chats.apply('PinnedChatsChanged', { chatIds }, ctx())
+    return command(() => chatsApi.reorderPinned(chatIds))
+  }
+
   function reset(): void {
     selectedChatId.value = null
   }
 
-  return { selectedChatId, selectedChat, select, deselect, openPrivateChat, markUnread, markRead, command, reset }
+  return { selectedChatId, selectedChat, select, deselect, openPrivateChat, markUnread, markRead, pin, reorderPinned, command, reset }
 })

@@ -21,6 +21,29 @@ function openMenu(chat: ChatListItem, event: MouseEvent): void {
   menu.value = { chat, x: event.clientX, y: event.clientY }
 }
 
+/* Pinned chats are reordered by dragging one onto another. */
+const dragged = ref<string | null>(null)
+
+function onDragStart(chat: ChatListItem, event: DragEvent): void {
+  if (chat.pinnedPosition === null) return
+  dragged.value = chat.chatId
+  event.dataTransfer?.setData('text/plain', chat.chatId)
+}
+
+function onDragOver(chat: ChatListItem, event: DragEvent): void {
+  if (dragged.value && chat.pinnedPosition !== null) event.preventDefault()
+}
+
+function onDrop(target: ChatListItem): void {
+  const moving = dragged.value
+  dragged.value = null
+  if (!moving || moving === target.chatId) return
+  const order = chats.list.filter((c) => c.pinnedPosition !== null).map((c) => c.chatId)
+  const without = order.filter((id) => id !== moving)
+  without.splice(without.indexOf(target.chatId), 0, moving)
+  void store.reorderPinned(without)
+}
+
 const found = ref<ChatListItem[]>([])
 const isSearching = ref(false)
 
@@ -83,8 +106,13 @@ watch(debouncedQuery, async (query) => {
         :key="chat.chatId"
         :chat="chat"
         :active="chat.chatId === store.selectedChatId"
+        :draggable="chat.pinnedPosition !== null"
         @click="store.select(chat.chatId)"
         @contextmenu.prevent="openMenu(chat, $event)"
+        @dragstart="onDragStart(chat, $event)"
+        @dragover="onDragOver(chat, $event)"
+        @drop.prevent="onDrop(chat)"
+        @dragend="dragged = null"
       />
     </template>
 

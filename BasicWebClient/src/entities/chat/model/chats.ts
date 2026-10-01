@@ -176,7 +176,7 @@ export function applyChatEvent<K extends keyof JournaledEvents>(
       const order = (payload as JournaledEvents['PinnedChatsChanged']).chatIds
       for (const chat of Object.values(state.byId)) {
         const index = order.indexOf(chat.chatId)
-        chat.pinnedPosition = index === -1 ? null : index
+        chat.pinnedPosition = index === -1 ? null : index + 1
       }
       return
     }

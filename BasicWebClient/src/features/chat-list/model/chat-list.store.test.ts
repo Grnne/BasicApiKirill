@@ -11,6 +11,8 @@ import { useChatListStore } from './chat-list.store'
 vi.mock('../api/chats.api', () => ({
   setMarkedUnread: vi.fn(async () => {}),
   markRead: vi.fn(async () => {}),
+  setPinned: vi.fn(),
+  reorderPinned: vi.fn(async () => {}),
   createPrivateChat: vi.fn(),
   searchChats: vi.fn(),
 }))
@@ -50,5 +52,29 @@ describe('marking chats', () => {
     await useChatListStore().markUnread('chat-1')
 
     expect(useNoticesStore().items[0]!.text).toBe('Вы не участник этого чата')
+  })
+})
+
+describe('pinned chats', () => {
+  it('pinning puts the order from the answer and takes the chat out of the archive', async () => {
+    const chats = useChatsStore()
+    chats.replaceAll([chat({ chatId: 'a', archived: true }), chat({ chatId: 'b', pinnedPosition: 1 })], [])
+    vi.mocked(chatsApi.setPinned).mockResolvedValue({ chatIds: ['a', 'b'] })
+
+    await useChatListStore().pin('a', true)
+
+    expect(chats.list.map((c) => c.chatId)).toEqual(['a', 'b'])
+    expect(chats.get('a')).toMatchObject({ pinnedPosition: 1, archived: false })
+  })
+
+  it('a new order is shown at once and sent', async () => {
+    const chats = useChatsStore()
+    chats.replaceAll([chat({ chatId: 'a', pinnedPosition: 1 }), chat({ chatId: 'b', pinnedPosition: 2 })], [])
+
+    const done = useChatListStore().reorderPinned(['b', 'a'])
+    expect(chats.list.map((c) => c.chatId)).toEqual(['b', 'a'])
+    await done
+
+    expect(chatsApi.reorderPinned).toHaveBeenCalledWith(['b', 'a'])
   })
 })

@@ -10,6 +10,7 @@ const emit = defineEmits<{ close: [] }>()
 const store = useChatListStore()
 
 const unread = computed(() => props.chat.unreadCount > 0 || props.chat.markedUnread)
+const pinned = computed(() => props.chat.pinnedPosition !== null)
 
 // Kept inside the window: the menu opens at the pointer.
 const style = computed(() => ({
@@ -40,6 +41,11 @@ onUnmounted(() => {
 
 <template>
   <ul class="menu" role="menu" :style="style" @click.stop>
+    <li>
+      <button type="button" role="menuitem" @click="run(() => store.pin(chat.chatId, !pinned))">
+        {{ pinned ? 'Открепить' : 'Закрепить' }}
+      </button>
+    </li>
     <li v-if="unread">
       <button type="button" role="menuitem" @click="run(() => store.markRead(chat.chatId))">
         Пометить прочитанным
