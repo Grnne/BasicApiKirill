@@ -30,6 +30,23 @@ public class SecurityHeadersTests(PostgresFixture db)
     }
 
     [Fact]
+    public async Task LocalFilePreviews_AreAllowedAsPicturesAndMedia_NowhereElse()
+    {
+        // The client previews chosen files and measures videos before upload through blob: URLs,
+        // which only the page itself can create; scripts and requests stay 'self'.
+        await using var factory = new ApiFactory(db.ConnectionString);
+        using var client = factory.CreateClient();
+
+        var csp = Assert.Single((await client.GetAsync("/health/live")).Headers.GetValues("Content-Security-Policy"));
+        var directives = csp.Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Contains("img-src 'self' data: blob:", directives);
+        Assert.Contains("media-src 'self' blob:", directives);
+        Assert.All(directives.Where(d => !d.StartsWith("img-src") && !d.StartsWith("media-src")),
+            d => Assert.DoesNotContain("blob:", d));
+    }
+
+    [Fact]
     public async Task FilesFromAnotherOrigin_AreAllowedOnlyFromTheStorage()
     {
         await using var factory = new ApiFactory(db.ConnectionString, new Dictionary<string, string?>
@@ -43,8 +60,8 @@ public class SecurityHeadersTests(PostgresFixture db)
 
         var csp = Assert.Single((await client.GetAsync("/health/live")).Headers.GetValues("Content-Security-Policy"));
 
-        Assert.Contains("img-src 'self' data: http://localhost:8333;", csp);
-        Assert.Contains("media-src 'self' http://localhost:8333;", csp);
+        Assert.Contains("img-src 'self' data: blob: http://localhost:8333;", csp);
+        Assert.Contains("media-src 'self' blob: http://localhost:8333;", csp);
         Assert.Contains("connect-src 'self' http://localhost:8333;", csp);
         Assert.DoesNotContain("seaweedfs", csp); // the internal address is nobody's business
     }

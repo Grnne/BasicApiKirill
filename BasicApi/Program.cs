@@ -15,13 +15,14 @@ public class Program
     /// <summary>
     /// CSP as a header, not only &lt;meta&gt; in index.html: frame-ancestors does not work
     /// in meta, and a header also covers the pages served by the server itself.
+    /// blob: for pictures and media only: previews of files chosen for upload, made by the page itself.
     /// connect-src 'self': even with XSS a script cannot send the token to a foreign host
     /// (same-origin ws/wss is covered by 'self' too). 'unsafe-inline' is for styles only:
     /// Vue inserts them with a &lt;style&gt; tag; there are no relaxations for scripts.
     /// </summary>
     public const string ContentSecurityPolicy =
         "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
-        "img-src 'self' data:; font-src 'self'; connect-src 'self'; " +
+        "img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; connect-src 'self'; " +
         "frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'";
 
     /// <summary>
@@ -33,9 +34,9 @@ public class Program
         storageOrigin is null
             ? ContentSecurityPolicy
             : ContentSecurityPolicy
-                .Replace("img-src 'self' data:", $"img-src 'self' data: {storageOrigin}")
-                .Replace("connect-src 'self'", $"connect-src 'self' {storageOrigin}")
-                .Replace("font-src 'self';", $"font-src 'self'; media-src 'self' {storageOrigin};");
+                .Replace("img-src 'self' data: blob:", $"img-src 'self' data: blob: {storageOrigin}")
+                .Replace("media-src 'self' blob:", $"media-src 'self' blob: {storageOrigin}")
+                .Replace("connect-src 'self'", $"connect-src 'self' {storageOrigin}");
 
     public static void Main(string[] args)
     {
