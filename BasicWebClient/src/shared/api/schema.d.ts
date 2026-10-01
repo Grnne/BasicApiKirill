@@ -3355,6 +3355,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The instance's limits and switches.
+         * @description What a client checks before sending, so a user learns about a limit before the server rejects
+         *     the request: message length, files per album, file sizes, the reaction set, group size, and
+         *     whether files and push are available. Set by the server's configuration; read once after login.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ClientConfigDto"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/devices": {
         parameters: {
             query?: never;
@@ -5722,6 +5772,13 @@ export interface components {
             memberPermissions: components["schemas"]["GroupPermissionsDto"];
             title: string | null;
         };
+        /** @description The instance's limits and switches a client needs before the server rejects a request. */
+        ClientConfigDto: {
+            groups: components["schemas"]["GroupLimitsDto"];
+            media: components["schemas"]["MediaLimitsDto"];
+            messages: components["schemas"]["MessageLimitsDto"];
+            push: components["schemas"]["PushSwitchDto"];
+        };
         CreateGroupDto: {
             /** @description Who to add besides the creator; may be empty. */
             memberIds?: string[] | null;
@@ -5868,6 +5925,15 @@ export interface components {
             nextCursor: string | null;
             query: string;
         };
+        GroupLimitsDto: {
+            /**
+             * Format: int32
+             * @description Most members of a group, the owner included.
+             */
+            maxMembers: number;
+            /** Format: int32 */
+            maxTitleLength: number;
+        };
         /** @description A member of a group as others see them. */
         GroupMemberDto: {
             /**
@@ -5915,6 +5981,25 @@ export interface components {
         MarkUnreadDto: {
             /** @description true — mark the chat as unread, false — remove the mark. */
             markedUnread?: boolean;
+        };
+        MediaLimitsDto: {
+            /** @description false — file storage is not set up: media endpoints answer 503 `MEDIA_UNAVAILABLE`. */
+            enabled: boolean;
+            /**
+             * Format: int64
+             * @description Largest file, in bytes.
+             */
+            maxFileSize: number;
+            /**
+             * Format: int64
+             * @description Largest photo (sent with kind `photo`), in bytes: the server decodes it for the preview.
+             */
+            maxPhotoSize: number;
+            /**
+             * Format: int32
+             * @description How many days files are kept; 0 — forever.
+             */
+            retentionDays: number;
         };
         MediaLinkDto: {
             /** Format: uuid */
@@ -6091,6 +6176,30 @@ export interface components {
             senderId: string;
             senderName: string;
         };
+        MessageLimitsDto: {
+            /**
+             * Format: int32
+             * @description How long the author may delete a message for everyone, in hours; 0 — no limit.
+             */
+            deleteWindowHours: number;
+            /**
+             * Format: int32
+             * @description How long the author may edit a message, in hours; 0 — no limit.
+             */
+            editWindowHours: number;
+            /**
+             * Format: int32
+             * @description Most files in one message (an album).
+             */
+            maxAttachments: number;
+            /**
+             * Format: int32
+             * @description Longest text of a message, caption or draft, in UTF-16 code units.
+             */
+            maxLength: number;
+            /** @description The reactions users may put, in the order to show them. */
+            reactions: string[];
+        };
         /**
          * @description The reactions of a message after a change: the answer to setting a reaction and the payload
          *     of the `ReactionsChanged` event.
@@ -6194,6 +6303,10 @@ export interface components {
             auth?: string | null;
             /** @description The browser's P-256 public key, base64url. */
             p256dh?: string | null;
+        };
+        PushSwitchDto: {
+            /** @description Whether the server sends push notifications; the key is in `GET /api/push/config`. */
+            enabled: boolean;
         };
         ReactionCountDto: {
             /** Format: int32 */
@@ -6572,6 +6685,7 @@ export type ChatListItemDtoCursorPaginatedResponse = components['schemas']['Chat
 export type ChatParticipantDto = components['schemas']['ChatParticipantDto'];
 export type ChatStateDto = components['schemas']['ChatStateDto'];
 export type ChatUpdatedDto = components['schemas']['ChatUpdatedDto'];
+export type ClientConfigDto = components['schemas']['ClientConfigDto'];
 export type CreateGroupDto = components['schemas']['CreateGroupDto'];
 export type CreateUploadDto = components['schemas']['CreateUploadDto'];
 export type DeviceDto = components['schemas']['DeviceDto'];
@@ -6586,12 +6700,14 @@ export type ForwardMessagesDto = components['schemas']['ForwardMessagesDto'];
 export type ForwardMessagesResponseDto = components['schemas']['ForwardMessagesResponseDto'];
 export type GlobalSearchHitDto = components['schemas']['GlobalSearchHitDto'];
 export type GlobalSearchResponseDto = components['schemas']['GlobalSearchResponseDto'];
+export type GroupLimitsDto = components['schemas']['GroupLimitsDto'];
 export type GroupMemberDto = components['schemas']['GroupMemberDto'];
 export type GroupPermissionsDto = components['schemas']['GroupPermissionsDto'];
 export type LoginRequestDto = components['schemas']['LoginRequestDto'];
 export type LogoutRequestDto = components['schemas']['LogoutRequestDto'];
 export type MarkMessageReadDto = components['schemas']['MarkMessageReadDto'];
 export type MarkUnreadDto = components['schemas']['MarkUnreadDto'];
+export type MediaLimitsDto = components['schemas']['MediaLimitsDto'];
 export type MediaLinkDto = components['schemas']['MediaLinkDto'];
 export type MediaLinksDto = components['schemas']['MediaLinksDto'];
 export type MediaLinksRequestDto = components['schemas']['MediaLinksRequestDto'];
@@ -6604,6 +6720,7 @@ export type MessageDto = components['schemas']['MessageDto'];
 export type MessageDtoCursorPaginatedResponse = components['schemas']['MessageDtoCursorPaginatedResponse'];
 export type MessageEntityDto = components['schemas']['MessageEntityDto'];
 export type MessageForwardDto = components['schemas']['MessageForwardDto'];
+export type MessageLimitsDto = components['schemas']['MessageLimitsDto'];
 export type MessageReactionsDto = components['schemas']['MessageReactionsDto'];
 export type MessageReplyDto = components['schemas']['MessageReplyDto'];
 export type OwnProfileResponseDto = components['schemas']['OwnProfileResponseDto'];
@@ -6614,6 +6731,7 @@ export type ProblemDetails = components['schemas']['ProblemDetails'];
 export type PushConfigDto = components['schemas']['PushConfigDto'];
 export type PushSubscriptionDto = components['schemas']['PushSubscriptionDto'];
 export type PushSubscriptionKeysDto = components['schemas']['PushSubscriptionKeysDto'];
+export type PushSwitchDto = components['schemas']['PushSwitchDto'];
 export type ReactionCountDto = components['schemas']['ReactionCountDto'];
 export type ReadStateDto = components['schemas']['ReadStateDto'];
 export type ReceiptDto = components['schemas']['ReceiptDto'];

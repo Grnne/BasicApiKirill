@@ -1701,6 +1701,31 @@ service worker'ом, даже когда вкладка закрыта.
 - Все поля ответа присутствуют в JSON всегда (в том числе со значением `null`); `required` в
   описании по-прежнему не указывается.
 
+### 20.2. `GET /api/config` (новая)
+
+Лимиты и переключатели экземпляра — чтобы клиент проверял ввод до отправки, а не узнавал о
+лимите из ошибки. Читать один раз после входа. Нужен вход.
+
+```json
+{
+  "messages": { "maxLength": 4096, "maxAttachments": 10,
+                "reactions": ["👍", "❤️", "😂", "😮", "😢", "🙏", "👎", "🔥", "🎉"],
+                "editWindowHours": 48, "deleteWindowHours": 48 },
+  "media":    { "enabled": true, "maxFileSize": 104857600, "maxPhotoSize": 20971520, "retentionDays": 0 },
+  "groups":   { "maxMembers": 500, "maxTitleLength": 128 },
+  "push":     { "enabled": false }
+}
+```
+
+- `reactions` — набор `Messages:Reactions` в порядке показа; другие реакции сервер не примет.
+  Исправлено попутно: набор из настроек, короче стандартного, раньше молча дополнялся
+  стандартными реакциями (список из `appsettings.json` склеивался с заданным).
+- `editWindowHours` / `deleteWindowHours` — сколько часов автор может править и удалять у всех;
+  `0` — без срока.
+- `media.enabled: false` — хранилище не настроено, ручки медиа отвечают `503 MEDIA_UNAVAILABLE`.
+  Размеры — в байтах; `maxPhotoSize` — для файлов с `kind: photo`.
+- `push.enabled` — то же, что в `GET /api/push/config`; ключ для подписки — там.
+
 ---
 
 ## Справочник кодов ошибок

@@ -473,6 +473,41 @@
         },
         "type": "object"
       },
+      "ClientConfigDto": {
+        "additionalProperties": false,
+        "description": "The instance's limits and switches a client needs before the server rejects a request.",
+        "properties": {
+          "groups": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GroupLimitsDto"
+              }
+            ]
+          },
+          "media": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MediaLimitsDto"
+              }
+            ]
+          },
+          "messages": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MessageLimitsDto"
+              }
+            ]
+          },
+          "push": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PushSwitchDto"
+              }
+            ]
+          }
+        },
+        "type": "object"
+      },
       "CreateGroupDto": {
         "additionalProperties": false,
         "properties": {
@@ -817,6 +852,21 @@
         },
         "type": "object"
       },
+      "GroupLimitsDto": {
+        "additionalProperties": false,
+        "properties": {
+          "maxMembers": {
+            "description": "Most members of a group, the owner included.",
+            "format": "int32",
+            "type": "integer"
+          },
+          "maxTitleLength": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
       "GroupMemberDto": {
         "additionalProperties": false,
         "description": "A member of a group as others see them.",
@@ -930,6 +980,31 @@
           "markedUnread": {
             "description": "true — mark the chat as unread, false — remove the mark.",
             "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "MediaLimitsDto": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "description": "false — file storage is not set up: media endpoints answer 503 `MEDIA_UNAVAILABLE`.",
+            "type": "boolean"
+          },
+          "maxFileSize": {
+            "description": "Largest file, in bytes.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "maxPhotoSize": {
+            "description": "Largest photo (sent with kind `photo`), in bytes: the server decodes it for the preview.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "retentionDays": {
+            "description": "How many days files are kept; 0 — forever.",
+            "format": "int32",
+            "type": "integer"
           }
         },
         "type": "object"
@@ -1274,6 +1349,39 @@
         },
         "type": "object"
       },
+      "MessageLimitsDto": {
+        "additionalProperties": false,
+        "properties": {
+          "deleteWindowHours": {
+            "description": "How long the author may delete a message for everyone, in hours; 0 — no limit.",
+            "format": "int32",
+            "type": "integer"
+          },
+          "editWindowHours": {
+            "description": "How long the author may edit a message, in hours; 0 — no limit.",
+            "format": "int32",
+            "type": "integer"
+          },
+          "maxAttachments": {
+            "description": "Most files in one message (an album).",
+            "format": "int32",
+            "type": "integer"
+          },
+          "maxLength": {
+            "description": "Longest text of a message, caption or draft, in UTF-16 code units.",
+            "format": "int32",
+            "type": "integer"
+          },
+          "reactions": {
+            "description": "The reactions users may put, in the order to show them.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
       "MessageReactionsDto": {
         "additionalProperties": false,
         "description": "The reactions of a message after a change: the answer to setting a reaction and the payload\nof the `ReactionsChanged` event.",
@@ -1503,6 +1611,16 @@
             "description": "The browser's P-256 public key, base64url.",
             "nullable": true,
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PushSwitchDto": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "description": "Whether the server sends push notifications; the key is in `GET /api/push/config`.",
+            "type": "boolean"
           }
         },
         "type": "object"
@@ -6618,6 +6736,37 @@
         ]
       }
     },
+    "/api/config": {
+      "get": {
+        "description": "What a client checks before sending, so a user learns about a limit before the server rejects\nthe request: message length, files per album, file sizes, the reaction set, group size, and\nwhether files and push are available. Set by the server's configuration; read once after login.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientConfigDto"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          }
+        },
+        "summary": "The instance's limits and switches.",
+        "tags": [
+          "Config"
+        ]
+      }
+    },
     "/api/devices": {
       "get": {
         "description": "A device is one sign-in (login or registration) with the token refreshes after it; it is gone\nafter logout, when its refresh token expires or when it is signed out from another device.\n`isCurrent` marks the one the request came from.",
@@ -7835,6 +7984,9 @@
     },
     {
       "name": "Groups"
+    },
+    {
+      "name": "Config"
     },
     {
       "name": "Devices"
