@@ -10,7 +10,7 @@ const props = defineProps<{
   own: boolean
   meId: string | null
 }>()
-defineEmits<{ jump: [messageId: string] }>()
+defineEmits<{ jump: [messageId: string]; react: [emoji: string] }>()
 
 const files = computed(() => props.message.attachments.length)
 </script>
@@ -37,6 +37,18 @@ const files = computed(() => props.message.attachments.length)
     <p v-if="message.text" class="text">
       <FormattedText :text="message.text" :entities="message.entities" :me-id="meId" />
     </p>
+    <div v-if="message.reactions.length > 0" class="reactions">
+      <button
+        v-for="r in message.reactions"
+        :key="r.emoji"
+        type="button"
+        :class="['reaction', { mine: r.emoji === message.myReaction }]"
+        :title="r.emoji === message.myReaction ? 'Убрать реакцию' : 'Поставить реакцию'"
+        @click="$emit('react', r.emoji)"
+      >
+        {{ r.emoji }} {{ r.count }}
+      </button>
+    </div>
     <span class="time">
       <span v-if="message.editedAt" class="edited">изменено</span>
       {{ formatTime(message.createdAt) }}
@@ -106,6 +118,24 @@ const files = computed(() => props.message.attachments.length)
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.reaction {
+  padding: 1px 7px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-hover);
+  color: var(--text);
+  font-size: 12px;
+}
+.reaction.mine {
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 .files {
   margin: 0 0 2px;

@@ -14,6 +14,8 @@ vi.mock('../api/messages.api', () => ({
   markRead: vi.fn(async () => {}),
   editMessage: vi.fn(),
   forwardMessages: vi.fn(),
+  setReaction: vi.fn(),
+  removeReaction: vi.fn(async () => {}),
   deleteMessage: vi.fn(async () => {}),
   sendMessage: vi.fn(),
   sendTyping: vi.fn(async () => {}),
@@ -28,7 +30,8 @@ async function openChatWithUnread() {
   auth.user = { userId: ME, username: 'me', email: 'me@test', displayName: 'Me', avatarId: null }
   const chats = useChatsStore()
   chats.replaceAll([chat({ lastMessage: m1, lastReadSeq: 0, unreadCount: 1 })], [])
-  vi.mocked(messageEntityApi.getMessagesPage).mockResolvedValue({ items: [m1], nextCursor: null, hasMore: false })
+  // A copy per test: the reducers update loaded messages in place.
+  vi.mocked(messageEntityApi.getMessagesPage).mockResolvedValue({ items: [{ ...m1 }], nextCursor: null, hasMore: false })
 
   const store = useMessagesStore()
   await store.openChat('chat-1')
@@ -139,5 +142,33 @@ describe('reply and forward', () => {
     expect(body.clientMessageIds).toHaveLength(2)
     expect(count).toBe(2)
     expect(store.selected.size).toBe(0)
+  })
+})
+
+describe('reactions', () => {
+  it('puts a reaction and shows the summary from the answer', async () => {
+    const { store } = await openChatWithUnread()
+    vi.mocked(messagesApi.setReaction).mockResolvedValue({
+      chatId: 'chat-1', messageId: m1.id, userId: ME, emoji: '🔥', reactions: [{ emoji: '🔥', count: 1 }],
+    })
+
+    await store.react(store.messages[0]!, '🔥')
+
+    expect(store.messages[0]!.myReaction).toBe('🔥')
+    expect(store.messages[0]!.reactions).toEqual([{ emoji: '🔥', count: 1 }])
+  })
+
+  it('the same reaction again takes it off', async () => {
+    const { store } = await openChatWithUnread()
+    vi.mocked(messagesApi.setReaction).mockResolvedValue({
+      chatId: 'chat-1', messageId: m1.id, userId: ME, emoji: '🔥', reactions: [{ emoji: '🔥', count: 2 }],
+    })
+    await store.react(store.messages[0]!, '🔥')
+
+    await store.react(store.messages[0]!, '🔥')
+
+    expect(messagesApi.removeReaction).toHaveBeenCalledWith('chat-1', m1.id)
+    expect(store.messages[0]!.myReaction).toBeNull()
+    expect(store.messages[0]!.reactions).toEqual([{ emoji: '🔥', count: 1 }])
   })
 })

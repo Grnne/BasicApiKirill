@@ -4,6 +4,7 @@ import type {
   ForwardMessagesDto,
   ForwardMessagesResponseDto,
   MessageDto,
+  MessageReactionsDto,
   SendMessageDto,
 } from '@/shared/api/schema'
 
@@ -35,4 +36,13 @@ export function deleteMessage(chatId: string, messageId: string, forEveryone: bo
 /** Copies into chatId, in the source order; repeating with the same clientMessageIds creates nothing. */
 export function forwardMessages(chatId: string, body: ForwardMessagesDto): Promise<ForwardMessagesResponseDto> {
   return http.post<ForwardMessagesResponseDto>(`/api/chats/${chatId}/messages/forward`, body)
+}
+
+/** One reaction per user: a new one replaces the old. Answers the summary after the change. */
+export function setReaction(chatId: string, messageId: string, emoji: string): Promise<MessageReactionsDto> {
+  return http.put<MessageReactionsDto>(`/api/chats/${chatId}/messages/${messageId}/reactions`, { emoji })
+}
+
+export function removeReaction(chatId: string, messageId: string): Promise<void> {
+  return http.delete<void>(`/api/chats/${chatId}/messages/${messageId}/reactions`)
 }

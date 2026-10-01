@@ -51,6 +51,11 @@ function copy(): void {
   close()
 }
 
+function react(emoji: string): void {
+  void store.react(props.message, emoji)
+  close()
+}
+
 function reply(): void {
   store.startReply(props.message)
   close()
@@ -106,7 +111,13 @@ async function confirmDelete(): Promise<void> {
     @click.capture="onClick"
   >
     <span v-if="selecting" class="check" aria-hidden="true">{{ isSelected ? '✓' : '' }}</span>
-    <MessageBubble :message="message" :own="own" :me-id="meId" @jump="store.jumpTo($event)" />
+    <MessageBubble
+      :message="message"
+      :own="own"
+      :me-id="meId"
+      @jump="store.jumpTo($event)"
+      @react="store.react(message, $event)"
+    />
     <div v-if="!selecting" class="tools">
       <button
         type="button"
@@ -119,6 +130,18 @@ async function confirmDelete(): Promise<void> {
         ⋯
       </button>
       <ul v-if="menuOpen" class="menu" role="menu">
+        <li v-if="actions.react" class="emoji-row">
+          <button
+            v-for="emoji in config.config.messages.reactions"
+            :key="emoji"
+            type="button"
+            :class="['emoji', { mine: emoji === message.myReaction }]"
+            :title="emoji === message.myReaction ? 'Убрать реакцию' : 'Поставить реакцию'"
+            @click="react(emoji)"
+          >
+            {{ emoji }}
+          </button>
+        </li>
         <li v-if="actions.reply"><button type="button" role="menuitem" @click="reply">Ответить</button></li>
         <li v-if="actions.forward"><button type="button" role="menuitem" @click="openForward">Переслать</button></li>
         <li v-if="actions.forward"><button type="button" role="menuitem" @click="select">Выбрать</button></li>
@@ -234,6 +257,23 @@ async function confirmDelete(): Promise<void> {
 }
 .menu button:hover {
   background: var(--surface-hover);
+}
+.menu .emoji-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  max-width: 220px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.menu .emoji {
+  width: auto;
+  padding: 3px 5px;
+  font-size: 17px;
+}
+.menu .emoji.mine {
+  background: var(--accent-soft);
 }
 .menu .danger {
   color: var(--danger);

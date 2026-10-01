@@ -235,6 +235,26 @@ export const useMessagesStore = defineStore('messages', () => {
     }
   }
 
+  /** The same emoji again takes the reaction off. */
+  async function react(message: Message, emoji: string): Promise<void> {
+    const me = ctx()
+    try {
+      if (message.myReaction === emoji) {
+        await messagesApi.removeReaction(message.chatId, message.id)
+        // 204 carries no summary: count it here; ReactionsChanged brings the server's.
+        const reactions = message.reactions
+          .map((r) => (r.emoji === emoji ? { ...r, count: r.count - 1 } : r))
+          .filter((r) => r.count > 0)
+        history.apply('ReactionsChanged', { chatId: message.chatId, messageId: message.id, userId: me.meId, emoji: null, reactions }, me)
+      } else {
+        const summary = await messagesApi.setReaction(message.chatId, message.id, emoji)
+        history.apply('ReactionsChanged', summary, me)
+      }
+    } catch (e) {
+      notices.push(describeError(e))
+    }
+  }
+
   function retry(clientMessageId: string): void {
     const message = pending.value.find((p) => p.clientMessageId === clientMessageId)
     if (message && message.state === 'failed') void outbox.deliver(message)
@@ -297,6 +317,7 @@ export const useMessagesStore = defineStore('messages', () => {
     clearSelection,
     forward,
     jumpTo,
+    react,
     cancelEdit,
     saveEdit,
     remove,
