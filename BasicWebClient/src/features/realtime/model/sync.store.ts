@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 
 import { useChatsStore } from '@/entities/chat/model/chats.store'
 import { useConfigStore } from '@/entities/config/config.store'
+import { useMediaLinksStore } from '@/entities/media/model/links.store'
 import { useHistoryStore } from '@/entities/message/model/history.store'
 import { useAccountStore } from '@/entities/user/model/account.store'
 import { usePresenceStore } from '@/entities/user/presence.store'
@@ -22,6 +23,7 @@ export const useSyncStore = defineStore('sync', () => {
   const account = useAccountStore()
   const presence = usePresenceStore()
   const config = useConfigStore()
+  const mediaLinks = useMediaLinksStore()
 
   const ctx = () => ({ meId: auth.user?.userId ?? '' })
 
@@ -93,6 +95,7 @@ export const useSyncStore = defineStore('sync', () => {
     account.reset()
     presence.reset()
     config.reset()
+    mediaLinks.reset()
   }
 
   return { start, stop, syncNow: () => engine.sync() }

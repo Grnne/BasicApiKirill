@@ -4,6 +4,7 @@ import { computed } from 'vue'
 import { STATUS_MARKS, type OwnStatus } from '@/entities/message/lib/status'
 import type { Message } from '@/entities/message/types'
 import FormattedText from '@/entities/message/ui/FormattedText'
+import AttachmentList from '@/entities/media/ui/AttachmentList.vue'
 import { formatTime } from '@/shared/lib/date'
 
 const props = defineProps<{
@@ -35,7 +36,7 @@ const files = computed(() => props.message.attachments.length)
       <span class="reply-sender">{{ message.replyTo.senderName }}</span>
       <span class="reply-text">{{ message.replyTo.deleted ? 'Сообщение удалено' : message.replyTo.text }}</span>
     </button>
-    <p v-if="files > 0" class="files">📎 Файлов: {{ files }}</p>
+    <AttachmentList v-if="files > 0" :attachments="message.attachments" />
     <p v-if="message.text" class="text">
       <FormattedText :text="message.text" :entities="message.entities" :me-id="meId" />
     </p>
@@ -141,11 +142,6 @@ const files = computed(() => props.message.attachments.length)
 .reaction.mine {
   border-color: var(--accent);
   background: var(--accent-soft);
-}
-.files {
-  margin: 0 0 2px;
-  color: var(--text-dim);
-  font-size: 12px;
 }
 .system {
   align-self: center;
