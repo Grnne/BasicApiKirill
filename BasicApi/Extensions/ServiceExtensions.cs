@@ -172,10 +172,7 @@ public static class ServiceExtensions
             .AddCheck<PostgresHealthCheck>("postgres", tags: [ReadyTag], timeout: TimeSpan.FromSeconds(3));
 
         services.AddFluentMigratorCore()
-            .ConfigureRunner(rb => rb
-                .AddPostgres()
-                .WithGlobalConnectionString(connectionString)
-                .ScanIn(typeof(InitialCreate).Assembly).For.Migrations());
+            .ConfigureRunner(rb => rb.AddAppMigrations(connectionString));
 
         // CORS — only explicitly allowed origins (wildcard + AllowCredentials
         // would mean any site could make requests on behalf of the user).

@@ -1,3 +1,4 @@
+using BasicApi.Extensions;
 using BasicApi.Storage;
 using BasicApi.Storage.Interfaces;
 using BasicApi.Storage.Migrations;
@@ -42,10 +43,7 @@ public sealed class PostgresFixture : IAsyncLifetime
     {
         using var provider = new ServiceCollection()
             .AddFluentMigratorCore()
-            .ConfigureRunner(rb => rb
-                .AddPostgres()
-                .WithGlobalConnectionString(connectionString)
-                .ScanIn(typeof(InitialCreate).Assembly).For.Migrations())
+            .ConfigureRunner(rb => rb.AddAppMigrations(connectionString))
             .BuildServiceProvider(validateScopes: false);
 
         using var scope = provider.CreateScope();
