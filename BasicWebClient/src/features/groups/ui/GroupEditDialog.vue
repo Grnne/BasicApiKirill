@@ -2,7 +2,15 @@
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 
 import * as chatApi from '@/entities/chat/api'
-import { MEMBER_PERMISSIONS, PERMISSION_LABELS, canDeleteGroup, canEditDefaults, canEditInfo } from '@/entities/chat/members'
+import {
+  MEMBER_PERMISSIONS,
+  PERMISSION_LABELS,
+  canDeleteGroup,
+  canEditDefaults,
+  canEditInfo,
+  mayGive,
+  type Permission,
+} from '@/entities/chat/members'
 import { useChatsStore } from '@/entities/chat/model/chats.store'
 import { useChatDetailsStore } from '@/entities/chat/model/details.store'
 import { useConfigStore } from '@/entities/config/config.store'
@@ -26,6 +34,9 @@ const detail = computed(() => details.get(props.chatId))
 const mayInfo = computed(() => !!detail.value && canEditInfo(detail.value))
 const mayDefaults = computed(() => !!detail.value && canEditDefaults(detail.value))
 const mayDelete = computed(() => !!detail.value && canDeleteGroup(detail.value))
+
+/** Off now and not the caller's to give: the box stays off, the server would refuse it. */
+const locked = (p: Permission) => !detail.value?.memberPermissions?.[p] && !!detail.value && !mayGive(detail.value, p)
 
 const title = ref(detail.value?.title ?? '')
 const defaults = reactive<PermissionsPatchDto>(
@@ -166,7 +177,7 @@ onUnmounted(() => {
       <fieldset v-if="mayDefaults" class="defaults">
         <legend class="label">Участники по умолчанию могут</legend>
         <label v-for="p in MEMBER_PERMISSIONS" :key="p" class="check">
-          <input v-model="defaults[p]" type="checkbox" />
+          <input v-model="defaults[p]" type="checkbox" :disabled="locked(p)" />
           {{ PERMISSION_LABELS[p] }}
         </label>
       </fieldset>

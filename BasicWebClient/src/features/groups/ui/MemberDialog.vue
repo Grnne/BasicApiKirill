@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 
 import * as chatApi from '@/entities/chat/api'
-import { PERMISSION_LABELS, ROLE_LABELS, memberActions } from '@/entities/chat/members'
+import { PERMISSION_LABELS, ROLE_LABELS, mayGive, memberActions, type Permission } from '@/entities/chat/members'
 import { useChatDetailsStore } from '@/entities/chat/model/details.store'
 import AvatarCircle from '@/entities/media/ui/AvatarCircle.vue'
 import { describeError } from '@/shared/api/problem'
@@ -21,6 +21,9 @@ const participant = computed(() => details.member(props.chatId, props.userId))
 const actions = computed(() =>
   detail.value && participant.value ? memberActions(detail.value, props.meId, participant.value) : null,
 )
+
+/** Off now and not the caller's to give: the box stays off, the server would refuse it. */
+const locked = (p: Permission) => !member.value?.permissions[p] && !!detail.value && !mayGive(detail.value, p)
 
 /** The member with what they may do now; only the members list carries it. */
 const member = ref<GroupMemberDto | null>(null)
@@ -108,7 +111,7 @@ onUnmounted(() => document.removeEventListener('keydown', onKeydown))
       <fieldset v-if="actions && actions.permissions.length > 0 && member" class="permissions">
         <legend class="label">Может</legend>
         <label v-for="p in actions.permissions" :key="p" class="check">
-          <input v-model="shown[p]" type="checkbox" :disabled="busy" />
+          <input v-model="shown[p]" type="checkbox" :disabled="busy || locked(p)" />
           {{ PERMISSION_LABELS[p] }}
         </label>
         <p class="hint">Сохранённые права больше не следуют настройкам группы.</p>

@@ -59,6 +59,34 @@ public static class GroupRights
         AddAdmins = patch?.AddAdmins ?? permissions.AddAdmins
     };
 
+    private static readonly (string Name, Func<GroupPermissionsDto, bool> Get, Action<PermissionsPatchDto, bool> Set)[] Each =
+    [
+        ("sendMessages", p => p.SendMessages, (p, v) => p.SendMessages = v),
+        ("sendMedia", p => p.SendMedia, (p, v) => p.SendMedia = v),
+        ("addMembers", p => p.AddMembers, (p, v) => p.AddMembers = v),
+        ("changeInfo", p => p.ChangeInfo, (p, v) => p.ChangeInfo = v),
+        ("removeMembers", p => p.RemoveMembers, (p, v) => p.RemoveMembers = v),
+        ("deleteMessages", p => p.DeleteMessages, (p, v) => p.DeleteMessages = v),
+        ("addAdmins", p => p.AddAdmins, (p, v) => p.AddAdmins = v)
+    ];
+
+    /// <summary>
+    /// What a change turns on that the actor does not have themselves — as in Telegram, an admin
+    /// gives only what they hold (the owner holds everything). Taking away is always allowed.
+    /// </summary>
+    public static IReadOnlyList<string> GrantedBeyond(
+        GroupPermissionsDto before, GroupPermissionsDto after, GroupPermissionsDto actor) =>
+        [.. Each.Where(p => !p.Get(before) && p.Get(after) && !p.Get(actor)).Select(p => p.Name)];
+
+    /// <summary>A new admin's overrides: the defaults, without what the one who appoints them lacks.</summary>
+    public static PermissionsPatchDto? AppointedBy(GroupPermissionsDto actor)
+    {
+        var patch = new PermissionsPatchDto();
+        foreach (var p in Each.Where(p => p.Get(AdminDefaults()) && !p.Get(actor)))
+            p.Set(patch, false);
+        return IsEmpty(patch) ? null : patch;
+    }
+
     /// <summary>A change that touches admin permissions — not allowed for members and group defaults.</summary>
     public static bool TouchesAdminPermissions(PermissionsPatchDto patch) =>
         patch.RemoveMembers is not null || patch.DeleteMessages is not null || patch.AddAdmins is not null;

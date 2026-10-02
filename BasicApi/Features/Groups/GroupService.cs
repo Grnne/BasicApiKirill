@@ -208,7 +208,11 @@ public sealed class GroupService(
             }
 
             await groups.SetRoleAsync(chatId, targetId, role!, ct);
-            await groups.SetPermissionsAsync(chatId, targetId, null, ct);
+            // A new admin gets no more than the one who made them has.
+            var overrides = action == GroupAction.PromoteToAdmin
+                ? GroupRights.AppointedBy(GroupRights.Effective(await MemberAsync(chatId, userId, ct)))
+                : null;
+            await groups.SetPermissionsAsync(chatId, targetId, GroupRights.WritePatch(overrides), ct);
             var updated = ToDto(await MemberAsync(chatId, targetId, ct));
             await events.MemberUpdatedAsync(new MemberUpdatedDto { ChatId = chatId, Member = updated }, memberIds, ct);
             return updated;
@@ -234,6 +238,10 @@ public sealed class GroupService(
             var json = GroupRights.WritePatch(permissions);
             if (json == GroupRights.WritePatch(GroupRights.ReadPatch(target.PermissionsJson)))
                 return ToDto(target);
+            DemandGivesOnlyOwn(
+                GroupRights.Effective(target),
+                GroupRights.Effective(target.Role, target.SettingsJson, json),
+                GroupRights.Effective(await MemberAsync(chatId, userId, ct)));
 
             await groups.SetPermissionsAsync(chatId, targetId, json, ct);
             await AuditAsync(chatId, userId, "permissions_changed", targetId,
@@ -244,6 +252,13 @@ public sealed class GroupService(
                 new MemberUpdatedDto { ChatId = chatId, Member = updated }, await chats.GetMemberIdsAsync(chatId, ct), ct);
             return updated;
         }, ct: ct);
+    }
+
+    private static void DemandGivesOnlyOwn(GroupPermissionsDto before, GroupPermissionsDto after, GroupPermissionsDto actor)
+    {
+        if (GroupRights.GrantedBeyond(before, after, actor) is { Count: > 0 } beyond)
+            throw new ForbiddenException(
+                $"You may not give permissions you do not have: {string.Join(", ", beyond)}", ChatPolicy.PermissionDeniedCode);
     }
 
     public async Task<IReadOnlyList<GroupMemberDto>> AddMembersAsync(
@@ -375,7 +390,13 @@ public sealed class GroupService(
             if (renamed)
                 (await policy.CanManageAsync(userId, chatId, GroupAction.ChangeInfo, ct: ct)).Demand();
             if (regranted)
+            {
                 (await policy.CanManageAsync(userId, chatId, GroupAction.ChangeMemberDefaults, ct: ct)).Demand();
+                DemandGivesOnlyOwn(
+                    GroupRights.MemberPermissions(chat.SettingsJson),
+                    GroupRights.MemberPermissions(GroupRights.WriteSettings(new GroupSettings { MemberPermissions = merged })),
+                    GroupRights.Effective(await MemberAsync(chatId, userId, ct)));
+            }
 
             settings.MemberPermissions = merged;
             var current = new ChatUpdatedDto
