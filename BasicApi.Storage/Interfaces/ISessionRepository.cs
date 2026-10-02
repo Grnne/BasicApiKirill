@@ -22,10 +22,13 @@ public interface ISessionRepository
     Task<bool> TryRotateAsync(Guid sessionId, Session replacement, DateTime rotatedAt, CancellationToken ct = default);
 
     /// <summary>
-    /// Whether the rotation chain still has a session that is neither revoked nor expired.
-    /// Used to reject a grace-window replay after the chain was ended by logout:
-    /// the presented token was only "rotated", but its successor is already dead.
+    /// Adds one more session to the chain of a session another refresh has just rotated (two
+    /// requests of one client racing), only while the chain is live. False when the session was
+    /// revoked rather than rotated, or the chain has been ended since.
     /// </summary>
+    Task<bool> TryAddToRotatedFamilyAsync(Guid rotatedSessionId, Session replacement, CancellationToken ct = default);
+
+    /// <summary>Whether the rotation chain still has a session that is neither revoked nor expired.</summary>
     Task<bool> HasLiveSessionInFamilyAsync(Guid familyId, CancellationToken ct = default);
 
     /// <summary>Which of the given rotation chains are still live (same rule as above), in one query.</summary>

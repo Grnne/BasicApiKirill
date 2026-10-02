@@ -44,7 +44,7 @@ public class SessionServiceTests
             .ReturnsAsync(true);
 
         _sessionRepoMock
-            .Setup(r => r.HasLiveSessionInFamilyAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.TryAddToRotatedFamilyAsync(It.IsAny<Guid>(), It.IsAny<Session>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
         var config = new ConfigurationBuilder()
@@ -225,6 +225,8 @@ public class SessionServiceTests
         _sessionRepoMock.Verify(
             r => r.RevokeFamilyAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()),
             Times.Never);
+        _sessionRepoMock.Verify(
+            r => r.TryAddToRotatedFamilyAsync(session.Id, It.IsAny<Session>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -272,6 +274,29 @@ public class SessionServiceTests
             Times.Never);
     }
 
+    [Fact]
+    public async Task RefreshAsync_SignedOutBetweenReadAndRotation_ThrowsRevoked_AndAddsNoSession()
+    {
+        // The session looked active, but a sign-out revoked it before the UPDATE. Taking that for
+        // a racing refresh gave the signed-out device a new live session.
+        const string token = "signed-out-meanwhile";
+        var session = ActiveSession(token);
+        _sessionRepoMock
+            .Setup(r => r.GetByRefreshTokenHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+        _sessionRepoMock
+            .Setup(r => r.TryRotateAsync(session.Id, It.IsAny<Session>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        _sessionRepoMock
+            .Setup(r => r.TryAddToRotatedFamilyAsync(session.Id, It.IsAny<Session>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var ex = await Assert.ThrowsAsync<UnauthorizedException>(() => _service.RefreshAsync(token, null, null));
+
+        Assert.Equal("SESSION_REVOKED", ex.ErrorCode);
+        _sessionRepoMock.Verify(r => r.CreateAsync(It.IsAny<Session>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
 
     [Fact]
     public async Task RefreshAsync_GraceWindowButFamilyLoggedOut_ThrowsRevoked()
@@ -288,7 +313,7 @@ public class SessionServiceTests
             .Setup(r => r.GetByRefreshTokenHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(session);
         _sessionRepoMock
-            .Setup(r => r.HasLiveSessionInFamilyAsync(session.FamilyId, It.IsAny<CancellationToken>()))
+            .Setup(r => r.TryAddToRotatedFamilyAsync(session.Id, It.IsAny<Session>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
 
         var ex = await Assert.ThrowsAsync<UnauthorizedException>(() =>
