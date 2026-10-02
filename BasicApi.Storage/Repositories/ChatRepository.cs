@@ -237,9 +237,12 @@ public class ChatRepository(IDbSession db) : IChatRepository
         LEFT JOIN users sender_u ON sender_u.id = lm.sender_id
         LEFT JOIN user_drafts d ON d.user_id = @userId AND d.chat_id = c.id
 
-        -- How far the other members got: the status of the user's own messages.
+        -- How far the other members got: the status of the user's own messages. A member's
+        -- pointers count from where they joined; those who left are kept in the chat.
         CROSS JOIN LATERAL (
-            SELECT MAX(o.last_read_seq) AS read_seq, MAX(o.last_delivered_seq) AS delivered_seq, COUNT(*) AS members
+            SELECT GREATEST(MAX(o.last_read_seq) FILTER (WHERE o.last_read_seq > o.joined_seq), c.departed_read_seq) AS read_seq,
+                   GREATEST(MAX(o.last_delivered_seq) FILTER (WHERE o.last_delivered_seq > o.joined_seq), c.departed_delivered_seq) AS delivered_seq,
+                   COUNT(*) AS members
             FROM chat_members o
             WHERE o.chat_id = c.id AND o.user_id <> @userId
         ) ob";

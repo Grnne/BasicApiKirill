@@ -306,8 +306,12 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
                    COALESCE(o.delivered_seq, 0) AS OutboxDeliveredSeq,
                    o.members > 0 AS HasOthers
             FROM chat_members cm
+            JOIN chats c ON c.id = cm.chat_id
+            -- A member's pointers count from where they joined; those who left are kept in the chat.
             CROSS JOIN LATERAL (
-                SELECT MAX(last_read_seq) AS read_seq, MAX(last_delivered_seq) AS delivered_seq, COUNT(*) AS members
+                SELECT GREATEST(MAX(last_read_seq) FILTER (WHERE last_read_seq > joined_seq), c.departed_read_seq) AS read_seq,
+                       GREATEST(MAX(last_delivered_seq) FILTER (WHERE last_delivered_seq > joined_seq), c.departed_delivered_seq) AS delivered_seq,
+                       COUNT(*) AS members
                 FROM chat_members
                 WHERE chat_id = @chatId AND user_id <> @viewerId
             ) o
@@ -318,9 +322,11 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
         Guid chatId, Guid memberId, long fromSeq, long toSeq, ReceiptKind kind, CancellationToken ct = default)
     {
         var pointer = kind == ReceiptKind.Read ? "last_read_seq" : "last_delivered_seq";
+        var departed = kind == ReceiptKind.Read ? "departed_read_seq" : "departed_delivered_seq";
 
         // Per author, their newest message in the range against the furthest pointer of everyone
-        // else (neither the author nor this member): if nobody had reached it, the status is new.
+        // else (neither the author nor this member, counted from where they joined, those who left
+        // included): if nobody had reached it, the status is new.
         return db.QueryAsync<Guid>($@"
             WITH authors AS (
                 SELECT sender_id, MAX(seq) AS top
@@ -331,9 +337,11 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
             )
             SELECT a.sender_id
             FROM authors a
-            WHERE a.top > COALESCE((
-                SELECT MAX(o.{pointer}) FROM chat_members o
-                WHERE o.chat_id = @chatId AND o.user_id <> @memberId AND o.user_id <> a.sender_id), 0)",
+            WHERE a.top > GREATEST(
+                (SELECT MAX(o.{pointer}) FILTER (WHERE o.{pointer} > o.joined_seq) FROM chat_members o
+                 WHERE o.chat_id = @chatId AND o.user_id <> @memberId AND o.user_id <> a.sender_id),
+                (SELECT {departed} FROM chats WHERE id = @chatId),
+                0)",
             new { chatId, memberId, fromSeq, toSeq }, ct);
     }
 

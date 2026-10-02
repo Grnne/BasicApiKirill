@@ -60,8 +60,8 @@ public sealed class GroupRepository(IDbSession db) : IGroupRepository
         Guid chatId, IReadOnlyCollection<Guid> userIds, DateTime now, CancellationToken ct = default) =>
         // History before joining is visible but not unread: the pointers start at the chat's last message.
         db.QueryAsync<Guid>(@"
-            INSERT INTO chat_members (chat_id, user_id, joined_at, role, last_read_seq, last_delivered_seq)
-            SELECT @chatId, u, @now, 'member', c.last_seq, c.last_seq
+            INSERT INTO chat_members (chat_id, user_id, joined_at, role, last_read_seq, last_delivered_seq, joined_seq)
+            SELECT @chatId, u, @now, 'member', c.last_seq, c.last_seq, c.last_seq
             FROM unnest(@userIds) AS u
             CROSS JOIN chats c
             WHERE c.id = @chatId
@@ -70,8 +70,21 @@ public sealed class GroupRepository(IDbSession db) : IGroupRepository
             new { chatId, now, userIds = userIds.Distinct().ToArray() }, ct);
 
     public async Task<bool> RemoveMemberAsync(Guid chatId, Guid userId, CancellationToken ct = default) =>
-        await db.ExecuteAsync(
-            "DELETE FROM chat_members WHERE chat_id = @chatId AND user_id = @userId", new { chatId, userId }, ct) > 0;
+        // What the member had read stays read for the authors: the chat keeps it.
+        await db.ExecuteScalarAsync<bool>(@"
+            WITH gone AS (
+                DELETE FROM chat_members WHERE chat_id = @chatId AND user_id = @userId
+                RETURNING last_read_seq, last_delivered_seq, joined_seq
+            ), kept AS (
+                UPDATE chats c
+                SET departed_read_seq = GREATEST(c.departed_read_seq,
+                        CASE WHEN g.last_read_seq > g.joined_seq THEN g.last_read_seq ELSE 0 END),
+                    departed_delivered_seq = GREATEST(c.departed_delivered_seq,
+                        CASE WHEN g.last_delivered_seq > g.joined_seq THEN g.last_delivered_seq ELSE 0 END)
+                FROM gone g
+                WHERE c.id = @chatId
+            )
+            SELECT EXISTS (SELECT 1 FROM gone)", new { chatId, userId }, ct);
 
     public Task SetRoleAsync(Guid chatId, Guid userId, string role, CancellationToken ct = default) =>
         db.ExecuteAsync(
