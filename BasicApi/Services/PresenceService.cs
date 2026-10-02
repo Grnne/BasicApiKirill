@@ -134,15 +134,8 @@ public sealed class PresenceService(
         await events.TypingChangedAsync(chatId, userId, isTyping, Others(memberIds, userId), ct);
     }
 
-    public async Task IntroduceAsync(Guid userA, Guid userB, CancellationToken ct = default)
-    {
-        var online = await status.GetOnlineUserIdsAsync(new HashSet<Guid> { userA, userB });
-
-        if (online.Contains(userA))
-            await events.UserOnlineChangedAsync(userA, true, [userB], ct);
-        if (online.Contains(userB))
-            await events.UserOnlineChangedAsync(userB, true, [userA], ct);
-    }
+    public Task IntroduceAsync(Guid userA, Guid userB, CancellationToken ct = default) =>
+        IntroduceAsync([userA], [userB], ct);
 
     public async Task IntroduceAsync(
         IReadOnlyCollection<Guid> newMembers, IReadOnlyCollection<Guid> existingMembers, CancellationToken ct = default)
@@ -150,10 +143,14 @@ public sealed class PresenceService(
         var everyone = newMembers.Concat(existingMembers).ToHashSet();
         var fresh = newMembers.ToHashSet();
 
-        // One event per online member, not per pair: a group of hundreds stays cheap.
+        // One event per online member, not per pair: a group of hundreds stays cheap. Only to
+        // those it may be shown to: the rule is mutual, so whom the member may see may see them.
         foreach (var userId in await status.GetOnlineUserIdsAsync(everyone))
         {
-            var recipients = (fresh.Contains(userId) ? everyone : fresh).Where(id => id != userId).ToList();
+            var candidates = (fresh.Contains(userId) ? everyone : fresh).Where(id => id != userId).ToList();
+            if (candidates.Count == 0)
+                continue;
+            var recipients = (await policy.FilterPresenceVisibleAsync(userId, candidates, ct)).ToList();
             if (recipients.Count > 0)
                 await events.UserOnlineChangedAsync(userId, true, recipients, ct);
         }

@@ -119,6 +119,10 @@ public class PresenceServiceTests
     [Fact]
     public async Task Introduce_BothOnline_EachLearnsTheOther()
     {
+        // Introduced once the chat is there: each is the other's contact by then.
+        _chatRepoMock
+            .Setup(r => r.GetAllChatMembersAsync(_contactA, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([_userId]);
         await _status.SetUserOnlineStatusAsync(_userId, "c1", true);
         await _status.SetUserOnlineStatusAsync(_contactA, "c2", true);
 
