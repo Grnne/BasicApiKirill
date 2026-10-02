@@ -74,22 +74,20 @@ public sealed class FolderService(
         }, ct);
     }
 
-    public async Task<FolderDto> UpdateAsync(Guid userId, Guid folderId, SaveFolderDto changes, CancellationToken ct = default)
-    {
-        var folder = await folders.GetAsync(userId, folderId, ct) ?? throw NotFound();
-        if (changes.Title is not null)
-            folder.Title = Title(changes.Title);
-        folder.IncludePrivate = changes.IncludePrivate ?? folder.IncludePrivate;
-        folder.IncludeGroups = changes.IncludeGroups ?? folder.IncludeGroups;
-        folder.OnlyUnread = changes.OnlyUnread ?? folder.OnlyUnread;
-        await SetChatsAsync(userId, folder, changes.ChatIds ?? folder.ChatIds, changes.PinnedChatIds ?? folder.PinnedChatIds, ct);
-
-        return await ChangeAsync(userId, async (_, ct) =>
+    public Task<FolderDto> UpdateAsync(Guid userId, Guid folderId, SaveFolderDto changes, CancellationToken ct = default) =>
+        // Read under the same lock as a delete: read before it, the save would bring a deleted folder back.
+        ChangeAsync(userId, async (existing, ct) =>
         {
+            var folder = existing.FirstOrDefault(f => f.Id == folderId) ?? throw NotFound();
+            if (changes.Title is not null)
+                folder.Title = Title(changes.Title);
+            folder.IncludePrivate = changes.IncludePrivate ?? folder.IncludePrivate;
+            folder.IncludeGroups = changes.IncludeGroups ?? folder.IncludeGroups;
+            folder.OnlyUnread = changes.OnlyUnread ?? folder.OnlyUnread;
+            await SetChatsAsync(userId, folder, changes.ChatIds ?? folder.ChatIds, changes.PinnedChatIds ?? folder.PinnedChatIds, ct);
             await folders.SaveAsync(folder, ct);
             return folder;
         }, ct);
-    }
 
     public async Task DeleteAsync(Guid userId, Guid folderId, CancellationToken ct = default) =>
         await ChangeAsync(userId, async (_, ct) =>
@@ -149,7 +147,10 @@ public sealed class FolderService(
             return changed is null ? new FolderDto() : all.First(f => f.Id == changed.Id);
         }, ct: ct);
 
-    /// <summary>Only the user's own chats, within the limits; the pinned ones are in the folder too.</summary>
+    /// <summary>
+    /// Within the limits; the pinned ones are in the folder too. Only the user's own chats are
+    /// kept, the others left out: a chat the user has left may still be in what a client sends back.
+    /// </summary>
     private async Task SetChatsAsync(
         Guid userId, Folder folder, IReadOnlyList<Guid> chatIds, IReadOnlyList<Guid> pinnedIds, CancellationToken ct)
     {
@@ -157,10 +158,9 @@ public sealed class FolderService(
         if (all.Count > MaxChats || pinnedIds.Count > MaxPinned || pinnedIds.Distinct().Count() != pinnedIds.Count)
             throw new BadRequestException(
                 $"A folder lists at most {MaxChats} chats and pins at most {MaxPinned}", "INVALID_REQUEST");
-        if (all.Count > 0 && (await folders.GetOwnChatsAsync(userId, all, ct)).Count != all.Count)
-            throw new BadRequestException("A folder may list only the user's chats", "INVALID_REQUEST");
-        folder.ChatIds = all;
-        folder.PinnedChatIds = [.. pinnedIds];
+        var own = all.Count == 0 ? [] : (await folders.GetOwnChatsAsync(userId, all, ct)).ToHashSet();
+        folder.ChatIds = [.. all.Where(own.Contains)];
+        folder.PinnedChatIds = [.. pinnedIds.Where(own.Contains)];
     }
 
     private static string Title(string? title)

@@ -27,6 +27,7 @@ public class ConfigTests(PostgresFixture db) : DbTest(db)
         Assert.False(media.GetProperty("enabled").GetBoolean());
         Assert.Equal(100L * 1024 * 1024, media.GetProperty("maxFileSize").GetInt64());
         Assert.Equal(20L * 1024 * 1024, media.GetProperty("maxPhotoSize").GetInt64());
+        Assert.Equal(12_000_000, media.GetProperty("maxPngGifPhotoPixels").GetInt64());
 
         Assert.Equal(500, config.GetProperty("groups").GetProperty("maxMembers").GetInt32());
         Assert.False(config.GetProperty("push").GetProperty("enabled").GetBoolean());

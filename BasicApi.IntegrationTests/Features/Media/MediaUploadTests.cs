@@ -7,6 +7,8 @@ using System.Text.Json;
 using BasicApi.Features.Media;
 using BasicApi.IntegrationTests.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using SkiaSharp;
 
 namespace BasicApi.IntegrationTests.Features.Media;
@@ -161,13 +163,14 @@ public class MediaUploadTests(PostgresFixture db, StorageFixture storage) : DbTe
             new { kind = "file", fileName = "big.bin", mimeType = "application/zip", size = 2 * 1024 * 1024 });
         Assert.Equal("FILE_TOO_LARGE", await declared.ErrorCodeAsync());
 
-        // Declared small, uploaded big: the server measures the object itself.
+        // Declared small, uploaded big: the link takes only the announced size.
         var ticket = await StartAsync(api, new { kind = "file", fileName = "big.bin", mimeType = "application/zip", size = 1000 });
         var early = await api.PostAsync($"/api/media/uploads/{ticket.Id("attachmentId")}/complete", null);
         Assert.Equal("UPLOAD_INCOMPLETE", await early.ErrorCodeAsync());
-        await PutAsync(ticket.GetProperty("uploadUrl").GetString()!, new byte[1536 * 1024], "application/zip");
+        var put = await PutAsync(ticket.GetProperty("uploadUrl").GetString()!, new byte[1536 * 1024], "application/zip");
+        Assert.Equal(HttpStatusCode.Forbidden, put.StatusCode);
         var late = await api.PostAsync($"/api/media/uploads/{ticket.Id("attachmentId")}/complete", null);
-        Assert.Equal("FILE_TOO_LARGE", await late.ErrorCodeAsync());
+        Assert.Equal("UPLOAD_INCOMPLETE", await late.ErrorCodeAsync());
 
         var voice = await api.PostAsJsonAsync("/api/media/uploads",
             new { kind = "voice", fileName = "voice.ogg", mimeType = "audio/ogg", size = 100 });
@@ -188,6 +191,40 @@ public class MediaUploadTests(PostgresFixture db, StorageFixture storage) : DbTe
         var put = await PutAsync(ticket.GetProperty("uploadUrl").GetString()!, "hello"u8.ToArray(), "text/html");
 
         Assert.Equal(HttpStatusCode.Forbidden, put.StatusCode);
+    }
+
+    [Fact]
+    public async Task UploadLink_TakesOnlyTheAnnouncedSize()
+    {
+        // Found by the review: the size was checked only at completion, so the link of a
+        // 5-byte file took gigabytes and the disk filled up — with Postgres on it.
+        await using var factory = Factory();
+        var alice = await factory.RegisterAsync("alice");
+        using var api = factory.CreateClient(alice.Token);
+
+        var ticket = await StartAsync(api, new { kind = "file", fileName = "a.txt", mimeType = "text/plain", size = 5 });
+        var put = await PutAsync(ticket.GetProperty("uploadUrl").GetString()!, "hello, world"u8.ToArray(), "text/plain");
+
+        Assert.Equal(HttpStatusCode.Forbidden, put.StatusCode);
+    }
+
+    [Fact]
+    public async Task UploadLink_CannotChangeTheFile_OnceItIsChecked()
+    {
+        // Found by the review: the link worked on after completion and wrote over the very object
+        // the server had checked — its type, size and hash no longer told the truth.
+        await using var factory = Factory();
+        var alice = await factory.RegisterAsync("alice");
+        using var api = factory.CreateClient(alice.Token);
+        var ticket = await StartAsync(api, new { kind = "file", fileName = "a.txt", mimeType = "text/plain", size = 5 });
+        var url = ticket.GetProperty("uploadUrl").GetString()!;
+        Assert.True((await PutAsync(url, "hello"u8.ToArray(), "text/plain")).IsSuccessStatusCode);
+        var file = await api.PostJsonAsync($"/api/media/uploads/{ticket.Id("attachmentId")}/complete");
+
+        await PutAsync(url, "HELLO"u8.ToArray(), "text/plain");
+
+        var download = await Storage.GetAsync((await LinkAsync(api, file.Id()))!.Value.GetProperty("url").GetString());
+        Assert.Equal("hello", await download.Content.ReadAsStringAsync());
     }
 
     [Fact]
@@ -277,9 +314,46 @@ public class MediaUploadTests(PostgresFixture db, StorageFixture storage) : DbTe
 
         Assert.Equal(2, (await factory.Services.GetRequiredService<MediaCleanup>().CleanupAsync()).StaleUploads);
         var objects = factory.Services.GetRequiredService<IObjectStorage>();
-        Assert.Null(await objects.GetSizeAsync(MediaService.OriginalKey(first.Id("attachmentId"))));
+        Assert.Null(await objects.GetSizeAsync(MediaService.UploadKey(first.Id("attachmentId"))));
         Assert.NotNull(await objects.GetSizeAsync(MediaService.OriginalKey(done.Id())));
         await StartAsync(api, new { kind = "file", fileName = "d.txt", mimeType = "text/plain", size = 5 });
+    }
+
+    [Fact]
+    public async Task WhatALinkWritesAfterCompletion_IsSwept_OnceTheLinkHasExpired()
+    {
+        await using var factory = Factory();
+        var alice = await factory.RegisterAsync("alice");
+        using var api = factory.CreateClient(alice.Token);
+        var ticket = await StartAsync(api, new { kind = "file", fileName = "a.txt", mimeType = "text/plain", size = 5 });
+        var url = ticket.GetProperty("uploadUrl").GetString()!;
+        await PutAsync(url, "hello"u8.ToArray(), "text/plain");
+        var file = await api.PostJsonAsync($"/api/media/uploads/{ticket.Id("attachmentId")}/complete");
+        await PutAsync(url, "HELLO"u8.ToArray(), "text/plain");
+        var objects = factory.Services.GetRequiredService<IObjectStorage>();
+        var leftover = MediaService.UploadKey(file.Id());
+
+        // The storage is shared by the tests: what else is swept is theirs.
+        await Cleanup(factory, TimeSpan.Zero).CleanupAsync();
+        Assert.NotNull(await objects.GetSizeAsync(leftover));
+        var swept = await Cleanup(factory, TimeSpan.FromHours(2)).CleanupAsync();
+
+        Assert.True(swept.UploadLeftovers >= 1);
+        Assert.Null(await objects.GetSizeAsync(leftover));
+        Assert.NotNull(await objects.GetSizeAsync(MediaService.OriginalKey(file.Id())));
+    }
+
+    /// <summary>The cleanup as it runs <paramref name="later"/> from now: objects cannot be aged in the storage.</summary>
+    private static MediaCleanup Cleanup(ApiFactory factory, TimeSpan later) => new(
+        factory.Services.GetRequiredService<IServiceScopeFactory>(),
+        factory.Services.GetRequiredService<IOptions<MediaOptions>>(),
+        factory.Services.GetRequiredService<IOptions<StorageOptions>>(),
+        new ShiftedTime(later),
+        NullLogger<MediaCleanup>.Instance);
+
+    private sealed class ShiftedTime(TimeSpan shift) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => base.GetUtcNow() + shift;
     }
 
     [Fact]

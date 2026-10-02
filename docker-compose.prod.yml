@@ -112,6 +112,7 @@ services:
       Jwt__Issuer: ${JWT_ISSUER:-ChatApi}
       Jwt__Audience: ${JWT_AUDIENCE:-ChatClient}
       Jwt__ExpiryMinutes: ${JWT_EXPIRY_MINUTES:-60}
+      Registration__Mode: ${REGISTRATION_MODE:-open}
       AllowedHosts: ${ALLOWED_HOSTS:-*}
       # Swagger UI and the API schema; off by default in production.
       Swagger__Enabled: ${SWAGGER_ENABLED:-false}

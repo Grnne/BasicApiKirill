@@ -58,21 +58,12 @@ public class SessionService(
             throw new UnauthorizedException("Refresh token has expired", "REFRESH_TOKEN_EXPIRED");
 
         // An already-consumed session: either an honest logout, a race, or theft.
-        var withinGraceWindow = false;
         if (session.RevokedAt is not null)
         {
             if (session.ReplacedBySessionId is null)
                 throw new UnauthorizedException("Session has been revoked", "SESSION_REVOKED");
 
-            withinGraceWindow = (now - session.RevokedAt.Value).TotalSeconds <= _graceSeconds;
-
-            // Rotation does not guarantee the chain is alive: logout or logout-all could have
-            // revoked the successor after it. Without this check a pre-rotation token
-            // would allow bypassing sign-out for the whole grace window.
-            if (withinGraceWindow && !await sessionRepository.HasLiveSessionInFamilyAsync(session.FamilyId, ct))
-                throw new UnauthorizedException("Session has been revoked", "SESSION_REVOKED");
-
-            if (!withinGraceWindow)
+            if ((now - session.RevokedAt.Value).TotalSeconds > _graceSeconds)
             {
                 // The token was presented again after a long time — treated as compromised
                 // and we revoke the whole chain, including the session the thief is currently using.
@@ -103,17 +94,13 @@ public class SessionService(
             Ip = Truncate(ip, 64)
         };
 
-        if (withinGraceWindow)
-        {
-            // The original row is already rotated — just add one more session to the family.
-            await sessionRepository.CreateAsync(replacement, ct);
-        }
-        else if (!await sessionRepository.TryRotateAsync(session.Id, replacement, now, ct))
-        {
-            // Someone rotated this session between SELECT and UPDATE. This is the same race,
-            // just caught a step later — there is nothing to kick the client out for.
-            await sessionRepository.CreateAsync(replacement, ct);
-        }
+        // Not rotated by this request: rotated already by a racing one of the same client (then it
+        // gets a sibling session while the chain is live), or revoked by a sign-out meanwhile —
+        // then nothing, or the sign-out would be undone by a refresh that read the row before it.
+        var rotated = session.RevokedAt is null &&
+            await sessionRepository.TryRotateAsync(session.Id, replacement, now, ct);
+        if (!rotated && !await sessionRepository.TryAddToRotatedFamilyAsync(session.Id, replacement, ct))
+            throw new UnauthorizedException("Session has been revoked", "SESSION_REVOKED");
 
         return BuildResponse(user, newRefreshToken, replacement.ExpiresAt, replacement.FamilyId);
     }

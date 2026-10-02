@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 
+import InviteSection from '@/features/auth/ui/InviteSection.vue'
 import DevicesSection from '@/features/devices/ui/DevicesSection.vue'
 import PasswordSection from '@/features/profile/ui/PasswordSection.vue'
 import ProfileSection from '@/features/profile/ui/ProfileSection.vue'
@@ -40,6 +41,7 @@ async function onSignOutEverywhere(): Promise<void> {
       <PushSection />
       <PrivacySection />
       <BlockedSection />
+      <InviteSection />
       <DevicesSection :key="devicesVersion" @sign-out-here="logout" @sign-out-everywhere="onSignOutEverywhere" />
     </main>
   </div>

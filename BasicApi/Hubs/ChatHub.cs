@@ -23,8 +23,14 @@ public class ChatHub(
     HubConnectionRegistry connectionRegistry,
     ILogger<ChatHub> logger) : Hub
 {
-    // Per-connection call throttling - protection against SendMessage/Typing spam,
-    // which are more expensive than a regular REST request (they write to the DB and broadcast to all chat members).
+    /// <summary>
+    /// Open connections one user may hold — tabs and devices. The call limit is per connection:
+    /// without a cap, more sockets would mean more calls.
+    /// </summary>
+    public const int MaxConnectionsPerUser = 20;
+
+    // Per-connection call throttling - protection against SendMessage/Typing/JoinChat spam,
+    // which are more expensive than a regular REST request (they hit the DB, some broadcast to all chat members).
     private static readonly ConcurrentDictionary<string, RateLimiter> ConnectionLimiters = new();
 
     private bool TryAcquireCallSlot()
@@ -51,6 +57,13 @@ public class ChatHub(
             // steps will either find the connection in the registry, or the check will see the revocation.
             var sessionFamilyId = Context.User?.GetSessionFamilyId();
             connectionRegistry.Add(Context, userId, sessionFamilyId, Context.User?.GetTokenExpiry());
+            if (connectionRegistry.CountOf(userId) > MaxConnectionsPerUser)
+            {
+                logger.LogWarning("Rejected hub connection over the limit of {Max}: userId={UserId}", MaxConnectionsPerUser, userId);
+                connectionRegistry.Remove(Context.ConnectionId);
+                Context.Abort();
+                return;
+            }
 
             try
             {
@@ -104,10 +117,23 @@ public class ChatHub(
 
     public async Task JoinChat(Guid chatId)
     {
+        if (!TryAcquireCallSlot())
+            throw HubErrors.Create(HubErrors.RateLimited, "Too many calls. Slow down.");
         if (UserId is not { } userId) return;
 
         await policy.DemandReadAsync(userId, chatId, Context.ConnectionAborted);
         await Groups.AddToGroupAsync(Context.ConnectionId, chatId.ToString());
+        try
+        {
+            // Checked again once in the group: a removal between the check and the join took the
+            // connection out of a group it was not in yet, and nothing would take it out later.
+            await policy.DemandReadAsync(userId, chatId, Context.ConnectionAborted);
+        }
+        catch
+        {
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, chatId.ToString());
+            throw;
+        }
     }
 
     /// <summary>Leaving a chat group is harmless even without a membership check.</summary>

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { DEFAULT_CONFIG } from '@/entities/config/config.store'
-import { albumConflict, formatDuration, formatSize, rejectFile, uploadKind } from './lib'
+import { albumConflict, formatDuration, formatSize, pngGifPixels, rejectFile, uploadKind } from './lib'
 
 const MB = 1024 * 1024
 
@@ -12,9 +12,38 @@ describe('uploadKind', () => {
     expect(uploadKind({ type: 'image/svg+xml', size: 10 }, DEFAULT_CONFIG)).toBe('file')
   })
 
+  it('a PNG or GIF with more pixels than the server decodes is a file', () => {
+    const limit = DEFAULT_CONFIG.media.maxPngGifPhotoPixels
+    expect(uploadKind({ type: 'image/png', size: MB, pixels: limit }, DEFAULT_CONFIG)).toBe('photo')
+    expect(uploadKind({ type: 'image/png', size: MB, pixels: limit + 1 }, DEFAULT_CONFIG)).toBe('file')
+    expect(uploadKind({ type: 'image/png', size: MB, pixels: null }, DEFAULT_CONFIG)).toBe('photo')
+  })
+
   it('mp4, mov and webm are videos; anything else is a file', () => {
     expect(uploadKind({ type: 'video/mp4', size: MB }, DEFAULT_CONFIG)).toBe('video')
     expect(uploadKind({ type: 'application/pdf', size: MB }, DEFAULT_CONFIG)).toBe('file')
+  })
+})
+
+/** The first bytes of a PNG: signature and IHDR with the given size. */
+function pngHeader(width: number, height: number): Uint8Array<ArrayBuffer> {
+  const head = new Uint8Array(24)
+  head.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52])
+  new DataView(head.buffer).setUint32(16, width)
+  new DataView(head.buffer).setUint32(20, height)
+  return head
+}
+
+describe('pngGifPixels', () => {
+  it('reads the size from a PNG or GIF header', async () => {
+    expect(await pngGifPixels(new Blob([pngHeader(4000, 4000)], { type: 'image/png' }))).toBe(16_000_000)
+    const gif = new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x10, 0x00, 0x20, 0x00])
+    expect(await pngGifPixels(new Blob([gif], { type: 'image/gif' }))).toBe(16 * 32)
+  })
+
+  it('other types and headers that do not parse give null', async () => {
+    expect(await pngGifPixels(new Blob(['abc'], { type: 'image/png' }))).toBeNull()
+    expect(await pngGifPixels(new Blob([pngHeader(10, 10)], { type: 'image/jpeg' }))).toBeNull()
   })
 })
 

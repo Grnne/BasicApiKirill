@@ -32,7 +32,7 @@ CI (GitHub Actions) запускает `test.ps1` на каждый push. Деп
 | Ресурс | Где | Что |
 |---|---|---|
 | REST API | `/swagger` (в проде — с `Swagger:Enabled`) | ручки, модели, коды ответов |
-| SignalR | `/signalr-docs`, эндпоинт `/hubs/chat` | методы хаба и события |
+| SignalR | `/signalr-docs` (там же, где `/swagger`), эндпоинт `/hubs/chat` | методы хаба и события |
 | Архитектура | [docs/architecture.md](docs/architecture.md) | устройство проекта, правила зависимостей, ключевые решения |
 | Веб-клиент | [BasicWebClient/README.md](BasicWebClient/README.md) | запуск в разработке, структура, синхронизация, сессии, push |
 | Изменения контракта | [docs/api-contract-changes.md](docs/api-contract-changes.md) | что поменялось для клиентов, справочник кодов ошибок |

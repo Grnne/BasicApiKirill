@@ -80,6 +80,75 @@ public class FoldersTests(PostgresFixture db) : DbTest(db)
     }
 
     [Fact]
+    public async Task Folder_KeepsWorking_AfterTheUserLeftAChatInIt()
+    {
+        // Found by the review: the folder kept the chat the user had left, and every change of it
+        // that did not list its chats again — a rename — was refused, as was one that sent back
+        // the chats the folder itself had reported.
+        await using var factory = new ApiFactory(Db.ConnectionString, Settings);
+        var alice = await factory.RegisterAsync("alice");
+        var bob = await factory.RegisterAsync("bob");
+        using var aliceApi = factory.CreateClient(alice.Token);
+        var group = await Data.GroupChatAsync("team", [bob.UserId, alice.UserId]);
+        var folder = await aliceApi.PostJsonAsync("/api/folders", new { title = "work", chatIds = new[] { group } });
+        var stale = folder.GetProperty("chatIds").EnumerateArray().Select(c => c.GetGuid()).ToArray();
+
+        Assert.Equal(HttpStatusCode.NoContent, (await aliceApi.DeleteAsync($"/api/chats/{group}/members/{alice.UserId}")).StatusCode);
+
+        // The folder lists it until it is saved (as every device has it from the events); saving drops it.
+        var renamed = await (await aliceApi.PatchAsJsonAsync($"/api/folders/{folder.Id()}", new { title = "job" })).ReadJsonAsync();
+        Assert.Empty(renamed.GetProperty("chatIds").EnumerateArray());
+        var echoed = await (await aliceApi.PatchAsJsonAsync($"/api/folders/{folder.Id()}", new { chatIds = stale })).ReadJsonAsync();
+        Assert.Empty(echoed.GetProperty("chatIds").EnumerateArray());
+    }
+
+    [Fact]
+    public async Task Folder_ChangedWhileItIsDeleted_StaysDeleted()
+    {
+        // Found by the review: the change read the folder before taking the user's lock, and its
+        // save, an upsert, brought back the folder a delete had just removed.
+        await using var factory = new ApiFactory(Db.ConnectionString, Settings);
+        var alice = await factory.RegisterAsync("alice");
+        using var aliceApi = factory.CreateClient(alice.Token);
+        var folder = (await aliceApi.PostJsonAsync("/api/folders", new { title = "work" })).Id();
+
+        // A delete in progress, holding the user's lock as the folder service does.
+        var deleting = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var commit = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var other = NewSession();
+        var delete = other.InTransactionAsync(async ct =>
+        {
+            await other.ExecuteAsync("SELECT 1 FROM users WHERE id = @userId FOR UPDATE", new { userId = alice.UserId }, ct);
+            await other.ExecuteAsync("DELETE FROM folders WHERE id = @folder", new { folder }, ct);
+            deleting.SetResult();
+            await commit.Task;
+            return 0;
+        });
+        await deleting.Task;
+
+        var rename = aliceApi.PatchAsJsonAsync($"/api/folders/{folder}", new { title = "job" });
+        await WaitForLockWaitAsync();
+        commit.SetResult();
+        await delete;
+
+        Assert.Equal(HttpStatusCode.NotFound, (await rename).StatusCode);
+        Assert.Empty((await aliceApi.GetJsonAsync("/api/folders")).EnumerateArray());
+    }
+
+    private async Task WaitForLockWaitAsync()
+    {
+        var observer = NewSession();
+        for (var i = 0; i < 100; i++)
+        {
+            if (await observer.ExecuteScalarAsync<long>(
+                    "SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND datname = current_database()") > 0)
+                return;
+            await Task.Delay(50);
+        }
+        Assert.Fail("The change never waited for the user's lock.");
+    }
+
+    [Fact]
     public async Task Folders_HaveLimits_AnOrder_AndBelongToTheirOwner()
     {
         await using var factory = new ApiFactory(Db.ConnectionString, Settings);
@@ -92,7 +161,10 @@ public class FoldersTests(PostgresFixture db) : DbTest(db)
         async Task<string?> Code(Task<HttpResponseMessage> call) => await (await call).ErrorCodeAsync();
 
         Assert.Equal("INVALID_TITLE", await Code(aliceApi.PostAsJsonAsync("/api/folders", new { title = "  " })));
-        Assert.Equal("INVALID_REQUEST", await Code(aliceApi.PostAsJsonAsync("/api/folders", new { title = "x", chatIds = new[] { foreign } })));
+        // Another's chat is left out, not stored: a folder lists only the user's chats.
+        var notMine = await aliceApi.PostJsonAsync("/api/folders", new { title = "x", chatIds = new[] { foreign } });
+        Assert.Empty(notMine.GetProperty("chatIds").EnumerateArray());
+        (await aliceApi.DeleteAsync($"/api/folders/{notMine.Id()}")).EnsureSuccessStatusCode();
 
         var ids = new List<Guid>();
         for (var i = 0; i < 20; i++)

@@ -19,4 +19,11 @@ public class RegisterRequestDto
 
     [MaxLength(100)]
     public string? DisplayName { get; set; }
+
+    /// <summary>
+    /// A member's one-time invitation (<c>POST /api/auth/invites</c>) — needed when registration is
+    /// by invitation (<c>GET /api/auth/registration</c>), ignored otherwise.
+    /// </summary>
+    [MaxLength(100)]
+    public string? InviteCode { get; set; }
 }

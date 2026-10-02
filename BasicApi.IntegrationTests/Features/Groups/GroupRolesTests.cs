@@ -126,6 +126,35 @@ public class GroupRolesTests(PostgresFixture db) : DbTest(db)
     }
 
     [Fact]
+    public async Task Admin_GivesOnlyThePermissionsTheyHave()
+    {
+        // Found by the review: an admin the owner allowed to make admins, but not to delete
+        // messages or change the group, made a second account an admin with every default right,
+        // and could let members change the group without being allowed to change it themselves.
+        var g = await ArrangeAsync();
+        await using var _ = g.Factory;
+        using var owner = g.Api(g.Owner);
+        using var bob = g.Api(g.Bob);
+        await Ok(SetRoleAsync(owner, g.ChatId, g.Bob.UserId, "admin"));
+        await Ok(SetPermissionsAsync(owner, g.ChatId, g.Bob.UserId, new { addAdmins = true, changeInfo = false, deleteMessages = false }));
+
+        var carol = await (await SetRoleAsync(bob, g.ChatId, g.Carol.UserId, "admin")).ReadJsonAsync();
+        var rights = carol.GetProperty("permissions");
+        Assert.False(rights.GetProperty("changeInfo").GetBoolean());
+        Assert.False(rights.GetProperty("deleteMessages").GetBoolean());
+        Assert.True(rights.GetProperty("removeMembers").GetBoolean());
+
+        await Expect(HttpStatusCode.Forbidden, "PERMISSION_DENIED",
+            SetPermissionsAsync(bob, g.ChatId, g.Dave.UserId, new { changeInfo = true }));
+        await Expect(HttpStatusCode.Forbidden, "PERMISSION_DENIED",
+            bob.PatchAsJsonAsync($"/api/chats/{g.ChatId}", new { memberPermissions = new { changeInfo = true } }));
+        // Taking away is not giving: an admin restricts what they do not have themselves too.
+        await Ok(SetPermissionsAsync(bob, g.ChatId, g.Dave.UserId, new { sendMessages = false, changeInfo = false }));
+        // The owner gives anything.
+        await Ok(SetPermissionsAsync(owner, g.ChatId, g.Dave.UserId, new { changeInfo = true }));
+    }
+
+    [Fact]
     public async Task HandingOver_MakesTheOldOwnerAnAdmin_AndConcurrentHandoversLeaveOneOwner()
     {
         var g = await ArrangeAsync();

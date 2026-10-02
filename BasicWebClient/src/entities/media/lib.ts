@@ -8,8 +8,30 @@ const VIDEO_TYPES = new Set(['video/mp4', 'video/quicktime', 'video/webm'])
 
 export const isPhotoType = (type: string) => PHOTO_TYPES.has(type)
 
-export function uploadKind(file: { type: string; size: number }, config: ClientConfigDto): UploadKind {
-  if (isPhotoType(file.type) && file.size <= config.media.maxPhotoSize) return 'photo'
+/**
+ * Width × height from the header of a PNG or GIF, or null for other types and headers that do not
+ * parse. The server decodes these at full size for the preview, so a big one has to go as a file.
+ */
+export async function pngGifPixels(file: Blob): Promise<number | null> {
+  if (file.type !== 'image/png' && file.type !== 'image/gif') return null
+  try {
+    const head = new DataView(await file.slice(0, 24).arrayBuffer())
+    // PNG: the signature, then the IHDR chunk with width and height, big-endian.
+    if (file.type === 'image/png')
+      return head.byteLength >= 24 && head.getUint32(12) === 0x49484452 ? head.getUint32(16) * head.getUint32(20) : null
+    // GIF: "GIF87a" or "GIF89a", then the screen width and height, little-endian.
+    return head.byteLength >= 10 && head.getUint32(0) === 0x47494638 ? head.getUint16(6, true) * head.getUint16(8, true) : null
+  } catch {
+    return null
+  }
+}
+
+export function uploadKind(
+  file: { type: string; size: number; pixels?: number | null },
+  config: ClientConfigDto,
+): UploadKind {
+  const decodable = file.pixels == null || file.pixels <= config.media.maxPngGifPhotoPixels
+  if (isPhotoType(file.type) && file.size <= config.media.maxPhotoSize && decodable) return 'photo'
   if (VIDEO_TYPES.has(file.type)) return 'video'
   return 'file'
 }

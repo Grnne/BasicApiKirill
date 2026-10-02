@@ -30,6 +30,17 @@ public class SecurityHeadersTests(PostgresFixture db)
     }
 
     [Fact]
+    public async Task HubDocs_AreServed_OnlyWithTheApiDocs()
+    {
+        // Found by the review: Swagger was off in production, the page describing the hub was not.
+        await using var production = new ApiFactory(db.ConnectionString);
+        await using var withDocs = new ApiFactory(db.ConnectionString, new Dictionary<string, string?> { ["Swagger:Enabled"] = "true" });
+
+        Assert.Equal(HttpStatusCode.NotFound, (await production.CreateClient().GetAsync("/signalr-docs")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await withDocs.CreateClient().GetAsync("/signalr-docs")).StatusCode);
+    }
+
+    [Fact]
     public async Task LocalFilePreviews_AreAllowedAsPicturesAndMedia_NowhereElse()
     {
         // The client previews chosen files and measures videos before upload through blob: URLs,

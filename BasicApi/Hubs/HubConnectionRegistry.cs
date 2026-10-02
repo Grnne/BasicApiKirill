@@ -18,6 +18,8 @@ public sealed class HubConnectionRegistry
 
     public void Remove(string connectionId) => _connections.TryRemove(connectionId, out _);
 
+    public int CountOf(Guid userId) => _connections.Values.Count(e => e.UserId == userId);
+
     /// <summary>
     /// Takes the users' open connections out of a hub group — the chat they left or lost — so that
     /// events of that chat stop reaching them. <c>JoinChat</c> will not let them back.

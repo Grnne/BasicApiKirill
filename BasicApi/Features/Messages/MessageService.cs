@@ -186,11 +186,13 @@ public sealed class MessageService(
     {
         var messages = await MapForViewerAsync([.. older, .. newer], chatId, viewerId, ct);
         var ordered = messages.OrderBy(m => m.Seq).ToList();
+        // Older ones are promised only with the cursor to get them by: an empty page has none.
+        var olderReachable = hasOlder && ordered.Count > 0;
         return new MessageWindowDto
         {
             Items = ordered,
-            NextCursor = hasOlder && ordered.Count > 0 ? MessageCursor.BeforeSeqOf(ordered[0].Seq).Encode() : null,
-            HasMore = hasOlder,
+            NextCursor = olderReachable ? MessageCursor.BeforeSeqOf(ordered[0].Seq).Encode() : null,
+            HasMore = olderReachable,
             HasNewer = hasNewer
         };
     }
@@ -334,14 +336,13 @@ public sealed class MessageService(
 
         var files = withFiles ? await FilesToSendAsync(senderId, attachmentIds!, ct) : [];
 
-        var memberIds = await membership.GetMemberIdsAsync(chatId, ct);
-        var mentioned = MentionedMembers(formatting, memberIds, senderId);
-
         try
         {
             // The message and its event are one transaction: one saved means the other is saved too.
             var message = await db.InTransactionAsync(async ct =>
             {
+                var memberIds = await LockToPostAsync(chatId, senderId, withFiles, ct);
+                var mentioned = MentionedMembers(formatting, memberIds, senderId);
                 var created = Map(await messageRepository.CreateAsync(new Message
                 {
                     Id = Guid.NewGuid(),
@@ -382,6 +383,21 @@ public sealed class MessageService(
                 ?? throw new InvalidOperationException("Duplicate clientMessageId, but the message is not found");
             return AlreadySent(winner, chatId);
         }
+    }
+
+    /// <summary>
+    /// The chat locked, the right to post checked again, the members read — inside the transaction.
+    /// Removing a member or changing rights takes the same lock: checked only before it, a send
+    /// could land after the sender was removed, and reach them.
+    /// </summary>
+    private async Task<IReadOnlyCollection<Guid>> LockToPostAsync(Guid chatId, Guid senderId, bool withFiles, CancellationToken ct)
+    {
+        await groups.LockAsync(chatId, ct);
+        if (withFiles)
+            await policy.DemandPostMediaAsync(senderId, chatId, ct);
+        else
+            await policy.DemandPostAsync(senderId, chatId, ct);
+        return await membership.GetMemberIdsAsync(chatId, ct);
     }
 
     private static SendResult AlreadySent(MessageWithSender sent, Guid chatId) =>
@@ -445,9 +461,10 @@ public sealed class MessageService(
             made[sourceId] = copy;
         }
 
-        var memberIds = await membership.GetMemberIdsAsync(chatId, ct);
         var items = await db.InTransactionAsync(async ct =>
         {
+            var memberIds = await LockToPostAsync(
+                chatId, userId, sources.Any(s => s.AttachmentsJson is not null), ct);
             var items = new List<MessageDto>(sources.Count);
             foreach (var source in sources)
             {
@@ -510,7 +527,8 @@ public sealed class MessageService(
             return Map(message);
 
         var memberIds = await membership.GetMemberIdsAsync(chatId, ct);
-        var mentioned = MentionedMembers(formatting, memberIds, userId);
+        var mentioned = MentionedMembers(formatting, memberIds, userId,
+            MessageEntities.MentionedUsers(MessageEntities.Deserialize(message.EntitiesJson)));
         return await db.InTransactionAsync(async ct =>
         {
             var edited = await messageRepository.EditTextAsync(
@@ -647,15 +665,18 @@ public sealed class MessageService(
 
     /// <summary>
     /// Who gets the mention counted: members of the chat except the author. Mentioning someone
-    /// outside the chat is an error — the server does not reveal non-members through a mention.
+    /// outside the chat is an error — the server does not reveal non-members through a mention —
+    /// unless the message already did (an edit keeps the mention of someone who has left since).
     /// </summary>
     private static IReadOnlyList<Guid> MentionedMembers(
-        List<MessageEntityDto> formatting, IReadOnlyCollection<Guid> memberIds, Guid authorId)
+        List<MessageEntityDto> formatting, IReadOnlyCollection<Guid> memberIds, Guid authorId,
+        IEnumerable<Guid>? alreadyMentioned = null)
     {
         var mentioned = MessageEntities.MentionedUsers(formatting);
-        if (mentioned.Any(id => !memberIds.Contains(id)))
+        var kept = alreadyMentioned?.ToHashSet() ?? [];
+        if (mentioned.Any(id => !memberIds.Contains(id) && !kept.Contains(id)))
             throw new BadRequestException("A mentioned user is not a member of this chat", MessageEntities.InvalidCode);
-        return [.. mentioned.Where(id => id != authorId)];
+        return [.. mentioned.Where(id => id != authorId && memberIds.Contains(id))];
     }
 
     private static NotFoundException MessageNotFound() => new("Message not found in this chat", "MESSAGE_NOT_FOUND");

@@ -37,7 +37,7 @@ public class AuthServiceTests
             });
 
         _service = new AuthService(_userRepoMock.Object, _jwtServiceMock.Object, _sessionServiceMock.Object, Mock.Of<IDeviceRepository>(),
-            new BasicApi.Hubs.HubConnectionRegistry());
+            new BasicApi.Hubs.HubConnectionRegistry(), new BasicApi.Services.SessionLiveness(TimeProvider.System));
     }
 
     [Fact]

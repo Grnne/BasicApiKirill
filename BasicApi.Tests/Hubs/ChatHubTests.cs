@@ -58,9 +58,9 @@ public class ChatHubTests
         return context;
     }
 
-    private ChatHub Hub(Mock<HubCallerContext>? context = null) =>
+    private ChatHub Hub(Mock<HubCallerContext>? context = null, HubConnectionRegistry? registry = null) =>
         new(_messagesMock.Object, _presenceMock.Object, _policyMock.Object, _sessionsMock.Object,
-            new HubConnectionRegistry(), NullLogger<ChatHub>.Instance)
+            registry ?? new HubConnectionRegistry(), NullLogger<ChatHub>.Instance)
         {
             Context = (context ?? Context()).Object,
             Clients = _callerClientsMock.Object,
@@ -114,9 +114,65 @@ public class ChatHubTests
 
         await Hub().JoinChat(chatId);
 
-        _policyMock.Verify(p => p.CanReadAsync(_userId, chatId, It.IsAny<CancellationToken>()), Times.Once);
+        _policyMock.Verify(p => p.CanReadAsync(_userId, chatId, It.IsAny<CancellationToken>()), Times.AtLeastOnce);
         _groupsMock.Verify(g => g.AddToGroupAsync(_connectionId, chatId.ToString(), It.IsAny<CancellationToken>()),
             Times.Once);
+        _groupsMock.Verify(g => g.RemoveFromGroupAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task JoinChat_RemovedWhileJoining_LeavesTheGroupAgain()
+    {
+        // Found by the review: a removal between the check and the join took the connection out of
+        // a group it was not in yet — then it joined, and got the chat's messages on.
+        var chatId = Guid.NewGuid();
+        _policyMock
+            .SetupSequence(p => p.CanReadAsync(_userId, chatId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(PolicyDecision.Allow)
+            .ReturnsAsync(PolicyDecision.Deny("NOT_A_MEMBER", "User is not a member of this chat"));
+
+        await Assert.ThrowsAsync<ForbiddenException>(() => Hub().JoinChat(chatId));
+
+        _groupsMock.Verify(g => g.RemoveFromGroupAsync(_connectionId, chatId.ToString(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task JoinChat_OverCallLimit_IsRejected_BeforeTheDatabase()
+    {
+        // Each join is a database query: unlimited, a few sockets took the whole connection pool.
+        var hub = Hub();
+
+        var refused = 0;
+        for (var i = 0; i < 25; i++)
+        {
+            try { await hub.JoinChat(Guid.NewGuid()); }
+            catch (HubException ex) when (ex.Message.StartsWith("RATE_LIMITED:")) { refused++; }
+        }
+
+        Assert.Equal(5, refused);
+        _groupsMock.Verify(g => g.AddToGroupAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Exactly(20));
+    }
+
+    [Fact]
+    public async Task OnConnected_OverTheConnectionsOfOneUser_IsAborted()
+    {
+        // The call limit is per connection: without a cap on connections a user multiplied it.
+        var registry = new HubConnectionRegistry();
+        for (var i = 0; i < ChatHub.MaxConnectionsPerUser; i++)
+        {
+            var other = Context();
+            other.Setup(c => c.ConnectionId).Returns($"other-{i}");
+            registry.Add(other.Object, _userId, _sessionFamilyId);
+        }
+        var context = Context();
+
+        await Hub(context, registry).OnConnectedAsync();
+
+        context.Verify(c => c.Abort(), Times.Once);
+        _presenceMock.Verify(p => p.ConnectedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

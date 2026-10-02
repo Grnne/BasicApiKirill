@@ -125,6 +125,34 @@ public class DevicesTests(PostgresFixture db) : DbTest(db)
     }
 
     [Fact]
+    public async Task EndedSignIn_ItsAccessToken_NoLongerWorks()
+    {
+        // Found by the review: only the hub checked the sign-in, REST trusted the token until it
+        // expired (an hour). A stolen phone signed out kept reading and sending — and could sign
+        // the owner's new devices out again and again.
+        await using var factory = new ApiFactory(Db.ConnectionString);
+        var laptop = await factory.RegisterAsync("alice");
+        var phone = await factory.LoginAsync("alice");
+        var tablet = await factory.LoginAsync("alice");
+        using var laptopApi = factory.CreateClient(laptop.Token);
+        using var phoneApi = factory.CreateClient(phone.Token);
+        using var tabletApi = factory.CreateClient(tablet.Token);
+        Assert.Equal(HttpStatusCode.OK, (await phoneApi.GetAsync("/api/chats")).StatusCode);
+
+        (await laptopApi.DeleteAsync($"/api/devices/{ApiClient.SessionFamilyOf(phone.Token)}")).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await phoneApi.GetAsync("/api/chats")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await tabletApi.GetAsync("/api/chats")).StatusCode);
+
+        (await laptopApi.PostAsJsonAsync("/api/auth/password", new { currentPassword = ApiClient.Password, newPassword = "another123" }))
+            .EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await tabletApi.GetAsync("/api/chats")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await laptopApi.GetAsync("/api/chats")).StatusCode);
+
+        (await laptopApi.PostAsync("/api/auth/logout-all", null)).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await laptopApi.GetAsync("/api/chats")).StatusCode);
+    }
+
+    [Fact]
     public async Task SignOut_OfSomeoneElsesDevice_IsNotFound()
     {
         await using var factory = new ApiFactory(Db.ConnectionString);
@@ -153,7 +181,6 @@ public class DevicesTests(PostgresFixture db) : DbTest(db)
         Assert.Equal([ApiClient.SessionFamilyOf(alice.Token)], (await DevicesAsync(api)).Select(d => d.Id()));
 
         (await api.PostAsync("/api/auth/logout-all", null)).EnsureSuccessStatusCode();
-        Assert.Empty(await DevicesAsync(api));
         await using var connection = new NpgsqlConnection(Db.ConnectionString);
         Assert.Equal(0, await connection.ExecuteScalarAsync<long>("SELECT count(*) FROM devices"));
     }

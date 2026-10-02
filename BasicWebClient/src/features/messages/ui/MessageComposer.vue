@@ -100,7 +100,7 @@ const canSend = computed(() => {
 
 function onFilesChosen(event: Event): void {
   const input = event.target as HTMLInputElement
-  if (input.files) uploads.add(input.files)
+  if (input.files) void uploads.add(input.files)
   input.value = ''
 }
 
@@ -108,12 +108,12 @@ function onPaste(event: ClipboardEvent): void {
   const files = event.clipboardData?.files
   if (!files || files.length === 0 || store.editing || !mayAttach.value) return
   event.preventDefault()
-  uploads.add(files)
+  void uploads.add(files)
 }
 
 function onDrop(event: DragEvent): void {
   const files = event.dataTransfer?.files
-  if (files && files.length > 0 && !store.editing && mayAttach.value) uploads.add(files)
+  if (files && files.length > 0 && !store.editing && mayAttach.value) void uploads.add(files)
 }
 
 function setContent(nextText: string, nextEntities: readonly Entity[]): void {

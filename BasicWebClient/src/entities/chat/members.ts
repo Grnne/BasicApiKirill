@@ -45,6 +45,10 @@ export const MEMBER_PERMISSIONS: readonly Permission[] = ['sendMessages', 'sendM
 const isOwner = (detail: ChatDetail) => detail.myRole === 'owner'
 const isAdmin = (detail: ChatDetail) => detail.myRole === 'admin'
 
+/** Whether the caller may switch a permission on for others: an admin gives only what they have. */
+export const mayGive = (detail: ChatDetail, permission: Permission) =>
+  isOwner(detail) || !!detail.myPermissions?.[permission]
+
 export const canEditInfo = (detail: ChatDetail) => detail.type === 'group' && !!detail.myPermissions?.changeInfo
 
 /** The group's defaults: the owner, or an admin with removeMembers. */

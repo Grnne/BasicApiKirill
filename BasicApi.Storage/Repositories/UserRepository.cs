@@ -135,7 +135,7 @@ public class UserRepository(IDbSession db) : IUserRepository
         return await db.QueryAsync<User>(sql, new
         {
             ExcludeUserId = excludeUserId,
-            Pattern = $"%{query}%",
+            Pattern = Like.Contains(query),
             Limit = limit
         }, ct);
     }
@@ -152,7 +152,7 @@ public class UserRepository(IDbSession db) : IUserRepository
         return await db.ExecuteScalarAsync<int>(sql, new
         {
             ExcludeUserId = excludeUserId,
-            Pattern = $"%{query}%"
+            Pattern = Like.Contains(query)
         }, ct);
     }
 }

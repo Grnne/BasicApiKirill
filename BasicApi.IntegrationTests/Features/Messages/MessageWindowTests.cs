@@ -69,6 +69,23 @@ public class MessageWindowTests(PostgresFixture db) : DbTest(db)
     }
 
     [Fact]
+    public async Task After_TheLastMessage_IsEmpty_AndPromisesNothing()
+    {
+        // Found by the review: an empty page after a message said hasMore (older ones) with no
+        // cursor to get them by.
+        var (factory, alice, bob, chat, sent) = await ArrangeAsync(3);
+        await using var _ = factory;
+        using var __ = alice;
+        using var ___ = bob;
+
+        var page = await bob.GetJsonAsync($"/api/chats/{chat}/messages/after?seq={sent[^1].GetProperty("seq").GetInt64()}");
+
+        Assert.Empty(Texts(page));
+        Assert.False(page.GetProperty("hasMore").GetBoolean());
+        Assert.False(page.GetProperty("hasNewer").GetBoolean());
+    }
+
+    [Fact]
     public async Task Context_OfAMessageTheViewerCannotSee_Is404()
     {
         var (factory, alice, bob, chat, sent) = await ArrangeAsync(3);

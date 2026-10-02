@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using BasicApi.IntegrationTests.Infrastructure;
+using BasicApi.Storage.Repositories;
 using Microsoft.AspNetCore.SignalR.Client;
 
 namespace BasicApi.IntegrationTests.Features.Messages;
@@ -139,6 +140,38 @@ public class ReceiptsTests(PostgresFixture db) : DbTest(db)
         Assert.Equal("read", Status(await MessageAsync(aliceApi, chat, fromAlice)));
         Assert.Equal("read", Status(await MessageAsync(bobApi, chat, fromBob)));
     }
+
+    [Fact]
+    public async Task Group_SomeoneJoiningOrLeaving_DoesNotChangeWhatWasRead()
+    {
+        // Found by the review: a new member starts at the chat's last message (history before
+        // joining is not unread), and the status took that for reading — an unread message turned
+        // "read" when someone joined, and back to "sent" when its only reader left.
+        await using var factory = new ApiFactory(Db.ConnectionString, Settings);
+        var alice = await factory.RegisterAsync("alice");
+        var bob = await factory.RegisterAsync("bob");
+        var carol = await factory.RegisterAsync("carol");
+        using var aliceApi = factory.CreateClient(alice.Token);
+        using var bobApi = factory.CreateClient(bob.Token);
+        var chat = await Data.GroupChatAsync("team", [alice.UserId, bob.UserId]);
+        var hi = await SendAsync(aliceApi, chat, "hi");
+        // Joining and leaving as the group service does them, without its system messages: the
+        // chat list shows the status of the last message.
+        var groups = new GroupRepository(NewSession());
+
+        await groups.AddMembersAsync(chat, [carol.UserId], DateTime.UtcNow);
+        Assert.Equal("sent", Status(await MessageAsync(aliceApi, chat, hi)));
+        Assert.Equal("sent", await ListStatusAsync(aliceApi, chat));
+
+        await ReadAsync(bobApi, chat, hi);
+        await groups.RemoveMemberAsync(chat, bob.UserId);
+        Assert.Equal("read", Status(await MessageAsync(aliceApi, chat, hi)));
+        Assert.Equal("read", await ListStatusAsync(aliceApi, chat));
+    }
+
+    private static async Task<string?> ListStatusAsync(HttpClient client, Guid chatId) =>
+        (await client.GetJsonAsync("/api/chats")).EnumerateArray()
+            .Single(c => c.Id("chatId") == chatId).GetProperty("lastMessage").GetProperty("status").GetString();
 
     [Fact]
     public async Task Ack_OfAnOlderPts_ByAnotherDevice_ChangesNothing()

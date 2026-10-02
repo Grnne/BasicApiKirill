@@ -169,6 +169,29 @@ public class MessageFormattingTests(PostgresFixture db) : DbTest(db)
     }
 
     [Fact]
+    public async Task Edit_KeepsAMention_OfSomeoneWhoHasLeft()
+    {
+        // Found by the review: the mention was checked as if new, and the author could fix a typo
+        // only by dropping the mention of someone who had left the group since.
+        await using var t = await ArrangeAsync();
+        using var aliceApi = t.Factory.CreateClient(t.Alice.Token);
+        using var bobApi = t.Factory.CreateClient(t.Bob.Token);
+        var mention = new { type = "mention", offset = 0, length = 4, userId = t.Bob.UserId };
+        var sent = await ReadJsonAsync(await aliceApi.PostAsJsonAsync($"/api/chats/{t.Group}/messages",
+            new { text = "@bob loook", entities = new[] { mention } }));
+        Assert.Equal(HttpStatusCode.NoContent, (await bobApi.DeleteAsync($"/api/chats/{t.Group}/members/{t.Bob.UserId}")).StatusCode);
+
+        var edited = await aliceApi.PatchAsJsonAsync($"/api/chats/{t.Group}/messages/{sent.GetProperty("id").GetGuid()}",
+            new { text = "@bob look", entities = new[] { mention } });
+
+        Assert.Equal(HttpStatusCode.OK, edited.StatusCode);
+        // Someone who has left is still not mentioned anew.
+        var anew = await aliceApi.PostAsJsonAsync($"/api/chats/{t.Group}/messages",
+            new { text = "@bob again", entities = new[] { mention } });
+        Assert.Equal("INVALID_ENTITIES", await ErrorCodeAsync(anew));
+    }
+
+    [Fact]
     public async Task Forward_KeepsTheFormatting_ButNotifiesNobody()
     {
         await using var t = await ArrangeAsync();

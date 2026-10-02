@@ -13,7 +13,13 @@ export const DEFAULT_CONFIG: ClientConfigDto = {
     editWindowHours: 48,
     deleteWindowHours: 48,
   },
-  media: { enabled: false, maxFileSize: 100 * 1024 * 1024, maxPhotoSize: 20 * 1024 * 1024, retentionDays: 0 },
+  media: {
+    enabled: false,
+    maxFileSize: 100 * 1024 * 1024,
+    maxPhotoSize: 20 * 1024 * 1024,
+    maxPngGifPhotoPixels: 12_000_000,
+    retentionDays: 0,
+  },
   groups: { maxMembers: 500, maxTitleLength: 128 },
   push: { enabled: false },
 }

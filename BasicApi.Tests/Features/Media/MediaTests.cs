@@ -105,6 +105,26 @@ public class ImagePreviewsTests
         Assert.True(pixel.Red > 200 && pixel.Green < 80, $"{pixel} at {x},{y} of {decoded.Width}x{decoded.Height}");
     }
 
+    private static byte[] Png(int width, int height)
+    {
+        using var bitmap = new SKBitmap(width, height);
+        bitmap.Erase(SKColors.White);
+        using var image = SKImage.FromBitmap(bitmap);
+        return image.Encode(SKEncodedImageFormat.Png, 100).ToArray();
+    }
+
+    [Fact]
+    public void Png_ThatOnlyDecodesAtFullSize_IsRefused_WhenItWouldNotFitTheMemory()
+    {
+        // A one-colour PNG of 16 Mpx is a few dozen KB, yet Skia decodes PNG only at full size:
+        // 64 MB of pixels — and up to 50 Mpx passed, 200 MB in a 256 MB container.
+        Assert.Null(ImagePreviews.Make(Png(4000, 4000), 640, 50_000_000));
+        // JPEG of the same size decodes straight to a smaller one: no memory to save.
+        Assert.NotNull(ImagePreviews.Make(Jpeg(4000, 4000), 640, 50_000_000));
+        // An ordinary screenshot still gets its preview.
+        Assert.NotNull(ImagePreviews.Make(Png(1920, 1080), 640, 50_000_000));
+    }
+
     [Fact]
     public void TooManyPixels_OrNotAPicture_GiveNoPreview()
     {

@@ -54,9 +54,25 @@ export const useAuthStore = defineStore('auth', () => {
    */
   const sessionLost = ref(false)
 
+  /** A sign-out this tab asked for is under way: the session ending is no news to report. */
+  let signingOut = false
+
   function loseSession(): void {
     clearSession()
-    sessionLost.value = true
+    if (!signingOut) sessionLost.value = true
+  }
+
+  /**
+   * Runs a sign-out that ends this sign-in on the server before the tab is done with it ("log out
+   * everywhere"): requests made meanwhile are refused, and that is expected.
+   */
+  async function whileSigningOut<T>(run: () => Promise<T>): Promise<T> {
+    signingOut = true
+    try {
+      return await run()
+    } finally {
+      signingOut = false
+    }
   }
 
   function acknowledgeSessionLost(): void {
@@ -173,5 +189,6 @@ export const useAuthStore = defineStore('auth', () => {
     restoreSession,
     sessionLost,
     acknowledgeSessionLost,
+    whileSigningOut,
   }
 })

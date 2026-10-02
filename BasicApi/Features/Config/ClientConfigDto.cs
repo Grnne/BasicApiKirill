@@ -30,6 +30,7 @@ public class ClientConfigDto
             Enabled = storage.IsConfigured,
             MaxFileSize = media.MaxFileSize,
             MaxPhotoSize = media.MaxPhotoSize,
+            MaxPngGifPhotoPixels = ImagePreviews.MaxDecodedPixels,
             RetentionDays = media.RetentionDays
         },
         Groups = new() { MaxMembers = groups.MaxMembers, MaxTitleLength = GroupOptions.MaxTitleLength },
@@ -65,6 +66,12 @@ public class MediaLimitsDto
 
     /// <summary>Largest photo (sent with kind <c>photo</c>), in bytes: the server decodes it for the preview.</summary>
     public long MaxPhotoSize { get; set; }
+
+    /// <summary>
+    /// Most pixels (width × height) of a PNG or GIF photo: the server decodes these at full size
+    /// for the preview, so a larger one is refused with <c>INVALID_MEDIA</c> — send it as a file.
+    /// </summary>
+    public long MaxPngGifPhotoPixels { get; set; }
 
     /// <summary>How many days files are kept; 0 — forever.</summary>
     public int RetentionDays { get; set; }

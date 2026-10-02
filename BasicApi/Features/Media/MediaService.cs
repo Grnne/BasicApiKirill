@@ -56,6 +56,15 @@ public sealed partial class MediaService(
     /// <summary>Where the client puts a video frame; the server turns it into the preview.</summary>
     public static string ClientThumbnailKey(Guid id) => $"c/{id:N}";
 
+    /// <summary>
+    /// Where the client puts the file. Its link works for a while after completion, so the file
+    /// kept is a copy under <see cref="OriginalKey"/> that no link can write.
+    /// </summary>
+    public static string UploadKey(Guid id) => $"u/{id:N}";
+
+    /// <summary>Prefixes of objects a link writes: whatever is left there past the link's lifetime is garbage.</summary>
+    public static readonly string[] UploadPrefixes = ["u/", "c/"];
+
     public async Task<UploadTicketDto> CreateUploadAsync(
         Guid userId, CreateUploadDto request, CancellationToken ct = default)
     {
@@ -93,9 +102,10 @@ public sealed partial class MediaService(
         attachment.StorageKey = OriginalKey(attachment.Id);
 
         // Links first: a storage that is off or unreachable fails the request before a row is left.
-        var uploadUrl = await storage.PresignPutAsync(attachment.StorageKey, contentType, lifetime);
+        var uploadUrl = await storage.PresignPutAsync(UploadKey(attachment.Id), contentType, request.Size, lifetime);
+        // The frame's size is not announced: the proxy caps the body of these links instead.
         var thumbnailUrl = kind == AttachmentKinds.Video && request.WithThumbnail
-            ? await storage.PresignPutAsync(ClientThumbnailKey(attachment.Id), MediaSniffer.Jpeg, lifetime)
+            ? await storage.PresignPutAsync(ClientThumbnailKey(attachment.Id), MediaSniffer.Jpeg, null, lifetime)
             : null;
         await attachments.CreateAsync(attachment, ct);
 
@@ -117,6 +127,14 @@ public sealed partial class MediaService(
         if (attachment.StorageState != StorageStates.Pending)
             return MessageAttachments.ToDto(attachment);
 
+        // Copied before it is checked: the link can still write to the upload, never to the copy.
+        // No upload but a copy — a concurrent completion has just moved it.
+        var uploaded = UploadKey(attachment.Id);
+        if (await storage.GetSizeAsync(uploaded, ct) is not null)
+        {
+            await storage.CopyAsync(uploaded, attachment.StorageKey, ct);
+            await storage.DeleteAsync([uploaded], ct);
+        }
         var size = await storage.GetSizeAsync(attachment.StorageKey, ct)
             ?? throw new BadRequestException("The file has not been uploaded yet", "UPLOAD_INCOMPLETE");
         var limit = attachment.Kind == AttachmentKinds.Photo ? _options.MaxPhotoSize : _options.MaxFileSize;
@@ -126,7 +144,7 @@ public sealed partial class MediaService(
         await ProcessingGate.WaitAsync(ct);
         try
         {
-            await CheckAsync(attachment, ct);
+            await CheckAsync(attachment, size, ct);
         }
         finally
         {
@@ -149,11 +167,12 @@ public sealed partial class MediaService(
     /// Reads the object once: its hash, real size and type; for a photo — the preview. A video frame
     /// from the client becomes the video's preview.
     /// </summary>
-    private async Task CheckAsync(Attachment attachment, CancellationToken ct)
+    private async Task CheckAsync(Attachment attachment, long expectedSize, CancellationToken ct)
     {
         var keepBytes = attachment.Kind == AttachmentKinds.Photo;
         using var sha = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        using var copy = keepBytes ? new MemoryStream() : null;
+        // Sized for the file up front: no doubling while reading, and its buffer is the picture's bytes.
+        using var copy = keepBytes ? new MemoryStream((int)expectedSize) : null;
         var head = new byte[MediaSniffer.HeaderLength];
         var headLength = 0;
         long size = 0;
@@ -188,7 +207,7 @@ public sealed partial class MediaService(
         {
             case AttachmentKinds.Photo:
                 var preview = MediaSniffer.IsImage(mime)
-                    ? ImagePreviews.Make(copy!.ToArray(), _options.PreviewSize, _options.MaxPhotoPixels)
+                    ? ImagePreviews.Make(Bytes(copy!), _options.PreviewSize, _options.MaxPhotoPixels)
                     : null;
                 if (preview is null)
                     await RejectAsync(attachment, Invalid("the file is not a JPEG, PNG, GIF or WebP picture of an allowed size"));
@@ -217,6 +236,10 @@ public sealed partial class MediaService(
                 break;
         }
     }
+
+    /// <summary>The bytes read, without a second copy when the buffer holds exactly them.</summary>
+    private static byte[] Bytes(MemoryStream stream) =>
+        stream.Length == stream.Capacity ? stream.GetBuffer() : stream.ToArray();
 
     private async Task<string?> VideoThumbnailAsync(Guid id, CancellationToken ct)
     {
@@ -251,7 +274,8 @@ public sealed partial class MediaService(
     /// <summary>A bad upload is removed at once, with its row: the client starts over.</summary>
     private async Task RejectAsync(Attachment attachment, Exception error)
     {
-        await storage.DeleteAsync([attachment.StorageKey, ClientThumbnailKey(attachment.Id)], CancellationToken.None);
+        await storage.DeleteAsync(
+            [attachment.StorageKey, UploadKey(attachment.Id), ClientThumbnailKey(attachment.Id)], CancellationToken.None);
         await attachments.DeleteAsync([attachment.Id], CancellationToken.None);
         throw error;
     }

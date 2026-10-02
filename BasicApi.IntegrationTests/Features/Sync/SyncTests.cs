@@ -148,6 +148,46 @@ public class SyncTests(PostgresFixture db) : DbTest(db)
     }
 
     [Fact]
+    public async Task GapInTheMiddleOfAPage_AsksForASnapshot()
+    {
+        // Found by the review: only the first number of a page was checked. Retention deletes in
+        // batches with no order, so a client syncing between them got 1, 3 — and acked past 2.
+        var (factory, alice, bob) = await ArrangeAsync();
+        await using var _ = factory;
+        var chat = await Data.PrivateChatAsync(alice.UserId, bob.UserId);
+        using var aliceApi = factory.CreateClient(alice.Token);
+        using var bobApi = factory.CreateClient(bob.Token);
+        for (var i = 0; i < 3; i++)
+            (await aliceApi.PostAsJsonAsync($"/api/chats/{chat}/messages", new { text = $"m{i}" })).EnsureSuccessStatusCode();
+
+        await ExecuteAsync("DELETE FROM user_updates WHERE user_id = @bob AND pts = 2", new { bob = bob.UserId });
+
+        var page = await GetJsonAsync(bobApi, "/api/sync?since=0");
+        Assert.True(page.GetProperty("snapshotRequired").GetBoolean());
+        Assert.Empty(page.GetProperty("updates").EnumerateArray());
+    }
+
+    [Fact]
+    public async Task FarBehind_AsksForASnapshot_InsteadOfReplayingIt()
+    {
+        // The architecture says a client too far behind reloads the state, but nothing told it to:
+        // after a month away it paged through tens of thousands of updates against the rate limit.
+        var (factory, _, bob) = await ArrangeAsync();
+        await using var __ = factory;
+        using var bobApi = factory.CreateClient(bob.Token);
+        var behind = BasicApi.Features.Sync.SyncService.MaxBehind + 1;
+        await ExecuteAsync(@"
+            INSERT INTO user_pts (user_id, last_pts) VALUES (@bob, @behind)
+            ON CONFLICT (user_id) DO UPDATE SET last_pts = @behind", new { bob = bob.UserId, behind });
+        await ExecuteAsync(@"
+            INSERT INTO user_updates (user_id, pts, type, payload)
+            SELECT @bob, n, 'Test', '{}'::jsonb FROM generate_series(1, @behind) AS n", new { bob = bob.UserId, behind });
+
+        Assert.True((await GetJsonAsync(bobApi, "/api/sync?since=0")).GetProperty("snapshotRequired").GetBoolean());
+        Assert.False((await GetJsonAsync(bobApi, "/api/sync?since=1")).GetProperty("snapshotRequired").GetBoolean());
+    }
+
+    [Fact]
     public async Task Ack_IsStoredPerDevice_AndOnlyMovesForward()
     {
         var (factory, alice, bob) = await ArrangeAsync();

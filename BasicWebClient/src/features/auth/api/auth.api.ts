@@ -1,5 +1,6 @@
 import { http } from '@/shared/api/http'
 import type { AuthResponse, LoginRequest, RegisterRequest } from '@/entities/user/auth.types'
+import type { InviteDto, RegistrationDto } from '@/shared/api/schema'
 
 /*
  * login/register/refresh use auth: false so a 401 never triggers a token refresh: a wrong
@@ -12,6 +13,16 @@ export function login(request: LoginRequest): Promise<AuthResponse> {
 
 export function register(request: RegisterRequest): Promise<AuthResponse> {
   return http.post<AuthResponse>('/api/auth/register', request, { auth: false })
+}
+
+/** Who may register here: open, closed, or by a member's invitation. Asked before signing in. */
+export function getRegistration(): Promise<RegistrationDto> {
+  return http.get<RegistrationDto>('/api/auth/registration', { auth: false })
+}
+
+/** A one-time invitation; its code comes only in this answer. */
+export function createInvite(): Promise<InviteDto> {
+  return http.post<InviteDto>('/api/auth/invites')
 }
 
 /** Rotates the pair: the old refresh token is invalid afterwards. */

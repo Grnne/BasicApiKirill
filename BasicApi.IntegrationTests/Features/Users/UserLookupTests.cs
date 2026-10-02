@@ -7,6 +7,25 @@ namespace BasicApi.IntegrationTests.Features.Users;
 public class UserLookupTests(PostgresFixture db) : DbTest(db)
 {
     [Fact]
+    public async Task Search_TakesPercentAndUnderscore_AsTheyAre()
+    {
+        // Found by the review: they went into ILIKE as wildcards, and q=% listed the whole directory.
+        await using var factory = new ApiFactory(Db.ConnectionString);
+        var alice = await factory.RegisterAsync("alice");
+        var bob = await factory.RegisterAsync("bob");
+        await factory.RegisterAsync("carol");
+        using var client = factory.CreateClient(alice.Token);
+        await Data.PrivateChatAsync(alice.UserId, bob.UserId);
+
+        foreach (var q in new[] { "%", "_", "b_b", "%o%" })
+        {
+            Assert.Empty((await client.GetJsonAsync($"/api/users/search?q={Uri.EscapeDataString(q)}")).GetProperty("items").EnumerateArray());
+            Assert.Empty((await client.GetJsonAsync($"/api/chats/search?q={Uri.EscapeDataString(q)}")).GetProperty("items").EnumerateArray());
+        }
+        Assert.NotEmpty((await client.GetJsonAsync("/api/users/search?q=bo")).GetProperty("items").EnumerateArray());
+    }
+
+    [Fact]
     public async Task GetUserId_ByUsername_AnyCase_ReturnsId()
     {
         await using var factory = new ApiFactory(Db.ConnectionString);

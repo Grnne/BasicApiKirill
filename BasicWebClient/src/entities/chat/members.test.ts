@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { GroupPermissionsDto } from '@/shared/api/schema'
-import { MEMBER_PERMISSIONS, canAddMembers, canEditDefaults, canRemoveMember, memberActions, sortedMembers } from './members'
+import { canAddMembers, canEditDefaults, canRemoveMember, mayGive, MEMBER_PERMISSIONS, memberActions, sortedMembers } from './members'
 import type { ChatDetail, ChatParticipant } from './types'
 
 const perms = (p: Partial<GroupPermissionsDto> = {}): GroupPermissionsDto => ({
@@ -58,6 +58,12 @@ describe('group members', () => {
     })
     expect(canEditDefaults(detail('admin'))).toBe(false)
     expect(canEditDefaults(detail('admin', { removeMembers: true }))).toBe(true)
+  })
+
+  it('an admin gives only the permissions they have; the owner gives any', () => {
+    expect(mayGive(detail('admin', { removeMembers: true, changeInfo: false }), 'changeInfo')).toBe(false)
+    expect(mayGive(detail('admin', { removeMembers: true, addMembers: true }), 'addMembers')).toBe(true)
+    expect(mayGive(detail('owner'), 'changeInfo')).toBe(true)
   })
 
   it('nobody changes the owner', () => {

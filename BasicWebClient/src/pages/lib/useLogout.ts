@@ -35,8 +35,11 @@ export function useLogout() {
 
   /** Every device; throws if the server did not take it, and then this one stays signed in too. */
   async function logoutEverywhere(): Promise<void> {
-    await authApi.logoutAll()
-    await logout()
+    // This sign-in ends on the server first: what the clean-up still asks is refused, and is no lost session.
+    await auth.whileSigningOut(async () => {
+      await authApi.logoutAll()
+      await logout()
+    })
   }
 
   /** The session ended elsewhere (another device, another tab): the same clean-up, and say why. */

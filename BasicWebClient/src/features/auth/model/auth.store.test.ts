@@ -94,6 +94,23 @@ describe('a session that ends by itself', () => {
     expect(authApi.logout).toHaveBeenCalledWith('token-2')
   })
 
+  it('"log out everywhere" ends this sign-in too: its refusals during the sign-out are not a lost session', async () => {
+    // The server stops taking this tab's token at once: the hub reconnect and the clean-up
+    // requests get 401, and the refresh after them is refused.
+    vi.mocked(authApi.refresh).mockResolvedValueOnce(answer('token-2'))
+    localStorage.setItem(KEY, 'token-1')
+    const auth = useAuthStore()
+    await auth.refreshTokens()
+    vi.mocked(authApi.refresh).mockRejectedValue(new ApiError(401, { errorCode: 'SESSION_REVOKED' }))
+
+    await auth.whileSigningOut(async () => {
+      expect(await auth.refreshTokens()).toBe(false)
+    })
+
+    expect(auth.isAuthenticated).toBe(false)
+    expect(auth.sessionLost).toBe(false)
+  })
+
   it('an own logout is not a lost session', async () => {
     vi.mocked(authApi.refresh).mockResolvedValue(answer('token-2'))
     vi.mocked(authApi.logout).mockResolvedValue(undefined)

@@ -115,6 +115,7 @@ public static class ServiceExtensions
         services.AddScoped<IUpdateJournal, UpdateJournalRepository>();
         services.AddScoped<IReactionRepository, ReactionRepository>();
         services.AddScoped<IDraftRepository, DraftRepository>();
+        services.AddScoped<IInviteRepository, InviteRepository>();
         services.AddScoped<IGroupRepository, GroupRepository>();
         services.AddScoped<IAttachmentRepository, AttachmentRepository>();
         services.AddScoped<IPrivacyRepository, PrivacyRepository>();
@@ -136,7 +137,7 @@ public static class ServiceExtensions
             .AddUsersFeature()
             .AddFoldersFeature()
             .AddSyncFeature()
-            .AddAuthFeature()
+            .AddAuthFeature(configuration)
             .AddDevicesFeature()
             .AddPushFeature(configuration);
 
@@ -152,6 +153,7 @@ public static class ServiceExtensions
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IUserStatusService, UserStatusService>();
         services.AddSingleton<HubConnectionRegistry>();
+        services.AddSingleton<SessionLiveness>();
         services.AddHostedService<HubSessionMonitor>();
 
         // Behind a reverse proxy the connection address is the proxy's address. The real
@@ -172,10 +174,7 @@ public static class ServiceExtensions
             .AddCheck<PostgresHealthCheck>("postgres", tags: [ReadyTag], timeout: TimeSpan.FromSeconds(3));
 
         services.AddFluentMigratorCore()
-            .ConfigureRunner(rb => rb
-                .AddPostgres()
-                .WithGlobalConnectionString(connectionString)
-                .ScanIn(typeof(InitialCreate).Assembly).For.Migrations());
+            .ConfigureRunner(rb => rb.AddAppMigrations(connectionString));
 
         // CORS — only explicitly allowed origins (wildcard + AllowCredentials
         // would mean any site could make requests on behalf of the user).
@@ -232,6 +231,19 @@ public static class ServiceExtensions
                         }
 
                         return Task.CompletedTask;
+                    },
+                    // A valid token whose sign-in has ended (signed out, device removed, new password)
+                    // is refused like an expired one: the client refreshes, and that fails too.
+                    // A token without a sign-in is never issued to clients.
+                    OnTokenValidated = async context =>
+                    {
+                        if (context.Principal?.GetSessionFamilyId() is not { } familyId)
+                            return;
+                        var services = context.HttpContext.RequestServices;
+                        var live = await services.GetRequiredService<SessionLiveness>().IsLiveAsync(
+                            familyId, services.GetRequiredService<ISessionRepository>(), context.HttpContext.RequestAborted);
+                        if (!live)
+                            context.Fail("The sign-in has ended");
                     },
                     OnChallenge = context =>
                     {
