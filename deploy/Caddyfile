@@ -4,6 +4,20 @@
 
 {
 	email {$ACME_EMAIL}
+	# Error lines (an upstream down) carry the request too: filtered as the access log below.
+	log default {
+		output stdout
+		format filter {
+			wrap json
+			fields {
+				request>uri query {
+					delete access_token
+					delete X-Amz-Signature
+					delete X-Amz-Credential
+				}
+			}
+		}
+	}
 }
 
 {$DOMAIN} {
@@ -44,8 +58,19 @@
 		-Server
 	}
 
+	# Credentials ride in query strings: SignalR's access token (WebSocket cannot carry a header) and
+	# the signatures of file links. Whoever reads the logs must not get working ones.
 	log {
 		output stdout
-		format json
+		format filter {
+			wrap json
+			fields {
+				request>uri query {
+					delete access_token
+					delete X-Amz-Signature
+					delete X-Amz-Credential
+				}
+			}
+		}
 	}
 }
