@@ -125,8 +125,6 @@ const { logout: onLogout } = useLogout()
         />
         <span class="user-name">{{ account.me?.displayName ?? auth.user?.displayName }}</span>
       </button>
-      <BaseButton variant="ghost" title="Новая группа" aria-label="Новая группа" @click="creatingGroup = true">＋</BaseButton>
-      <BaseButton variant="ghost" title="Избранное" aria-label="Избранное" @click="chatList.openSaved()">★</BaseButton>
       <BaseButton variant="ghost" @click="onLogout">Выйти</BaseButton>
     </header>
 
@@ -141,7 +139,14 @@ const { logout: onLogout } = useLogout()
             autocomplete="off"
           />
         </div>
-        <FolderTabs v-if="!query.trim()" />
+        <FolderTabs v-if="!query.trim()">
+          <template #actions>
+            <button type="button" class="action" title="Новая группа" aria-label="Новая группа" @click="creatingGroup = true">
+              👥
+            </button>
+            <button type="button" class="action" title="Избранное" aria-label="Избранное" @click="chatList.openSaved()">★</button>
+          </template>
+        </FolderTabs>
         <div class="panels">
           <ChatListPanel :query="query" />
           <UserSearchPanel :query="query" @select="onUserSelected" />
@@ -307,6 +312,18 @@ const { logout: onLogout } = useLogout()
 .search-input:focus {
   border-color: var(--accent);
   outline: none;
+}
+.action {
+  padding: 3px 7px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 14px;
+}
+.action:hover {
+  background: var(--surface-hover);
+  color: var(--text);
 }
 .panels {
   flex: 1;

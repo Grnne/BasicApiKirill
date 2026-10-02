@@ -26,43 +26,62 @@ function onDrop(target: FolderDto): void {
 </script>
 
 <template>
-  <nav v-if="chats.loaded" class="tabs" aria-label="Папки">
-    <button
-      type="button"
-      :class="['tab', { active: store.selectedFolderId === null }]"
-      @click="store.selectedFolderId = null"
-    >
-      Все
-    </button>
-    <button
-      v-for="folder in chats.folders"
-      :key="folder.id"
-      type="button"
-      draggable="true"
-      :class="['tab', { active: store.selectedFolderId === folder.id }]"
-      title="Правый клик — изменить"
-      @click="store.selectedFolderId = folder.id"
-      @contextmenu.prevent="editing = folder"
-      @dragstart="dragged = folder.id"
-      @dragover.prevent
-      @drop.prevent="onDrop(folder)"
-      @dragend="dragged = null"
-    >
-      {{ folder.title }}
-    </button>
-    <button type="button" class="tab add" title="Новая папка" aria-label="Новая папка" @click="editing = null">+</button>
+  <div v-if="chats.loaded" class="row">
+    <nav class="tabs" aria-label="Папки">
+      <button
+        type="button"
+        :class="['tab', { active: store.selectedFolderId === null }]"
+        @click="store.selectedFolderId = null"
+      >
+        Все
+      </button>
+      <button
+        v-for="folder in chats.folders"
+        :key="folder.id"
+        type="button"
+        draggable="true"
+        :class="['tab', { active: store.selectedFolderId === folder.id }]"
+        title="Правый клик — изменить"
+        @click="store.selectedFolderId = folder.id"
+        @contextmenu.prevent="editing = folder"
+        @dragstart="dragged = folder.id"
+        @dragover.prevent
+        @drop.prevent="onDrop(folder)"
+        @dragend="dragged = null"
+      >
+        {{ folder.title }}
+      </button>
+      <button type="button" class="tab add" title="Новая папка" aria-label="Новая папка" @click="editing = null">+</button>
+    </nav>
+    <!-- The page's own actions (new group, saved messages): they stay put while the tabs scroll. -->
+    <div class="actions"><slot name="actions" /></div>
 
     <FolderEditor v-if="editing !== undefined" :folder="editing" @close="editing = undefined" />
-  </nav>
+  </div>
 </template>
 
 <style scoped>
+.row {
+  display: flex;
+  align-items: flex-end;
+  border-bottom: 1px solid var(--border);
+}
 .tabs {
   display: flex;
+  flex: 1;
   gap: 2px;
+  min-width: 0;
   overflow-x: auto;
   padding: 6px 8px 0;
-  border-bottom: 1px solid var(--border);
+}
+.actions {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  padding: 0 6px 3px;
+}
+.actions:empty {
+  display: none;
 }
 .tab {
   flex: none;
