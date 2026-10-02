@@ -247,6 +247,8 @@ public class ChatRepository(IDbSession db) : IChatRepository
             WHERE o.chat_id = c.id AND o.user_id <> @userId
         ) ob";
 
+    private static string? Pattern(string? query) => string.IsNullOrEmpty(query) ? null : Like.Contains(query);
+
     private static string BuildSearchWhereClause(string? query, string? typeFilter, bool byChatId = false)
     {
         if (!byChatId && string.IsNullOrEmpty(typeFilter) && string.IsNullOrEmpty(query))
@@ -261,18 +263,18 @@ public class ChatRepository(IDbSession db) : IChatRepository
         {
             conditions.Add("c.type = 'group'");
             if (!string.IsNullOrEmpty(query))
-                conditions.Add("c.title ILIKE '%' || @query || '%'");
+                conditions.Add("c.title ILIKE @query");
         }
         else if (typeFilter == "private")
         {
             conditions.Add("c.type = 'private'");
             if (!string.IsNullOrEmpty(query))
-                conditions.Add("(comp.display_name ILIKE '%' || @query || '%' OR comp.username ILIKE '%' || @query || '%')");
+                conditions.Add("(comp.display_name ILIKE @query OR comp.username ILIKE @query)");
         }
         else
         {
             if (!string.IsNullOrEmpty(query))
-                conditions.Add("(c.type = 'group' AND c.title ILIKE '%' || @query || '%' OR c.type = 'private' AND (comp.display_name ILIKE '%' || @query || '%' OR comp.username ILIKE '%' || @query || '%'))");
+                conditions.Add("(c.type = 'group' AND c.title ILIKE @query OR c.type = 'private' AND (comp.display_name ILIKE @query OR comp.username ILIKE @query))");
         }
 
         return conditions.Count > 0 ? "WHERE " + string.Join(" AND ", conditions) : "";
@@ -288,7 +290,7 @@ public class ChatRepository(IDbSession db) : IChatRepository
 
         var sql = $"{ChatListBaseSql}\n{whereClause}\n{orderBy}{limitClause}";
 
-        return [.. await db.QueryAsync<ChatListResult>(sql, new { userId, query }, ct)];
+        return [.. await db.QueryAsync<ChatListResult>(sql, new { userId, query = Pattern(query) }, ct)];
     }
 
     public async Task<IReadOnlyList<ChatListResult>> GetUserChatsPageAsync(
@@ -381,6 +383,6 @@ public class ChatRepository(IDbSession db) : IChatRepository
             ) comp ON c.type = 'private'
             {whereClause}";
 
-        return await db.ExecuteScalarAsync<int>(sql, new { userId, query }, ct);
+        return await db.ExecuteScalarAsync<int>(sql, new { userId, query = Pattern(query) }, ct);
     }
 }

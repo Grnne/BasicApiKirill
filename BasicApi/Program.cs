@@ -169,13 +169,17 @@ public class Program
             Predicate = check => check.Tags.Contains(ServiceExtensions.ReadyTag)
         }).DisableRateLimiting();
 
-        app.MapGet("/signalr-docs", async context =>
+        // The hub's description goes with the API docs: off in production unless asked for.
+        if (app.Configuration.GetValue("Swagger:Enabled", false))
         {
-            context.Response.ContentType = "text/html; charset=utf-8";
-            var html = await File.ReadAllTextAsync(
-                Path.Combine(app.Environment.WebRootPath, "signalr-docs.html"));
-            await context.Response.WriteAsync(html);
-        });
+            app.MapGet("/signalr-docs", async context =>
+            {
+                context.Response.ContentType = "text/html; charset=utf-8";
+                var html = await File.ReadAllTextAsync(
+                    Path.Combine(app.Environment.WebRootPath, "signalr-docs.html"));
+                await context.Response.WriteAsync(html);
+            });
+        }
 
         app.MapGet("/", context =>
         {

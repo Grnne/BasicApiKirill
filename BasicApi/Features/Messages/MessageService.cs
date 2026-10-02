@@ -186,11 +186,13 @@ public sealed class MessageService(
     {
         var messages = await MapForViewerAsync([.. older, .. newer], chatId, viewerId, ct);
         var ordered = messages.OrderBy(m => m.Seq).ToList();
+        // Older ones are promised only with the cursor to get them by: an empty page has none.
+        var olderReachable = hasOlder && ordered.Count > 0;
         return new MessageWindowDto
         {
             Items = ordered,
-            NextCursor = hasOlder && ordered.Count > 0 ? MessageCursor.BeforeSeqOf(ordered[0].Seq).Encode() : null,
-            HasMore = hasOlder,
+            NextCursor = olderReachable ? MessageCursor.BeforeSeqOf(ordered[0].Seq).Encode() : null,
+            HasMore = olderReachable,
             HasNewer = hasNewer
         };
     }

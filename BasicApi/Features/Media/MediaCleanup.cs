@@ -86,13 +86,25 @@ public sealed class MediaCleanup(
             while (keys.Count == BatchSize);
         }
 
-        // Unused files: the row first — its deletion is what checks that nothing points to it.
+        // Unused files: the row first — its deletion is what checks that nothing points to it. So
+        // an object the storage fails to delete has no row left to retry from: it is named in the
+        // log for a hand to remove, and the sweep stops before it leaves more such.
         var unused = 0;
         do
         {
             batch = await attachments.DeleteUnreferencedAsync(now - TimeSpan.FromHours(o.UnusedFileHours), BatchSize, ct);
-            await storage.DeleteAsync(batch.SelectMany(Keys), ct);
             unused += batch.Count;
+            var keys = batch.SelectMany(Keys).ToList();
+            try
+            {
+                await storage.DeleteAsync(keys, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(ex, "Media cleanup: the storage failed, objects of removed files may be left in it: {Keys}",
+                    string.Join(", ", keys));
+                break;
+            }
         }
         while (batch.Count == BatchSize);
 
