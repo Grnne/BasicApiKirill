@@ -334,14 +334,13 @@ public sealed class MessageService(
 
         var files = withFiles ? await FilesToSendAsync(senderId, attachmentIds!, ct) : [];
 
-        var memberIds = await membership.GetMemberIdsAsync(chatId, ct);
-        var mentioned = MentionedMembers(formatting, memberIds, senderId);
-
         try
         {
             // The message and its event are one transaction: one saved means the other is saved too.
             var message = await db.InTransactionAsync(async ct =>
             {
+                var memberIds = await LockToPostAsync(chatId, senderId, withFiles, ct);
+                var mentioned = MentionedMembers(formatting, memberIds, senderId);
                 var created = Map(await messageRepository.CreateAsync(new Message
                 {
                     Id = Guid.NewGuid(),
@@ -382,6 +381,21 @@ public sealed class MessageService(
                 ?? throw new InvalidOperationException("Duplicate clientMessageId, but the message is not found");
             return AlreadySent(winner, chatId);
         }
+    }
+
+    /// <summary>
+    /// The chat locked, the right to post checked again, the members read — inside the transaction.
+    /// Removing a member or changing rights takes the same lock: checked only before it, a send
+    /// could land after the sender was removed, and reach them.
+    /// </summary>
+    private async Task<IReadOnlyCollection<Guid>> LockToPostAsync(Guid chatId, Guid senderId, bool withFiles, CancellationToken ct)
+    {
+        await groups.LockAsync(chatId, ct);
+        if (withFiles)
+            await policy.DemandPostMediaAsync(senderId, chatId, ct);
+        else
+            await policy.DemandPostAsync(senderId, chatId, ct);
+        return await membership.GetMemberIdsAsync(chatId, ct);
     }
 
     private static SendResult AlreadySent(MessageWithSender sent, Guid chatId) =>
@@ -445,9 +459,10 @@ public sealed class MessageService(
             made[sourceId] = copy;
         }
 
-        var memberIds = await membership.GetMemberIdsAsync(chatId, ct);
         var items = await db.InTransactionAsync(async ct =>
         {
+            var memberIds = await LockToPostAsync(
+                chatId, userId, sources.Any(s => s.AttachmentsJson is not null), ct);
             var items = new List<MessageDto>(sources.Count);
             foreach (var source in sources)
             {
