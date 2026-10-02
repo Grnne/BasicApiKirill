@@ -160,14 +160,29 @@ sealed class LoadClient(int index, HubConnection hub)
     public volatile bool GaveUp;
     public long DisconnectedAt;
     public long ReconnectedAt;
+    /// <summary>Where the client's journal stands; 0 — not known yet.</summary>
+    public long Pts;
+}
+
+/// <summary>
+/// The web client's schedule: SignalR's own attempts (hub.store.ts), then its RetryLoop (retry.ts),
+/// whose last pause repeats while the user is signed in — the client never gives up.
+/// </summary>
+sealed class ClientRetryPolicy : IRetryPolicy
+{
+    private static readonly TimeSpan[] Delays =
+    [
+        TimeSpan.Zero, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10),
+        TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(30),
+        TimeSpan.FromSeconds(60),
+    ];
+
+    public TimeSpan? NextRetryDelay(RetryContext context) =>
+        Delays[Math.Min(context.PreviousRetryCount, Delays.Length - 1)];
 }
 
 sealed class LoadRun(Options o)
 {
-    // Same as the web client (hub.store.ts): five attempts, then the client gives up.
-    private static readonly TimeSpan[] ReconnectDelays =
-        [TimeSpan.Zero, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30)];
-
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     private readonly Stopwatch _clock = Stopwatch.StartNew();
@@ -179,7 +194,7 @@ sealed class LoadRun(Options o)
     private readonly Metric _send = new("POST messages");
     private readonly Metric _list = new("GET /api/chats");
     private readonly Metric _delivery = new("delivery (event)");
-    private readonly Metric _reconnectList = new("GET chats after recon.");
+    private readonly Metric _reconnectSync = new("sync after reconnect");
     private long _expectedDeliveries;
 
     public async Task<int> ExecuteAsync()
@@ -211,7 +226,10 @@ sealed class LoadRun(Options o)
         Console.WriteLine($"{"deliveries",-22} {_delivery.Count} of {Interlocked.Read(ref _expectedDeliveries)} expected");
 
         if (o.RestartContainer is not null)
+        {
+            await LearnPtsAsync();
             await ReconnectStormAsync(o.RestartContainer);
+        }
 
         await Task.WhenAll(_clients.Select(c => c.Hub.DisposeAsync().AsTask()));
         return 0;
@@ -261,7 +279,7 @@ sealed class LoadRun(Options o)
                     options.WebSocketConfiguration = ws => ws.RemoteCertificateValidationCallback = (_, _, _, _) => true;
                 }
             })
-            .WithAutomaticReconnect(ReconnectDelays)
+            .WithAutomaticReconnect(new ClientRetryPolicy())
             .Build();
         var client = new LoadClient(i, hub);
 
@@ -279,8 +297,8 @@ sealed class LoadRun(Options o)
         hub.Reconnected += async _ =>
         {
             client.ReconnectedAt = _clock.ElapsedTicks;
-            // Like a page reload: the client loads the chat list again.
-            await TimedGetChatsAsync(i, _reconnectList);
+            // Like the web client: catch up on the journal from where it stood.
+            await TimedCatchUpAsync(client);
         };
         hub.Closed += _ =>
         {
@@ -358,6 +376,88 @@ sealed class LoadRun(Options o)
         await TimedAsync(request, user, _send);
     }
 
+    /// <summary>
+    /// A live web client keeps its pts current (it catches up a second after live events), so before
+    /// the restart every client learns where its journal stands — untimed, it is not part of the storm.
+    /// </summary>
+    private async Task LearnPtsAsync()
+    {
+        using var gate = new SemaphoreSlim(32);
+        await Task.WhenAll(_clients.Select(async client =>
+        {
+            await gate.WaitAsync();
+            try
+            {
+                client.Pts = await StatePtsAsync(client.Index) ?? 0;
+            }
+            catch (Exception)
+            {
+                // Unknown pts: the catch-up after the reconnect starts from 0 and takes the snapshot.
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }));
+    }
+
+    /// <summary>
+    /// GET /api/sync?since=pts page by page until hasMore is false; snapshotRequired — GET
+    /// /api/sync/state, as the web client does. Timed as a whole.
+    /// </summary>
+    private async Task TimedCatchUpAsync(LoadClient client)
+    {
+        var t0 = _clock.Elapsed;
+        try
+        {
+            while (true)
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/sync?since={client.Pts}&limit=100");
+                using var response = await SendAsync(request, client.Index);
+                if (!response.IsSuccessStatusCode)
+                {
+                    _reconnectSync.Error(((int)response.StatusCode).ToString());
+                    return;
+                }
+                using var body = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+                var root = body.RootElement;
+                if (root.GetProperty("snapshotRequired").GetBoolean())
+                {
+                    var pts = await StatePtsAsync(client.Index);
+                    if (pts is null)
+                    {
+                        _reconnectSync.Error("snapshot");
+                        return;
+                    }
+                    client.Pts = pts.Value;
+                    break;
+                }
+                client.Pts = root.GetProperty("pts").GetInt64();
+                if (!root.GetProperty("hasMore").GetBoolean()) break;
+            }
+            _reconnectSync.Ok((_clock.Elapsed - t0).TotalMilliseconds);
+        }
+        catch (Exception ex)
+        {
+            _reconnectSync.Error(Short(ex));
+        }
+    }
+
+    private async Task<long?> StatePtsAsync(int user)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/sync/state");
+        using var response = await SendAsync(request, user);
+        if (!response.IsSuccessStatusCode) return null;
+        using var body = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        return body.RootElement.GetProperty("pts").GetInt64();
+    }
+
+    private Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, int user)
+    {
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _tokens[user]);
+        return _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+    }
+
     private Task TimedGetChatsAsync(int user, Metric metric) =>
         TimedAsync(new HttpRequestMessage(HttpMethod.Get, "/api/chats"), user, metric);
 
@@ -387,7 +487,7 @@ sealed class LoadRun(Options o)
         await Docker($"restart {container}");
         Console.WriteLine($"docker restart returned after {Seconds(_clock.ElapsedTicks - restartAt):F1}s");
 
-        // Wait until everyone reconnects or gives up (the last attempt comes after ~47 s).
+        // Wait until everyone reconnects; the client never gives up, so the wait is capped.
         var deadline = _clock.Elapsed + TimeSpan.FromSeconds(90);
         var nextSample = _clock.Elapsed;
         while (_clock.Elapsed < deadline &&
@@ -398,7 +498,7 @@ sealed class LoadRun(Options o)
                 nextSample = _clock.Elapsed + TimeSpan.FromSeconds(5);
                 var connectedNow = _clients.Count(c => c.Hub.State == HubConnectionState.Connected);
                 Console.WriteLine($"  t+{Seconds(_clock.ElapsedTicks - restartAt):F0}s connected {connectedNow}, " +
-                                  $"chat lists {_reconnectList.TakeWindow()} | {await StatsAsync()}");
+                                  $"catch-ups {_reconnectSync.TakeWindow()} | {await StatsAsync()}");
             }
             await Task.Delay(500);
         }
@@ -406,11 +506,11 @@ sealed class LoadRun(Options o)
         Stats("after reconnect storm");
 
         var reconnected = _clients.Where(c => c.ReconnectedAt > 0).Select(c => Seconds(c.ReconnectedAt - restartAt)).Order().ToArray();
-        var gaveUp = _clients.Count(c => c.GaveUp);
+        var gaveUp = _clients.Count(c => c.GaveUp || c.Hub.State != HubConnectionState.Connected);
         string At(double q) => reconnected.Length == 0 ? "-" : $"{reconnected[Math.Min(reconnected.Length - 1, (int)Math.Ceiling(q * reconnected.Length) - 1)]:F1}s";
-        Console.WriteLine($"reconnected {reconnected.Length}/{_clients.Count}, gave up {gaveUp}; " +
+        Console.WriteLine($"reconnected {reconnected.Length}/{_clients.Count}, not connected {gaveUp}; " +
                           $"since restart: 50% {At(0.5)}, 95% {At(0.95)}, 100% {At(1)}");
-        Console.WriteLine(_reconnectList.Report());
+        Console.WriteLine(_reconnectSync.Report());
     }
 
     private void Stats(string label) => Console.WriteLine($"[{label}] {StatsAsync().GetAwaiter().GetResult()}");

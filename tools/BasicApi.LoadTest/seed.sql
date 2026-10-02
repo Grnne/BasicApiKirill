@@ -6,7 +6,7 @@
 --
 -- Ids are deterministic (md5 of the number): the load program computes them the same way
 -- and never reads the database. Every user has a live sign-in (session), so access tokens
--- the program issues with that sid are accepted by the hub.
+-- the program issues with that sid are accepted by the hub and REST, which both check it.
 --
 -- These users have no working password: they cannot sign in via /api/auth/login.
 
