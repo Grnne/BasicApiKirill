@@ -12,8 +12,11 @@ namespace BasicApi.Features.Media;
 /// </summary>
 public interface IObjectStorage
 {
-    /// <summary>A link to upload one object with exactly this <c>Content-Type</c> header.</summary>
-    Task<Uri> PresignPutAsync(string key, string contentType, TimeSpan lifetime);
+    /// <summary>
+    /// A link to upload one object with exactly this <c>Content-Type</c> header and, when given,
+    /// exactly this many bytes: the storage refuses another body, so a link cannot fill the disk.
+    /// </summary>
+    Task<Uri> PresignPutAsync(string key, string contentType, long? contentLength, TimeSpan lifetime);
 
     /// <summary>A link to download the object; the storage answers with the given headers.</summary>
     Task<Uri> PresignGetAsync(string key, TimeSpan lifetime, string contentType, string contentDisposition);
@@ -24,6 +27,12 @@ public interface IObjectStorage
     Task<Stream> OpenReadAsync(string key, CancellationToken ct = default);
 
     Task PutAsync(string key, Stream content, string contentType, CancellationToken ct = default);
+
+    /// <summary>Copies an object inside the storage.</summary>
+    Task CopyAsync(string sourceKey, string destinationKey, CancellationToken ct = default);
+
+    /// <summary>Keys under the prefix last written before the moment, at most <paramref name="limit"/>.</summary>
+    Task<IReadOnlyList<string>> ListOlderAsync(string prefix, DateTime before, int limit, CancellationToken ct = default);
 
     /// <summary>Removes the objects; missing ones are not an error.</summary>
     Task DeleteAsync(IEnumerable<string> keys, CancellationToken ct = default);
@@ -65,15 +74,21 @@ public sealed class S3ObjectStorage : IObjectStorage, IDisposable
     private AmazonS3Client Client => _client ?? throw Unavailable();
     private AmazonS3Client Signer => _signer ?? throw Unavailable();
 
-    public Task<Uri> PresignPutAsync(string key, string contentType, TimeSpan lifetime) =>
-        PresignAsync(new GetPreSignedUrlRequest
+    public Task<Uri> PresignPutAsync(string key, string contentType, long? contentLength, TimeSpan lifetime)
+    {
+        var request = new GetPreSignedUrlRequest
         {
             BucketName = _options.Bucket,
             Key = key,
             Verb = HttpVerb.PUT,
             ContentType = contentType,
             Expires = DateTime.UtcNow.Add(lifetime)
-        });
+        };
+        // A signed header: the storage checks the request's Content-Length against it.
+        if (contentLength is { } length)
+            request.Headers["Content-Length"] = length.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return PresignAsync(request);
+    }
 
     public Task<Uri> PresignGetAsync(string key, TimeSpan lifetime, string contentType, string contentDisposition)
     {
@@ -131,6 +146,23 @@ public sealed class S3ObjectStorage : IObjectStorage, IDisposable
             ContentType = contentType,
             AutoCloseStream = false
         }, ct);
+    }
+
+    public Task CopyAsync(string sourceKey, string destinationKey, CancellationToken ct = default) =>
+        Client.CopyObjectAsync(_options.Bucket, sourceKey, _options.Bucket, destinationKey, ct);
+
+    public async Task<IReadOnlyList<string>> ListOlderAsync(string prefix, DateTime before, int limit, CancellationToken ct = default)
+    {
+        var keys = new List<string>();
+        var request = new ListObjectsV2Request { BucketName = _options.Bucket, Prefix = prefix };
+        do
+        {
+            var page = await Client.ListObjectsV2Async(request, ct);
+            keys.AddRange((page.S3Objects ?? []).Where(o => o.LastModified < before).Select(o => o.Key));
+            request.ContinuationToken = page.IsTruncated == true ? page.NextContinuationToken : null;
+        }
+        while (request.ContinuationToken is not null && keys.Count < limit);
+        return keys.Take(limit).ToList();
     }
 
     public async Task DeleteAsync(IEnumerable<string> keys, CancellationToken ct = default)

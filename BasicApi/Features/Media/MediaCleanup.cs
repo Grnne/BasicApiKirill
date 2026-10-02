@@ -5,7 +5,7 @@ using Microsoft.Extensions.Options;
 namespace BasicApi.Features.Media;
 
 /// <summary>What one cleanup pass removed.</summary>
-public sealed record MediaCleanupResult(int StaleUploads, int UnusedFiles, int ExpiredOriginals);
+public sealed record MediaCleanupResult(int StaleUploads, int UnusedFiles, int ExpiredOriginals, int UploadLeftovers = 0);
 
 /// <summary>
 /// Periodically removes unfinished uploads, files nothing points to and, with <c>Media:RetentionDays</c>,
@@ -19,6 +19,9 @@ public sealed class MediaCleanup(
     ILogger<MediaCleanup> logger) : BackgroundService
 {
     public const int BatchSize = 500;
+
+    /// <summary>A link checked at the start of a request may still be writing a little after it expires.</summary>
+    private static readonly TimeSpan LinkMargin = TimeSpan.FromMinutes(10);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -59,11 +62,29 @@ public sealed class MediaCleanup(
         do
         {
             batch = await attachments.GetStalePendingAsync(now - TimeSpan.FromHours(o.PendingUploadHours), BatchSize, ct);
-            await storage.DeleteAsync(batch.SelectMany(a =>
-                new[] { a.StorageKey, MediaService.ClientThumbnailKey(a.Id), MediaService.ThumbnailKey(a.Id) }), ct);
+            await storage.DeleteAsync(batch.SelectMany(a => new[]
+            {
+                a.StorageKey, MediaService.UploadKey(a.Id), MediaService.ClientThumbnailKey(a.Id), MediaService.ThumbnailKey(a.Id)
+            }), ct);
             stale += await attachments.DeleteAsync([.. batch.Select(a => a.Id)], ct);
         }
         while (batch.Count == BatchSize);
+
+        // What links wrote that no completion took (a second upload after completion or refusal, a
+        // frame of a video never completed): garbage once the links have expired.
+        var leftovers = 0;
+        var linksExpired = now - TimeSpan.FromMinutes(o.UploadUrlMinutes) - LinkMargin;
+        foreach (var prefix in MediaService.UploadPrefixes)
+        {
+            IReadOnlyList<string> keys;
+            do
+            {
+                keys = await storage.ListOlderAsync(prefix, linksExpired, BatchSize, ct);
+                await storage.DeleteAsync(keys, ct);
+                leftovers += keys.Count;
+            }
+            while (keys.Count == BatchSize);
+        }
 
         // Unused files: the row first — its deletion is what checks that nothing points to it.
         var unused = 0;
@@ -87,11 +108,11 @@ public sealed class MediaCleanup(
             while (batch.Count == BatchSize);
         }
 
-        if (stale + unused + expired > 0)
+        if (stale + unused + expired + leftovers > 0)
             logger.LogInformation(
-                "Media cleanup: {Stale} stale uploads, {Unused} unused files removed, {Expired} originals expired",
-                stale, unused, expired);
-        return new MediaCleanupResult(stale, unused, expired);
+                "Media cleanup: {Stale} stale uploads, {Unused} unused files removed, {Expired} originals expired, {Leftovers} upload leftovers",
+                stale, unused, expired, leftovers);
+        return new MediaCleanupResult(stale, unused, expired, leftovers);
     }
 
     private static IEnumerable<string> Keys(Attachment a) =>

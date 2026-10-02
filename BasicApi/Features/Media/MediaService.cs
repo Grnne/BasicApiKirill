@@ -56,6 +56,15 @@ public sealed partial class MediaService(
     /// <summary>Where the client puts a video frame; the server turns it into the preview.</summary>
     public static string ClientThumbnailKey(Guid id) => $"c/{id:N}";
 
+    /// <summary>
+    /// Where the client puts the file. Its link works for a while after completion, so the file
+    /// kept is a copy under <see cref="OriginalKey"/> that no link can write.
+    /// </summary>
+    public static string UploadKey(Guid id) => $"u/{id:N}";
+
+    /// <summary>Prefixes of objects a link writes: whatever is left there past the link's lifetime is garbage.</summary>
+    public static readonly string[] UploadPrefixes = ["u/", "c/"];
+
     public async Task<UploadTicketDto> CreateUploadAsync(
         Guid userId, CreateUploadDto request, CancellationToken ct = default)
     {
@@ -93,9 +102,10 @@ public sealed partial class MediaService(
         attachment.StorageKey = OriginalKey(attachment.Id);
 
         // Links first: a storage that is off or unreachable fails the request before a row is left.
-        var uploadUrl = await storage.PresignPutAsync(attachment.StorageKey, contentType, lifetime);
+        var uploadUrl = await storage.PresignPutAsync(UploadKey(attachment.Id), contentType, request.Size, lifetime);
+        // The frame's size is not announced: the proxy caps the body of these links instead.
         var thumbnailUrl = kind == AttachmentKinds.Video && request.WithThumbnail
-            ? await storage.PresignPutAsync(ClientThumbnailKey(attachment.Id), MediaSniffer.Jpeg, lifetime)
+            ? await storage.PresignPutAsync(ClientThumbnailKey(attachment.Id), MediaSniffer.Jpeg, null, lifetime)
             : null;
         await attachments.CreateAsync(attachment, ct);
 
@@ -117,6 +127,14 @@ public sealed partial class MediaService(
         if (attachment.StorageState != StorageStates.Pending)
             return MessageAttachments.ToDto(attachment);
 
+        // Copied before it is checked: the link can still write to the upload, never to the copy.
+        // No upload but a copy — a concurrent completion has just moved it.
+        var uploaded = UploadKey(attachment.Id);
+        if (await storage.GetSizeAsync(uploaded, ct) is not null)
+        {
+            await storage.CopyAsync(uploaded, attachment.StorageKey, ct);
+            await storage.DeleteAsync([uploaded], ct);
+        }
         var size = await storage.GetSizeAsync(attachment.StorageKey, ct)
             ?? throw new BadRequestException("The file has not been uploaded yet", "UPLOAD_INCOMPLETE");
         var limit = attachment.Kind == AttachmentKinds.Photo ? _options.MaxPhotoSize : _options.MaxFileSize;
@@ -256,7 +274,8 @@ public sealed partial class MediaService(
     /// <summary>A bad upload is removed at once, with its row: the client starts over.</summary>
     private async Task RejectAsync(Attachment attachment, Exception error)
     {
-        await storage.DeleteAsync([attachment.StorageKey, ClientThumbnailKey(attachment.Id)], CancellationToken.None);
+        await storage.DeleteAsync(
+            [attachment.StorageKey, UploadKey(attachment.Id), ClientThumbnailKey(attachment.Id)], CancellationToken.None);
         await attachments.DeleteAsync([attachment.Id], CancellationToken.None);
         throw error;
     }

@@ -12,6 +12,13 @@
 	# check out. Whatever a user uploaded is never active content on the site (R32): the
 	# browser must not guess the type, and a page from here gets no script and no origin.
 	handle /media/* {
+		# A video frame the client uploads for the preview (key c/…) is at most 2 MB, the API's
+		# MaxThumbnailSize. Its size is not announced, so its link cannot be signed for it as the
+		# file's link is — the cap is here instead.
+		@clientFrame path_regexp ^/media/[^/]+/c/
+		request_body @clientFrame {
+			max_size 2MB
+		}
 		reverse_proxy seaweedfs:8333
 		header {
 			X-Content-Type-Options nosniff
