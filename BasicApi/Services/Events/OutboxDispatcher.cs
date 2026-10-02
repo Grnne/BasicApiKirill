@@ -25,6 +25,7 @@ public sealed class OutboxSignal
 /// <summary>
 /// Dispatches outbox events in order; woken after each commit, and polls for missed signals or other instances' events.
 /// "At least once": a crash between dispatch and marking resends the event, clients recognize a repeat by id.
+/// Sends are started, not waited for: a slow connection delays only itself.
 /// </summary>
 public sealed class OutboxDispatcher(
     IServiceScopeFactory scopes,
@@ -146,7 +147,25 @@ public sealed class OutboxDispatcher(
                 "users" => hub.Clients.Users(send.Ids),
                 _ => throw new InvalidOperationException($"Unknown outbox target '{send.Target}'")
             };
-            await target.SendCoreAsync(send.Method, [.. send.Args.Select(a => (object?)a)], ct);
+            // Not awaited: a connection that does not read (gone off the network, or never reading)
+            // would hold up the events of everyone behind it until SignalR gives up on it. Sends
+            // start in order, so each connection still gets its events in order.
+            var sending = target.SendCoreAsync(send.Method, [.. send.Args.Select(a => (object?)a)], ct);
+            if (!sending.IsCompletedSuccessfully)
+                _ = ObserveAsync(sending, row);
+        }
+    }
+
+    /// <summary>A live send that failed is not retried: the journal has the event, clients catch up.</summary>
+    private async Task ObserveAsync(Task sending, OutboxRow row)
+    {
+        try
+        {
+            await sending;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Outbox event {Id} ({Type}) did not reach every connection", row.Id, row.Type);
         }
     }
 }
