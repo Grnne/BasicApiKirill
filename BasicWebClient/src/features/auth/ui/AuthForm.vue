@@ -1,17 +1,33 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 
 import BaseButton from '@/shared/ui/BaseButton.vue'
 import BaseInput from '@/shared/ui/BaseInput.vue'
 import { ApiError, NetworkError } from '@/shared/api/problem'
+import * as authApi from '../api/auth.api'
 import { useAuthStore } from '../model/auth.store'
 
+/** An invitation code from the link a member shared: the form opens on registration with it. */
+const props = defineProps<{ invite?: string | undefined }>()
 const emit = defineEmits<{ success: [] }>()
 
 const auth = useAuthStore()
 
 type Mode = 'login' | 'register'
-const mode = ref<Mode>('login')
+const mode = ref<Mode>(props.invite ? 'register' : 'login')
+
+/** Who may register here; open until the server says otherwise (it decides anyway). */
+const registration = ref<'open' | 'closed' | 'invite'>('open')
+
+onMounted(async () => {
+  try {
+    const { mode: answer } = await authApi.getRegistration()
+    if (answer === 'closed' || answer === 'invite') registration.value = answer
+    if (answer === 'closed' && mode.value === 'register') mode.value = 'login'
+  } catch {
+    // The form stays as it is: registration itself will say if it is not possible.
+  }
+})
 
 const form = reactive({
   usernameOrEmail: '',
@@ -19,6 +35,7 @@ const form = reactive({
   username: '',
   email: '',
   displayName: '',
+  inviteCode: props.invite ?? '',
 })
 
 const isBusy = ref(false)
@@ -51,6 +68,7 @@ async function submit(): Promise<void> {
         // Omitted rather than empty: the server length-checks it and defaults a missing one
         // to the username.
         ...(displayName ? { displayName } : {}),
+        ...(registration.value === 'invite' ? { inviteCode: form.inviteCode.trim() } : {}),
       })
     }
     form.password = ''
@@ -86,6 +104,7 @@ function describe(error: unknown): string {
         Вход
       </button>
       <button
+        v-if="registration !== 'closed'"
         type="button"
         :class="['tab', { active: mode === 'register' }]"
         @click="switchMode('register')"
@@ -139,6 +158,14 @@ function describe(error: unknown): string {
         label="Пароль"
         type="password"
         autocomplete="new-password"
+        :disabled="isBusy"
+        required
+      />
+      <BaseInput
+        v-if="registration === 'invite'"
+        v-model="form.inviteCode"
+        label="Код приглашения"
+        autocomplete="off"
         :disabled="isBusy"
         required
       />

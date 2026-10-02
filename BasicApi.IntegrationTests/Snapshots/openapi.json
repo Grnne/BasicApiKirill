@@ -932,6 +932,20 @@
         },
         "type": "object"
       },
+      "InviteDto": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "description": "The one-time code; the server keeps only its hash, so it is shown once.",
+            "type": "string"
+          },
+          "expiresAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "LoginRequestDto": {
         "additionalProperties": false,
         "properties": {
@@ -1758,6 +1772,12 @@
             "minLength": 1,
             "type": "string"
           },
+          "inviteCode": {
+            "description": "A member's one-time invitation (`POST /api/auth/invites`) — needed when registration is\nby invitation (`GET /api/auth/registration`), ignored otherwise.",
+            "maxLength": 100,
+            "nullable": true,
+            "type": "string"
+          },
           "password": {
             "minLength": 6,
             "type": "string"
@@ -1773,6 +1793,16 @@
           "password",
           "username"
         ],
+        "type": "object"
+      },
+      "RegistrationDto": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "description": "`open`, `closed` or `invite` (registration then needs `inviteCode`).",
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "SaveDraftDto": {
@@ -2436,6 +2466,57 @@
   },
   "openapi": "3.0.4",
   "paths": {
+    "/api/Auth/invites": {
+      "post": {
+        "description": "A one-time code that lets one person register while registration is by invitation; it\nworks for a week. The server keeps only its hash: the code is in this response only.\n            \nErrors: `403 INVITES_DISABLED` — registration here is not by invitation;\n`409 TOO_MANY_INVITES` — too many unused invitations already.",
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteDto"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Conflict"
+          }
+        },
+        "summary": "Invite someone to register",
+        "tags": [
+          "Authentication"
+        ]
+      }
+    },
     "/api/Auth/login": {
       "post": {
         "description": "Returns a short-lived `token` (access) and a long-lived `refreshToken`.\nStore both; when the access token expires, call `POST /api/auth/refresh`\ninstead of asking for the password again.",
@@ -2746,7 +2827,7 @@
     },
     "/api/Auth/register": {
       "post": {
-        "description": "Registration signs the user in: the response carries the same access and\nrefresh tokens as `POST /api/auth/login`.",
+        "description": "Registration signs the user in: the response carries the same access and\nrefresh tokens as `POST /api/auth/login`.\n            \nWhether one may register is the server's setting (`GET /api/auth/registration`):\n`403 REGISTRATION_CLOSED` when it is closed; by invitation, `inviteCode` must be a member's\nunused, unexpired invitation — `403 INVITE_INVALID` otherwise. A registration refused for\nanother reason (a name taken) does not use the invitation up.",
         "requestBody": {
           "content": {
             "application/*+json": {
@@ -2799,6 +2880,16 @@
             },
             "description": "Bad Request"
           },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
           "409": {
             "content": {
               "application/json": {
@@ -2821,6 +2912,27 @@
           }
         },
         "summary": "Register a new user",
+        "tags": [
+          "Authentication"
+        ]
+      }
+    },
+    "/api/Auth/registration": {
+      "get": {
+        "description": "`open` — anyone; `closed` — nobody, accounts are made otherwise; `invite` — with a code a\nmember made (`POST /api/auth/invites`). For the sign-up form, before signing in.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistrationDto"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "Who may register here",
         "tags": [
           "Authentication"
         ]

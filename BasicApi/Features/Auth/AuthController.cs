@@ -9,7 +9,7 @@ namespace BasicApi.Features.Auth;
 [Route("api/[controller]")]
 [Produces("application/json")]
 [Tags("Authentication")]
-public class AuthController(AuthService auth) : ControllerBase
+public class AuthController(AuthService auth, InviteService invites) : ControllerBase
 {
     private string? UserAgent => Request.Headers.UserAgent.FirstOrDefault();
     private string? RemoteIp => HttpContext.Connection.RemoteIpAddress?.ToString();
@@ -38,16 +38,55 @@ public class AuthController(AuthService auth) : ControllerBase
     /// <remarks>
     /// Registration signs the user in: the response carries the same access and
     /// refresh tokens as `POST /api/auth/login`.
+    ///
+    /// Whether one may register is the server's setting (`GET /api/auth/registration`):
+    /// `403 REGISTRATION_CLOSED` when it is closed; by invitation, `inviteCode` must be a member's
+    /// unused, unexpired invitation — `403 INVITE_INVALID` otherwise. A registration refused for
+    /// another reason (a name taken) does not use the invitation up.
     /// </remarks>
     [AllowAnonymous]
     [EnableRateLimiting("auth")]
     [HttpPost("register")]
     [ProducesResponseType(typeof(AuthResponseDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> Register([FromBody] RegisterRequestDto request)
-        => Created(string.Empty, await auth.RegisterAsync(request, UserAgent, RemoteIp, HttpContext.RequestAborted));
+        => Created(string.Empty, await invites.AdmitAsync(request.InviteCode,
+            ct => auth.RegisterAsync(request, UserAgent, RemoteIp, ct), HttpContext.RequestAborted));
+
+    /// <summary>
+    /// Who may register here
+    /// </summary>
+    /// <remarks>
+    /// `open` — anyone; `closed` — nobody, accounts are made otherwise; `invite` — with a code a
+    /// member made (`POST /api/auth/invites`). For the sign-up form, before signing in.
+    /// </remarks>
+    [AllowAnonymous]
+    [HttpGet("registration")]
+    [ProducesResponseType(typeof(RegistrationDto), StatusCodes.Status200OK)]
+    public IActionResult Registration() => Ok(invites.Registration);
+
+    /// <summary>
+    /// Invite someone to register
+    /// </summary>
+    /// <remarks>
+    /// A one-time code that lets one person register while registration is by invitation; it
+    /// works for a week. The server keeps only its hash: the code is in this response only.
+    ///
+    /// Errors: `403 INVITES_DISABLED` — registration here is not by invitation;
+    /// `409 TOO_MANY_INVITES` — too many unused invitations already.
+    /// </remarks>
+    [Authorize]
+    [EnableRateLimiting(ServiceExtensions.CommandsRateLimitPolicy)]
+    [HttpPost("invites")]
+    [ProducesResponseType(typeof(InviteDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> CreateInvite() =>
+        Created(string.Empty, await invites.CreateAsync(User.GetUserId(), HttpContext.RequestAborted));
 
     /// <summary>
     /// Exchange a refresh token for a new access/refresh pair.

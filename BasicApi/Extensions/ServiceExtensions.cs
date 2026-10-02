@@ -115,6 +115,7 @@ public static class ServiceExtensions
         services.AddScoped<IUpdateJournal, UpdateJournalRepository>();
         services.AddScoped<IReactionRepository, ReactionRepository>();
         services.AddScoped<IDraftRepository, DraftRepository>();
+        services.AddScoped<IInviteRepository, InviteRepository>();
         services.AddScoped<IGroupRepository, GroupRepository>();
         services.AddScoped<IAttachmentRepository, AttachmentRepository>();
         services.AddScoped<IPrivacyRepository, PrivacyRepository>();
@@ -136,7 +137,7 @@ public static class ServiceExtensions
             .AddUsersFeature()
             .AddFoldersFeature()
             .AddSyncFeature()
-            .AddAuthFeature()
+            .AddAuthFeature(configuration)
             .AddDevicesFeature()
             .AddPushFeature(configuration);
 

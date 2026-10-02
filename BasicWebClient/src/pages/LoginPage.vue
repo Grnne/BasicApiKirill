@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { useAuthStore } from '@/features/auth/model/auth.store'
@@ -9,6 +9,9 @@ import { safeRedirect } from './lib/redirect'
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+
+/** A member's invitation link: /login?invite={code}. */
+const inviteCode = computed(() => (typeof route.query.invite === 'string' ? route.query.invite : undefined))
 
 function onSuccess(): void {
   void router.replace(safeRedirect(route.query.redirect))
@@ -51,7 +54,7 @@ onUnmounted(() => {
 <template>
   <main class="page">
     <p v-if="auth.canResume" class="offline" role="status">Нет связи с сервером — войдём, как только он ответит</p>
-    <AuthForm @success="onSuccess" />
+    <AuthForm :invite="inviteCode" @success="onSuccess" />
   </main>
 </template>
 
