@@ -525,7 +525,8 @@ public sealed class MessageService(
             return Map(message);
 
         var memberIds = await membership.GetMemberIdsAsync(chatId, ct);
-        var mentioned = MentionedMembers(formatting, memberIds, userId);
+        var mentioned = MentionedMembers(formatting, memberIds, userId,
+            MessageEntities.MentionedUsers(MessageEntities.Deserialize(message.EntitiesJson)));
         return await db.InTransactionAsync(async ct =>
         {
             var edited = await messageRepository.EditTextAsync(
@@ -662,15 +663,18 @@ public sealed class MessageService(
 
     /// <summary>
     /// Who gets the mention counted: members of the chat except the author. Mentioning someone
-    /// outside the chat is an error — the server does not reveal non-members through a mention.
+    /// outside the chat is an error — the server does not reveal non-members through a mention —
+    /// unless the message already did (an edit keeps the mention of someone who has left since).
     /// </summary>
     private static IReadOnlyList<Guid> MentionedMembers(
-        List<MessageEntityDto> formatting, IReadOnlyCollection<Guid> memberIds, Guid authorId)
+        List<MessageEntityDto> formatting, IReadOnlyCollection<Guid> memberIds, Guid authorId,
+        IEnumerable<Guid>? alreadyMentioned = null)
     {
         var mentioned = MessageEntities.MentionedUsers(formatting);
-        if (mentioned.Any(id => !memberIds.Contains(id)))
+        var kept = alreadyMentioned?.ToHashSet() ?? [];
+        if (mentioned.Any(id => !memberIds.Contains(id) && !kept.Contains(id)))
             throw new BadRequestException("A mentioned user is not a member of this chat", MessageEntities.InvalidCode);
-        return [.. mentioned.Where(id => id != authorId)];
+        return [.. mentioned.Where(id => id != authorId && memberIds.Contains(id))];
     }
 
     private static NotFoundException MessageNotFound() => new("Message not found in this chat", "MESSAGE_NOT_FOUND");
