@@ -41,6 +41,12 @@ public sealed class SyncService(
     IPrivacyService privacy,
     IUserService users) : ISyncService
 {
+    /// <summary>
+    /// Updates behind past which a client is told to take the snapshot: ten pages and more of
+    /// replay cost more than the state, and run into the rate limit.
+    /// </summary>
+    public const int MaxBehind = 1000;
+
     public Task<SyncStateDto> GetStateAsync(Guid userId, CancellationToken ct = default) =>
         // One database snapshot for pts and everything else: a change that made it into the state also
         // made it into pts, and vice versa — nothing is lost or counted twice.
@@ -60,15 +66,17 @@ public sealed class SyncService(
             throw InvalidPts();
 
         var current = await journal.GetPtsAsync(userId, ct);
-        if (since > current)
+        // From the future (another database) or too far behind: the state is cheaper than the replay.
+        if (since > current || current - since > MaxBehind)
             return new SyncDifferenceDto { Pts = current, SnapshotRequired = true };
         if (since == current)
             return new SyncDifferenceDto { Pts = current };
 
         var updates = await journal.GetSinceAsync(userId, since, limit, ct);
 
-        // Journal numbers are consecutive; a first one that is not since + 1 means the start was already purged.
-        if (updates.Count == 0 || updates[0].Pts != since + 1)
+        // Journal numbers are consecutive: a gap anywhere in the page means retention purged it —
+        // its batches go in no order, so not only the start.
+        if (updates.Count == 0 || updates.Select((u, i) => u.Pts != since + 1 + i).Any(gap => gap))
             return new SyncDifferenceDto { Pts = current, SnapshotRequired = true };
 
         var last = updates[^1].Pts;
