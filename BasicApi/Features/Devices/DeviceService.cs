@@ -1,5 +1,6 @@
 using BasicApi.Hubs;
 using BasicApi.Middleware.Exceptions;
+using BasicApi.Services;
 using BasicApi.Storage;
 using BasicApi.Storage.Interfaces;
 
@@ -22,6 +23,7 @@ public sealed class DeviceService(
     IDeviceRepository devices,
     ISessionRepository sessions,
     HubConnectionRegistry connections,
+    SessionLiveness liveness,
     TimeProvider time) : IDeviceService
 {
     public async Task<DeviceListDto> GetAllAsync(Guid userId, Guid? currentDeviceId, CancellationToken ct = default) =>
@@ -48,6 +50,7 @@ public sealed class DeviceService(
             await devices.DeleteAsync(deviceId, ct);
             return true;
         }, ct: ct);
+        liveness.Forget(deviceId);
         connections.AbortSessionFamily(deviceId);
     }
 }

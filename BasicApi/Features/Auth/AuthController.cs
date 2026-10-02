@@ -86,8 +86,8 @@ public class AuthController(AuthService auth) : ControllerBase
     /// does not matter: the sign-in still ends.
     ///
     /// Idempotent: an unknown or already-revoked token also returns 200, so the endpoint
-    /// cannot be used to find out which tokens exist. The access token keeps working until
-    /// it expires (minutes) — discard it client-side.
+    /// cannot be used to find out which tokens exist. The access tokens of the ended sign-in
+    /// stop working at once (401).
     /// </remarks>
     [Authorize]
     [HttpPost("logout")]

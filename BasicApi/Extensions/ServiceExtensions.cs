@@ -152,6 +152,7 @@ public static class ServiceExtensions
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IUserStatusService, UserStatusService>();
         services.AddSingleton<HubConnectionRegistry>();
+        services.AddSingleton<SessionLiveness>();
         services.AddHostedService<HubSessionMonitor>();
 
         // Behind a reverse proxy the connection address is the proxy's address. The real
@@ -229,6 +230,19 @@ public static class ServiceExtensions
                         }
 
                         return Task.CompletedTask;
+                    },
+                    // A valid token whose sign-in has ended (signed out, device removed, new password)
+                    // is refused like an expired one: the client refreshes, and that fails too.
+                    // A token without a sign-in is never issued to clients.
+                    OnTokenValidated = async context =>
+                    {
+                        if (context.Principal?.GetSessionFamilyId() is not { } familyId)
+                            return;
+                        var services = context.HttpContext.RequestServices;
+                        var live = await services.GetRequiredService<SessionLiveness>().IsLiveAsync(
+                            familyId, services.GetRequiredService<ISessionRepository>(), context.HttpContext.RequestAborted);
+                        if (!live)
+                            context.Fail("The sign-in has ended");
                     },
                     OnChallenge = context =>
                     {

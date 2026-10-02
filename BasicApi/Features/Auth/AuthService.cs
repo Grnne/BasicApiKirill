@@ -1,6 +1,7 @@
 using System.Text;
 using BasicApi.Hubs;
 using BasicApi.Middleware.Exceptions;
+using BasicApi.Services;
 using BasicApi.Storage.Entities;
 using BasicApi.Storage.Exceptions;
 using BasicApi.Storage.Interfaces;
@@ -13,7 +14,8 @@ public sealed class AuthService(
     IJwtService jwtService,
     ISessionService sessionService,
     IDeviceRepository devices,
-    HubConnectionRegistry hubConnections)
+    HubConnectionRegistry hubConnections,
+    SessionLiveness liveness)
 {
     /// <summary>bcrypt limit: anything beyond it is ignored.</summary>
     public const int MaxPasswordBytes = 72;
@@ -115,6 +117,7 @@ public sealed class AuthService(
         // receiving messages as long as it holds the connection.
         foreach (var familyId in families)
         {
+            liveness.Forget(familyId);
             await devices.DeleteAsync(familyId, ct);
             hubConnections.AbortSessionFamily(familyId);
         }
@@ -141,19 +144,19 @@ public sealed class AuthService(
         // Whoever might know the old password is signed out everywhere else, at once.
         await sessionService.RevokeOthersAsync(userId, sessionFamilyId, ct);
         await devices.DeleteAllExceptAsync(userId, sessionFamilyId, ct);
+        liveness.ForgetAll();
         hubConnections.AbortUserExcept(userId, sessionFamilyId);
     }
 
     /// <summary>
-    /// Ends every session of the current user — "log out on all devices".
-    /// The current access token keeps working for REST until it expires (minutes), but
-    /// no new one can be obtained; open hub connections are closed right away and cannot
-    /// be reopened with the old token.
+    /// Ends every session of the current user — "log out on all devices", this one included:
+    /// their access tokens stop working and open hub connections are closed right away.
     /// </summary>
     public async Task LogoutAllAsync(Guid userId, CancellationToken ct = default)
     {
         await sessionService.RevokeAllForUserAsync(userId, ct);
         await devices.DeleteAllExceptAsync(userId, null, ct);
+        liveness.ForgetAll();
         hubConnections.AbortUser(userId);
     }
 

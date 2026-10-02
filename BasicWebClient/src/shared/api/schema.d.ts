@@ -91,8 +91,8 @@ export interface paths {
          *     does not matter: the sign-in still ends.
          *
          *     Idempotent: an unknown or already-revoked token also returns 200, so the endpoint
-         *     cannot be used to find out which tokens exist. The access token keeps working until
-         *     it expires (minutes) — discard it client-side.
+         *     cannot be used to find out which tokens exist. The access tokens of the ended sign-in
+         *     stop working at once (401).
          */
         post: {
             parameters: {
@@ -3615,9 +3615,8 @@ export interface paths {
         post?: never;
         /**
          * Sign a device out.
-         * @description Its refresh token stops working and its hub connections close at once; an access token it
-         *     already holds works until it expires (minutes). The current device may be signed out too —
-         *     the same as logout.
+         * @description Its tokens stop working and its hub connections close at once. The current device may be
+         *     signed out too — the same as logout.
          *
          *     Errors: `404 DEVICE_NOT_FOUND` — not the caller's or already signed out.
          */

@@ -107,10 +107,9 @@ public class PushSubscriptionTests(PostgresFixture db) : DbTest(db)
         (await api.PostAsJsonAsync("/api/auth/logout", new { refreshToken = alice.RefreshToken })).EnsureSuccessStatusCode();
 
         Assert.Empty(await SubscriptionsAsync());
-        // The access token still works for minutes, but the sign-in is over.
+        // The sign-in is over, and its access token with it.
         var response = await api.PutAsJsonAsync("/api/push/subscription", device.Subscription);
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-        Assert.Equal("DEVICE_NOT_FOUND", await response.ErrorCodeAsync());
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     public static TheoryData<string?, bool, bool> BadSubscriptions => new()

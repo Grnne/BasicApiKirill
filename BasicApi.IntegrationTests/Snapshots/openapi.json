@@ -2520,7 +2520,7 @@
     },
     "/api/Auth/logout": {
       "post": {
-        "description": "Ends the sign-in of the access token the request carries, and the session of the\n`refreshToken` in the body, if one is sent. A refresh token that was rotated meanwhile\ndoes not matter: the sign-in still ends.\n            \nIdempotent: an unknown or already-revoked token also returns 200, so the endpoint\ncannot be used to find out which tokens exist. The access token keeps working until\nit expires (minutes) — discard it client-side.",
+        "description": "Ends the sign-in of the access token the request carries, and the session of the\n`refreshToken` in the body, if one is sent. A refresh token that was rotated meanwhile\ndoes not matter: the sign-in still ends.\n            \nIdempotent: an unknown or already-revoked token also returns 200, so the endpoint\ncannot be used to find out which tokens exist. The access tokens of the ended sign-in\nstop working at once (401).",
         "requestBody": {
           "content": {
             "application/*+json": {
@@ -7002,7 +7002,7 @@
     },
     "/api/devices/{deviceId}": {
       "delete": {
-        "description": "Its refresh token stops working and its hub connections close at once; an access token it\nalready holds works until it expires (minutes). The current device may be signed out too —\nthe same as logout.\n            \nErrors: `404 DEVICE_NOT_FOUND` — not the caller's or already signed out.",
+        "description": "Its tokens stop working and its hub connections close at once. The current device may be\nsigned out too — the same as logout.\n            \nErrors: `404 DEVICE_NOT_FOUND` — not the caller's or already signed out.",
         "parameters": [
           {
             "description": "The device id from the list.",

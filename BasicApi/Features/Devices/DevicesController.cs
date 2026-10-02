@@ -29,9 +29,8 @@ public class DevicesController(IDeviceService devices) : ControllerBase
     /// Sign a device out.
     /// </summary>
     /// <remarks>
-    /// Its refresh token stops working and its hub connections close at once; an access token it
-    /// already holds works until it expires (minutes). The current device may be signed out too —
-    /// the same as logout.
+    /// Its tokens stop working and its hub connections close at once. The current device may be
+    /// signed out too — the same as logout.
     ///
     /// Errors: <c>404 DEVICE_NOT_FOUND</c> — not the caller's or already signed out.
     /// </remarks>
