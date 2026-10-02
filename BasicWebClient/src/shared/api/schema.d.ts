@@ -6144,6 +6144,12 @@ export interface components {
              */
             maxPhotoSize: number;
             /**
+             * Format: int64
+             * @description Most pixels (width × height) of a PNG or GIF photo: the server decodes these at full size
+             *     for the preview, so a larger one is refused with `INVALID_MEDIA` — send it as a file.
+             */
+            maxPngGifPhotoPixels: number;
+            /**
              * Format: int32
              * @description How many days files are kept; 0 — forever.
              */

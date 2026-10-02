@@ -4,7 +4,7 @@ import { computed, onUnmounted, ref } from 'vue'
 
 import { useConfigStore } from '@/entities/config/config.store'
 import * as mediaApi from '@/entities/media/api'
-import { albumConflict, rejectFile, uploadKind, type UploadKind } from '@/entities/media/lib'
+import { albumConflict, pngGifPixels, rejectFile, uploadKind, type UploadKind } from '@/entities/media/lib'
 import { measureVideo, putFile } from '@/entities/media/transfer'
 import { uploadFile } from '@/entities/media/upload'
 import { describeError } from '@/shared/api/problem'
@@ -56,12 +56,16 @@ export function useUploads() {
     }
   }
 
-  function add(files: Iterable<File>): void {
+  /** Adds files to the tray; PNG and GIF headers are read first, so it resolves a moment later. */
+  async function add(files: Iterable<File>): Promise<void> {
+    // Taken now: the file input's list is cleared right after this call.
+    const chosen = [...files]
     if (!config.config.media.enabled) {
       notices.push('Файлы на этом сервере отключены')
       return
     }
-    for (const file of files) {
+    const pixels = await Promise.all(chosen.map(pngGifPixels))
+    for (const [index, file] of chosen.entries()) {
       const problem = rejectFile(file, config.config)
       if (problem) {
         notices.push(`${file.name}: ${problem}`)
@@ -71,7 +75,7 @@ export function useUploads() {
         notices.push(`В одном сообщении — не больше ${config.config.messages.maxAttachments} файлов`)
         return
       }
-      const kind = uploadKind(file, config.config)
+      const kind = uploadKind({ type: file.type, size: file.size, pixels: pixels[index] ?? null }, config.config)
       if (albumConflict([...items.value.map((i) => i.kind), kind])) {
         notices.push('Фото и видео отправляются отдельно от других файлов')
         continue

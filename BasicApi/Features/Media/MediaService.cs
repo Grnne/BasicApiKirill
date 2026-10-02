@@ -126,7 +126,7 @@ public sealed partial class MediaService(
         await ProcessingGate.WaitAsync(ct);
         try
         {
-            await CheckAsync(attachment, ct);
+            await CheckAsync(attachment, size, ct);
         }
         finally
         {
@@ -149,11 +149,12 @@ public sealed partial class MediaService(
     /// Reads the object once: its hash, real size and type; for a photo — the preview. A video frame
     /// from the client becomes the video's preview.
     /// </summary>
-    private async Task CheckAsync(Attachment attachment, CancellationToken ct)
+    private async Task CheckAsync(Attachment attachment, long expectedSize, CancellationToken ct)
     {
         var keepBytes = attachment.Kind == AttachmentKinds.Photo;
         using var sha = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        using var copy = keepBytes ? new MemoryStream() : null;
+        // Sized for the file up front: no doubling while reading, and its buffer is the picture's bytes.
+        using var copy = keepBytes ? new MemoryStream((int)expectedSize) : null;
         var head = new byte[MediaSniffer.HeaderLength];
         var headLength = 0;
         long size = 0;
@@ -188,7 +189,7 @@ public sealed partial class MediaService(
         {
             case AttachmentKinds.Photo:
                 var preview = MediaSniffer.IsImage(mime)
-                    ? ImagePreviews.Make(copy!.ToArray(), _options.PreviewSize, _options.MaxPhotoPixels)
+                    ? ImagePreviews.Make(Bytes(copy!), _options.PreviewSize, _options.MaxPhotoPixels)
                     : null;
                 if (preview is null)
                     await RejectAsync(attachment, Invalid("the file is not a JPEG, PNG, GIF or WebP picture of an allowed size"));
@@ -217,6 +218,10 @@ public sealed partial class MediaService(
                 break;
         }
     }
+
+    /// <summary>The bytes read, without a second copy when the buffer holds exactly them.</summary>
+    private static byte[] Bytes(MemoryStream stream) =>
+        stream.Length == stream.Capacity ? stream.GetBuffer() : stream.ToArray();
 
     private async Task<string?> VideoThumbnailAsync(Guid id, CancellationToken ct)
     {

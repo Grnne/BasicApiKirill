@@ -29,6 +29,14 @@ function setup() {
 }
 
 const png = (name = 'a.png') => new File(['abc'], name, { type: 'image/png' })
+/** The first bytes of a PNG of the given size: what the client reads before choosing photo or file. */
+function pngHeader(width: number, height: number): Uint8Array<ArrayBuffer> {
+  const head = new Uint8Array(24)
+  head.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52])
+  new DataView(head.buffer).setUint32(16, width)
+  new DataView(head.buffer).setUint32(20, height)
+  return head
+}
 const pdf = () => new File(['%PDF'], 'doc.pdf', { type: 'application/pdf' })
 
 beforeEach(() => {
@@ -41,7 +49,7 @@ describe('useUploads', () => {
   it('uploads a chosen file at once; ready with its attachment when done', async () => {
     const uploads = setup()
 
-    uploads.add([png()])
+    await uploads.add([png()])
     expect(uploads.busy.value).toBe(true)
     await flushPromises()
 
@@ -49,29 +57,39 @@ describe('useUploads', () => {
     expect(uploads.attachments.value.map((a) => a.id)).toEqual(['att'])
   })
 
-  it('a file that cannot go into the same album is refused with a reason', () => {
+  it('a PNG too big for the server to decode goes as a file, not refused as a photo', async () => {
+    const uploads = setup()
+    const huge = new File([pngHeader(5000, 4000)], 'shot.png', { type: 'image/png' })
+
+    await uploads.add([huge])
+
+    expect(uploads.items.value.map((i) => i.kind)).toEqual(['file'])
+    expect(vi.mocked(mediaApi.createUpload).mock.calls[0]![0]).toMatchObject({ kind: 'file' })
+  })
+
+  it('a file that cannot go into the same album is refused with a reason', async () => {
     const uploads = setup()
 
-    uploads.add([png(), pdf()])
+    await uploads.add([png(), pdf()])
 
     expect(uploads.items.value.map((i) => i.kind)).toEqual(['photo'])
     expect(useNoticesStore().items[0]!.text).toContain('отдельно')
   })
 
-  it('no more files than the server allows in one message', () => {
+  it('no more files than the server allows in one message', async () => {
     const uploads = setup()
 
-    uploads.add(Array.from({ length: 11 }, (_, i) => png(`${i}.png`)))
+    await uploads.add(Array.from({ length: 11 }, (_, i) => png(`${i}.png`)))
 
     expect(uploads.items.value).toHaveLength(10)
     expect(useNoticesStore().items[0]!.text).toContain('не больше 10')
   })
 
-  it('without file storage nothing is uploaded', () => {
+  it('without file storage nothing is uploaded', async () => {
     const uploads = setup()
     useConfigStore().config = DEFAULT_CONFIG
 
-    uploads.add([png()])
+    await uploads.add([png()])
 
     expect(uploads.items.value).toEqual([])
     expect(mediaApi.createUpload).not.toHaveBeenCalled()

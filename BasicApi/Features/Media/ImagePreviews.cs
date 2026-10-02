@@ -14,8 +14,16 @@ public static class ImagePreviews
     public const int JpegQuality = 80;
 
     /// <summary>
+    /// The most pixels decoded at once: 48 MB of RGBA. JPEG and WebP decode straight to about the
+    /// preview size; PNG and GIF only at full size, so a big one is refused rather than taking the
+    /// API's memory (two are processed at a time, in a 256 MB container).
+    /// </summary>
+    public const long MaxDecodedPixels = 12_000_000;
+
+    /// <summary>
     /// A preview whose longer side is at most <paramref name="maxSide"/>; null when the bytes are
-    /// not a picture Skia can decode or it has more than <paramref name="maxPixels"/> pixels.
+    /// not a picture Skia can decode, it has more than <paramref name="maxPixels"/> pixels, or
+    /// decoding it would take more than <see cref="MaxDecodedPixels"/>.
     /// </summary>
     public static ImagePreview? Make(byte[] data, int maxSide, long maxPixels)
     {
@@ -32,6 +40,8 @@ public static class ImagePreviews
         // JPEG decodes straight to a smaller size, much cheaper than full size and then down.
         var scale = Math.Min(1f, (float)maxSide / Math.Max(info.Width, info.Height));
         var decoded = scale < 1f ? codec.GetScaledDimensions(scale) : info.Size;
+        if ((long)decoded.Width * decoded.Height > MaxDecodedPixels)
+            return null;
         using var bitmap = new SKBitmap(new SKImageInfo(decoded.Width, decoded.Height, SKColorType.Rgba8888, SKAlphaType.Premul));
         var result = codec.GetPixels(bitmap.Info, bitmap.GetPixels());
         if (result is not (SKCodecResult.Success or SKCodecResult.IncompleteInput))
@@ -51,6 +61,8 @@ public static class ImagePreviews
         var canvas = surface.Canvas;
         canvas.Clear(SKColors.White); // JPEG has no transparency
         Orient(canvas, origin, w, h);
+        // Immutable, the image shares the bitmap's pixels instead of copying them.
+        bitmap.SetImmutable();
         using var image = SKImage.FromBitmap(bitmap);
         canvas.DrawImage(image, new SKRect(0, 0, w, h), new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear));
         canvas.Flush();

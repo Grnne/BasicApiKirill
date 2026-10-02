@@ -1001,6 +1001,11 @@
             "format": "int64",
             "type": "integer"
           },
+          "maxPngGifPhotoPixels": {
+            "description": "Most pixels (width × height) of a PNG or GIF photo: the server decodes these at full size\nfor the preview, so a larger one is refused with `INVALID_MEDIA` — send it as a file.",
+            "format": "int64",
+            "type": "integer"
+          },
           "retentionDays": {
             "description": "How many days files are kept; 0 — forever.",
             "format": "int32",
