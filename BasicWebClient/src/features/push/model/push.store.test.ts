@@ -57,6 +57,17 @@ describe('push', () => {
     expect(push.state).toBe('on')
   })
 
+  it('forbidden in the browser says so even where the server sends no push', async () => {
+    // Seen on a server without VAPID keys: "turned off, turn them on" and a button that did nothing.
+    vi.mocked(pushApi.getPushConfig).mockResolvedValue({ enabled: false, vapidPublicKey: null })
+    vi.mocked(browser.permission).mockReturnValue('denied')
+    const push = usePushStore()
+
+    await push.refresh()
+
+    expect(push.state).toBe('denied')
+  })
+
   it('a browser that will not say whether it is subscribed: the state is "off", no unhandled error', async () => {
     // getRegistration rejects with site data blocked; the settings page calls refresh unawaited.
     const push = usePushStore()

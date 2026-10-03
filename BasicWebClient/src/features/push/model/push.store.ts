@@ -33,7 +33,12 @@ export const usePushStore = defineStore('push', () => {
       state.value = 'unsupported'
       return
     }
+    // Forbidden in the browser comes first: the open client cannot show notifications either.
     permission.value = browser.permission()
+    if (permission.value === 'denied') {
+      state.value = 'denied'
+      return
+    }
     try {
       if (!(await pushApi.getPushConfig()).enabled) {
         state.value = 'unavailable'
@@ -41,10 +46,6 @@ export const usePushStore = defineStore('push', () => {
       }
     } catch (e) {
       error.value = describeError(e)
-      return
-    }
-    if (permission.value === 'denied') {
-      state.value = 'denied'
       return
     }
     // Rejects where the site may not keep data; the page calls refresh without waiting.
