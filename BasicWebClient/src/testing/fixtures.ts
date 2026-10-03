@@ -46,6 +46,7 @@ export function chat(overrides: Partial<ChatListItemDto> = {}): ChatListItemDto 
     lastMessage: null,
     unreadCount: 0,
     unreadMentionCount: 0,
+    unreadReactionCount: 0,
     lastReadSeq: 0,
     markedUnread: false,
     outboxReadSeq: 0,

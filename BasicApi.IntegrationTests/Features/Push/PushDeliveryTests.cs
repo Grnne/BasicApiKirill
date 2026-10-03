@@ -207,6 +207,46 @@ public class PushDeliveryTests(PostgresFixture db) : DbTest(db)
         Assert.False(device.GetProperty("pushEnabled").GetBoolean());
     }
 
+    [Fact]
+    public async Task Reaction_NotifiesOnlyTheAuthor_OfWhoReactedAndToWhat()
+    {
+        await using var factory = Factory();
+        var alice = await factory.RegisterAsync("alice");
+        var bob = await factory.RegisterAsync("bob");
+        var carl = await factory.RegisterAsync("carl");
+        using var bobApi = factory.CreateClient(bob.Token);
+        using var carlApi = factory.CreateClient(carl.Token);
+        using var alicePhone = await SubscribeAsync(factory.CreateClient(alice.Token));
+        using var bobPhone = await SubscribeAsync(bobApi);
+        using var carlPhone = await SubscribeAsync(carlApi);
+        var group = await Data.GroupChatAsync("Команда", [alice.UserId, bob.UserId, carl.UserId]);
+        var alices = await Data.MessageAsync(group, alice.UserId, "релиз в пятницу", TestData.T0);
+        var carls = await Data.MessageAsync(group, carl.UserId, "ок", TestData.T0.AddMinutes(1));
+
+        // Carl on his own message: nobody is notified — the next push is of Bob's reaction.
+        (await carlApi.PutAsJsonAsync($"/api/chats/{group}/messages/{carls}/reactions", new { emoji = "👍" })).EnsureSuccessStatusCode();
+        (await bobApi.PutAsJsonAsync($"/api/chats/{group}/messages/{alices}/reactions", new { emoji = "🔥" })).EnsureSuccessStatusCode();
+
+        var push = await _pushes.NextAsync();
+        Assert.Equal(alicePhone.Endpoint, push.Endpoint);
+        // Not the chat's topic: a reaction must not replace an undelivered message.
+        Assert.Equal(alices.ToString("N"), push.Topic);
+        var n = push.Payload;
+        Assert.Equal("reaction", n.GetProperty("kind").GetString());
+        Assert.Equal("🔥", n.GetProperty("emoji").GetString());
+        Assert.Equal(bob.UserId, n.Id("senderId"));
+        Assert.Equal("bob", n.GetProperty("senderName").GetString());
+        Assert.Equal(alices, n.Id("messageId"));
+        Assert.Equal("релиз в пятницу", n.GetProperty("text").GetString());
+        Assert.Equal("Команда", n.GetProperty("chatTitle").GetString());
+
+        // Taking it back notifies nobody: the next push is of a new message.
+        Assert.Equal(System.Net.HttpStatusCode.NoContent,
+            (await bobApi.DeleteAsync($"/api/chats/{group}/messages/{alices}/reactions")).StatusCode);
+        var next = await SendAsync(bobApi, group, "кто за?");
+        Assert.Equal(next, (await _pushes.NextAsync()).Payload.Id("messageId"));
+    }
+
     private static async Task WaitUntilOfflineAsync(HttpClient api, Guid userId)
     {
         var deadline = DateTime.UtcNow.AddSeconds(10);

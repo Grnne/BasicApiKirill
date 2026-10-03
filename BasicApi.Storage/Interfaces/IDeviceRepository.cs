@@ -27,9 +27,11 @@ public interface IDeviceRepository
 
     /// <summary>
     /// Where to push a new message of the chat: the subscribed devices, with an open sign-in, of the
-    /// members other than the sender who have not muted the chat and have not blocked the sender.
+    /// members other than the sender who have not muted the chat and have not blocked the sender;
+    /// with <paramref name="recipientId"/> — of that member only.
     /// </summary>
-    Task<IReadOnlyList<PushTarget>> GetPushTargetsAsync(Guid chatId, Guid senderId, CancellationToken ct = default);
+    Task<IReadOnlyList<PushTarget>> GetPushTargetsAsync(
+        Guid chatId, Guid senderId, Guid? recipientId = null, CancellationToken ct = default);
 
     /// <summary>
     /// Deletes up to <paramref name="batchSize"/> devices whose sign-in has ended in any way

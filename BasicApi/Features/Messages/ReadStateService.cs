@@ -56,7 +56,7 @@ public sealed class ReadStateService(
                         new ReceiptDto { ChatId = chatId, UserId = userId, Seq = move.ToSeq }, authors, ct);
             }
 
-            if (move.Update == ReadPointerUpdate.Moved || move.ClearedMark)
+            if (move.Update == ReadPointerUpdate.Moved || move.ClearedMark || move.ClearedReactions)
                 await PublishStateAsync(chatId, userId, ct);
             return true;
         }, ct: ct);
@@ -74,8 +74,15 @@ public sealed class ReadStateService(
         }, ct: ct);
     }
 
-    /// <summary>The counters as they are after the change, from the same query as the chat list.</summary>
-    private async Task PublishStateAsync(Guid chatId, Guid userId, CancellationToken ct)
+    private Task PublishStateAsync(Guid chatId, Guid userId, CancellationToken ct) =>
+        PublishStateAsync(chats, events, chatId, userId, ct);
+
+    /// <summary>
+    /// <c>ReadStateChanged</c> with the counters as they are after the change, from the same query
+    /// as the chat list; nothing when the user is not a member.
+    /// </summary>
+    public static async Task PublishStateAsync(
+        IChatRepository chats, IChatEventPublisher events, Guid chatId, Guid userId, CancellationToken ct)
     {
         if (await chats.GetChatListItemAsync(chatId, userId, ct) is not { } row)
             return;
@@ -86,6 +93,7 @@ public sealed class ReadStateService(
             LastReadSeq = row.LastReadSeq,
             UnreadCount = row.UnreadCount,
             UnreadMentionCount = row.UnreadMentionCount,
+            UnreadReactionCount = row.UnreadReactionCount,
             MarkedUnread = row.MarkedUnread
         }, userId, ct);
     }

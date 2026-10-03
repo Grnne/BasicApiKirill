@@ -25,6 +25,12 @@ public class ChatListItemDto
     /// <summary>Unread messages that mention the user.</summary>
     public int UnreadMentionCount { get; set; }
 
+    /// <summary>
+    /// Other members' reactions to the user's messages since the user last read the chat
+    /// (<c>POST /api/chats/{chatId}/read</c>); show a mark on the row while it is above 0.
+    /// </summary>
+    public int UnreadReactionCount { get; set; }
+
     /// <summary>Seq of the last message the user has read.</summary>
     public long LastReadSeq { get; set; }
 

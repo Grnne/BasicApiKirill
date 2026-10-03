@@ -3,8 +3,11 @@ using BasicApi.Models.Dto.Message;
 
 namespace BasicApi.Services.Events;
 
-/// <summary>A new message that may need push notifications.</summary>
-public sealed record PushJob(Guid ChatId, Guid SenderId, PushNotificationDto Notification);
+/// <summary>
+/// A new message, or a reaction, that may need push notifications; <paramref name="RecipientId"/> —
+/// only to that member (the author of the message reacted to), otherwise to every member.
+/// </summary>
+public sealed record PushJob(Guid ChatId, Guid SenderId, PushNotificationDto Notification, Guid? RecipientId = null);
 
 /// <summary>
 /// Messages waiting for their push notifications, filled by the outbox dispatcher. In memory: a
@@ -54,4 +57,19 @@ public static class PushNotifications
         AttachmentCount = message.Attachments.Count,
         CreatedAt = message.CreatedAt
     };
+
+    /// <summary>
+    /// The notification of a reaction to <paramref name="message"/>: the sender is who reacted,
+    /// the text is the message's.
+    /// </summary>
+    public static PushNotificationDto OfReaction(MessageDto message, Guid reactorId, string reactorName, string emoji, DateTime at)
+    {
+        var notification = Of(message);
+        notification.Kind = PushNotificationDto.ReactionKind;
+        notification.SenderId = reactorId;
+        notification.SenderName = reactorName;
+        notification.Emoji = emoji;
+        notification.CreatedAt = at;
+        return notification;
+    }
 }

@@ -19,6 +19,7 @@ public static class ChatListItemMapper
         AvatarId = r.Type == Storage.Entities.ChatTypes.Private ? r.CompanionAvatarId : r.ChatAvatarId,
         UnreadCount = r.UnreadCount,
         UnreadMentionCount = r.UnreadMentionCount,
+        UnreadReactionCount = r.UnreadReactionCount,
         LastReadSeq = r.LastReadSeq,
         MarkedUnread = r.MarkedUnread,
         OutboxReadSeq = r.OutboxReadSeq,

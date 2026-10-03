@@ -5992,6 +5992,12 @@ export interface components {
              * @description Unread messages that mention the user.
              */
             unreadMentionCount: number;
+            /**
+             * Format: int32
+             * @description Other members' reactions to the user's messages since the user last read the chat
+             *     (`POST /api/chats/{chatId}/read`); show a mark on the row while it is above 0.
+             */
+            unreadReactionCount: number;
         };
         /** @description Generic cursor-based paginated response. */
         ChatListItemDtoCursorPaginatedResponse: {
@@ -6586,6 +6592,46 @@ export interface components {
              */
             vapidPublicKey: string | null;
         };
+        /**
+         * @description What a push notification carries to the service worker's `push` event: enough to show it
+         *     without asking the API, since the worker has no access token.
+         */
+        PushNotificationDto: {
+            /** Format: int32 */
+            attachmentCount: number;
+            /** @description Media: the kind of the first file (`photo`, `video`, `file`, `voice`); null otherwise. */
+            attachmentKind: string | null;
+            /** Format: uuid */
+            chatId: string;
+            /** @description The group's title; null in a private chat — show the sender's name. */
+            chatTitle: string | null;
+            /** @description `private` or `group`. */
+            chatType: string;
+            /**
+             * Format: date-time
+             * @description When the message was sent, or the reaction made.
+             */
+            createdAt: string;
+            /** @description The reaction (`kind: reaction`); null for a message. */
+            emoji: string | null;
+            /**
+             * @description `message` — a new message; `reaction` — a reaction to the recipient's message
+             *                 (`emoji`; the sender is who reacted, the message fields are the message's). More kinds may
+             *                 come: ignore an unknown one.
+             */
+            kind: string;
+            /** Format: uuid */
+            messageId: string;
+            /** @description As `MessageDto.type`: `text`, `media`, `system`. */
+            messageType: string;
+            /** Format: uuid */
+            senderId: string;
+            senderName: string;
+            /** Format: int64 */
+            seq: number;
+            /** @description The start of the text (up to 100 characters); for media — of the caption, may be empty. */
+            text: string;
+        };
         /** @description A browser push subscription, as `PushSubscription.toJSON()` gives it. */
         PushSubscriptionDto: {
             /** @description The push service address to deliver to. */
@@ -6608,8 +6654,9 @@ export interface components {
             emoji: string;
         };
         /**
-         * @description `ReadStateChanged`: the user's reading of a chat changed on one of their devices —
-         *                 the others update the counters and the mark from it.
+         * @description `ReadStateChanged`: the chat's counters changed for the user — they read it on one of
+         *                 their devices, or a reaction to their message came or went. Devices take the counters and the
+         *                 mark from it as they are.
          */
         ReadStateDto: {
             /** Format: uuid */
@@ -6621,6 +6668,11 @@ export interface components {
             unreadCount: number;
             /** Format: int32 */
             unreadMentionCount: number;
+            /**
+             * Format: int32
+             * @description As `ChatListItemDto.unreadReactionCount`.
+             */
+            unreadReactionCount: number;
         };
         /**
          * @description `MessagesDelivered` / `MessagesRead`: a member's device received, or the member read,
@@ -7034,6 +7086,7 @@ export type PinnedChatsDto = components['schemas']['PinnedChatsDto'];
 export type PrivacySettingsDto = components['schemas']['PrivacySettingsDto'];
 export type ProblemDetails = components['schemas']['ProblemDetails'];
 export type PushConfigDto = components['schemas']['PushConfigDto'];
+export type PushNotificationDto = components['schemas']['PushNotificationDto'];
 export type PushSubscriptionDto = components['schemas']['PushSubscriptionDto'];
 export type PushSubscriptionKeysDto = components['schemas']['PushSubscriptionKeysDto'];
 export type PushSwitchDto = components['schemas']['PushSwitchDto'];

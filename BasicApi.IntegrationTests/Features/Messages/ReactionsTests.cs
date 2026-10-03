@@ -157,4 +157,55 @@ public class ReactionsTests(PostgresFixture db) : DbTest(db)
         Assert.Equal(20, summary.EnumerateArray().Sum(r => r.GetProperty("count").GetInt32()));
         Assert.Equal([10, 10], summary.EnumerateArray().Select(r => r.GetProperty("count").GetInt32()));
     }
+
+    private static async Task<int> UnreadReactionsAsync(HttpClient client, Guid chat) =>
+        (await client.ChatItemAsync(chat)).GetProperty("unreadReactionCount").GetInt32();
+
+    [Fact]
+    public async Task OthersReactions_ToYourMessages_AreNewUntilYouReadTheChat()
+    {
+        await using var factory = new ApiFactory(Db.ConnectionString,
+            new Dictionary<string, string?> { ["RateLimiting:CommandsPer10Seconds"] = "1000" });
+        var alice = await factory.RegisterAsync("alice");
+        var bob = await factory.RegisterAsync("bob");
+        var carol = await factory.RegisterAsync("carol");
+        var chat = await Data.GroupChatAsync("team", [alice.UserId, bob.UserId, carol.UserId]);
+        var mine = await Data.MessageAsync(chat, alice.UserId, "we shipped it", TestData.T0);
+        var bobs = await Data.MessageAsync(chat, bob.UserId, "great", TestData.T0.AddMinutes(1));
+        // Recent: deleting for everyone has a time window.
+        var gone = await Data.MessageAsync(chat, alice.UserId, "oops", DateTime.UtcNow);
+        using var aliceApi = factory.CreateClient(alice.Token);
+        using var bobApi = factory.CreateClient(bob.Token);
+        using var carolApi = factory.CreateClient(carol.Token);
+        (await aliceApi.PostAsJsonAsync($"/api/chats/{chat}/read", new { lastMessageId = bobs })).EnsureSuccessStatusCode();
+
+        (await ReactAsync(bobApi, chat, mine, "🔥")).EnsureSuccessStatusCode();
+        (await ReactAsync(carolApi, chat, mine, "🔥")).EnsureSuccessStatusCode();
+        (await ReactAsync(carolApi, chat, gone, "👍")).EnsureSuccessStatusCode();
+        // One's own reaction is no news; a message deleted for everyone takes its reactions with it.
+        (await ReactAsync(aliceApi, chat, mine, "🎉")).EnsureSuccessStatusCode();
+        (await aliceApi.DeleteAsync($"/api/chats/{chat}/messages/{gone}?forEveryone=true")).EnsureSuccessStatusCode();
+
+        Assert.Equal(2, await UnreadReactionsAsync(aliceApi, chat));
+        Assert.Equal(0, await UnreadReactionsAsync(bobApi, chat));
+        Assert.Contains((await aliceApi.GetJsonAsync("/api/chats")).EnumerateArray(),
+            c => c.Id("chatId") == chat && c.GetProperty("unreadReactionCount").GetInt32() == 2);
+        // Alice's devices keep the count from the journal, without reloading the list.
+        Assert.Equal([0, 1, 2, 3], (await aliceApi.JournalAsync("ReadStateChanged"))
+            .Select(s => s.GetProperty("unreadReactionCount").GetInt32()));
+
+        // Taking a reaction back takes it from the count.
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await carolApi.DeleteAsync($"/api/chats/{chat}/messages/{mine}/reactions")).StatusCode);
+        Assert.Equal(1, await UnreadReactionsAsync(aliceApi, chat));
+
+        // Reading the chat sees them, even with no new messages to read: the pointer is already there.
+        (await aliceApi.PostAsJsonAsync($"/api/chats/{chat}/read", new { lastMessageId = bobs })).EnsureSuccessStatusCode();
+        Assert.Equal(0, await UnreadReactionsAsync(aliceApi, chat));
+        Assert.Equal(0, (await aliceApi.JournalAsync("ReadStateChanged"))[^1].GetProperty("unreadReactionCount").GetInt32());
+
+        // A reaction after that is new again; a changed one is new too.
+        (await ReactAsync(bobApi, chat, mine, "🎉")).EnsureSuccessStatusCode();
+        Assert.Equal(1, await UnreadReactionsAsync(aliceApi, chat));
+    }
 }

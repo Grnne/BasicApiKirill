@@ -270,33 +270,43 @@ public partial class MessageRepository(IDbSession db) : IMessageRepository
                 return new ReadPointerMove(ReadPointerUpdate.MessageNotFound);
 
             var current = await db.QueryFirstOrDefaultAsync<MemberReadState>(@"
-                SELECT last_read_seq AS ReadSeq, marked_unread AS MarkedUnread FROM chat_members
-                WHERE chat_id = @chatId AND user_id = @userId FOR UPDATE",
+                SELECT cm.last_read_seq AS ReadSeq, cm.marked_unread AS MarkedUnread,
+                       EXISTS (
+                           SELECT 1 FROM message_reactions r
+                           WHERE r.author_id = @userId AND r.chat_id = @chatId
+                             AND r.created_at > cm.reactions_seen_at AND r.user_id <> @userId
+                       ) AS NewReactions
+                FROM chat_members cm
+                WHERE cm.chat_id = @chatId AND cm.user_id = @userId FOR UPDATE",
                 new { chatId, userId }, ct);
             if (current is null)
                 return new ReadPointerMove(ReadPointerUpdate.NotMoved);
 
             var moves = current.ReadSeq < seq;
-            if (!moves && !current.MarkedUnread)
+            if (!moves && !current.MarkedUnread && !current.NewReactions)
                 return new ReadPointerMove(ReadPointerUpdate.NotMoved, current.ReadSeq, current.ReadSeq);
 
-            // Reading clears "marked as unread" even when there was nothing new to read.
+            // Reading clears "marked as unread" and new reactions even when there was nothing new
+            // to read. A reaction committed just after this, but made before, counts as seen: a
+            // missed heart in the list, not worth ordering reactions against reads.
             await db.ExecuteAsync(@"
                 UPDATE chat_members
                 SET last_read_seq = GREATEST(last_read_seq, @seq),
                     last_delivered_seq = GREATEST(last_delivered_seq, @seq),
-                    marked_unread = false
+                    marked_unread = false,
+                    reactions_seen_at = CASE WHEN @newReactions THEN now() ELSE reactions_seen_at END
                 WHERE chat_id = @chatId AND user_id = @userId",
-                new { chatId, userId, seq }, ct);
-            return moves
-                ? new ReadPointerMove(ReadPointerUpdate.Moved, current.ReadSeq, seq, current.MarkedUnread)
-                : new ReadPointerMove(ReadPointerUpdate.NotMoved, current.ReadSeq, current.ReadSeq, current.MarkedUnread);
+                new { chatId, userId, seq, newReactions = current.NewReactions }, ct);
+            return new ReadPointerMove(
+                moves ? ReadPointerUpdate.Moved : ReadPointerUpdate.NotMoved,
+                current.ReadSeq, moves ? seq : current.ReadSeq, current.MarkedUnread, current.NewReactions);
         }, ct: ct);
 
     private sealed class MemberReadState
     {
         public long ReadSeq { get; set; }
         public bool MarkedUnread { get; set; }
+        public bool NewReactions { get; set; }
     }
 
     public Task<ReadPointers?> GetReadPointersAsync(Guid chatId, Guid viewerId, CancellationToken ct = default) =>

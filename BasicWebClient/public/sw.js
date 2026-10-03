@@ -1,5 +1,5 @@
-// Service worker of the web client: shows push notifications about new messages and opens the
-// chat on a click. It holds no access token: everything shown comes in the notification itself
+// Service worker of the web client: shows push notifications about new messages and reactions to
+// the user's messages, and opens the chat on a click. It holds no access token: everything shown comes in the notification itself
 // (docs/api-contract-changes.md, 18.3). Plain JavaScript, copied to the build as is.
 
 const KIND_LABELS = { photo: 'Фото', video: 'Видео', voice: 'Голосовое сообщение', file: 'Файл' }
@@ -22,18 +22,21 @@ self.addEventListener('push', (event) => {
   } catch {
     payload = null
   }
-  // Only `message` exists so far; an unknown kind is skipped.
-  if (!payload || payload.kind !== 'message' || !payload.chatId) return
+  // An unknown kind is skipped.
+  if (!payload || !payload.chatId || (payload.kind !== 'message' && payload.kind !== 'reaction')) return
 
   const group = payload.chatType === 'group'
+  const reaction = payload.kind === 'reaction'
   const title = group ? payload.chatTitle || 'Группа' : payload.senderName || 'Новое сообщение'
-  const body = group && payload.messageType !== 'system' ? `${payload.senderName}: ${bodyOf(payload)}` : bodyOf(payload)
+  const text = reaction ? `${payload.emoji} на «${bodyOf(payload)}»` : bodyOf(payload)
+  const body = group && (reaction || payload.messageType !== 'system') ? `${payload.senderName}: ${text}` : text
 
   event.waitUntil(
     self.registration.showNotification(title, {
       body,
-      // One notification per chat: a newer one replaces the older.
-      tag: `chat-${payload.chatId}`,
+      // One notification per chat: a newer one replaces the older. A reaction replaces only an
+      // older reaction to the same message, never the chat's messages.
+      tag: reaction ? `reaction-${payload.messageId}` : `chat-${payload.chatId}`,
       renotify: true,
       data: { chatId: payload.chatId },
     }),

@@ -40,9 +40,14 @@ public sealed record HubSend(string Target, IReadOnlyList<string> Ids, string Me
     public static HubSend LeaveGroup(IEnumerable<Guid> userIds, Guid chatId) =>
         new("leave-group", [.. userIds.Select(id => id.ToString())], chatId.ToString(), []);
 
-    /// <summary>Recipients are chosen when it is sent: members, their devices and settings then.</summary>
-    public static HubSend Push(Guid chatId, Guid senderId, PushNotificationDto notification) =>
-        new("push", [chatId.ToString(), senderId.ToString()], "Push", ToJson([notification]));
+    /// <summary>
+    /// Recipients are chosen when it is sent: members, their devices and settings then; with
+    /// <paramref name="recipientId"/> — only that member.
+    /// </summary>
+    public static HubSend Push(Guid chatId, Guid senderId, PushNotificationDto notification, Guid? recipientId = null) =>
+        new("push", recipientId is { } only
+            ? [chatId.ToString(), senderId.ToString(), only.ToString()]
+            : [chatId.ToString(), senderId.ToString()], "Push", ToJson([notification]));
 
     private static JsonElement[] ToJson(object?[] args) =>
         [.. args.Select(a => JsonSerializer.SerializeToElement(a, a?.GetType() ?? typeof(object), OutboxEnvelope.Json))];

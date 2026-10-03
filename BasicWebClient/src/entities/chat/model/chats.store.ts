@@ -97,6 +97,7 @@ export const useChatsStore = defineStore('chats', () => {
     chat.lastReadSeq = Math.max(chat.lastReadSeq, seq)
     chat.unreadCount = 0
     chat.unreadMentionCount = 0
+    chat.unreadReactionCount = 0
     chat.markedUnread = false
   }
 

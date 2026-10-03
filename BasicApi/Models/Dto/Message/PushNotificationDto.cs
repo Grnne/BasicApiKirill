@@ -6,8 +6,15 @@ namespace BasicApi.Models.Dto.Message;
 /// </summary>
 public class PushNotificationDto
 {
-    /// <summary><c>message</c> — a new message. More kinds may come: ignore an unknown one.</summary>
-    public string Kind { get; set; } = "message";
+    public const string MessageKind = "message";
+    public const string ReactionKind = "reaction";
+
+    /// <summary>
+    /// <c>message</c> — a new message; <c>reaction</c> — a reaction to the recipient's message
+    /// (<c>emoji</c>; the sender is who reacted, the message fields are the message's). More kinds may
+    /// come: ignore an unknown one.
+    /// </summary>
+    public string Kind { get; set; } = MessageKind;
 
     public Guid ChatId { get; set; }
 
@@ -33,5 +40,9 @@ public class PushNotificationDto
 
     public int AttachmentCount { get; set; }
 
+    /// <summary>The reaction (<c>kind: reaction</c>); null for a message.</summary>
+    public string? Emoji { get; set; }
+
+    /// <summary>When the message was sent, or the reaction made.</summary>
     public DateTime CreatedAt { get; set; }
 }

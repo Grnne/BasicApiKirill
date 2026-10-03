@@ -12,8 +12,9 @@ namespace BasicApi.Features.Messages;
 public interface IReactionService
 {
     /// <summary>
-    /// Sets the user's reaction, replacing their previous one; members get <c>ReactionsChanged</c>.
-    /// The same reaction again changes nothing and sends nothing.
+    /// Sets the user's reaction, replacing their previous one; members get <c>ReactionsChanged</c>,
+    /// the message's author — also <c>ReadStateChanged</c> with the new reaction counted, and a push
+    /// notification if they are offline. The same reaction again changes nothing and sends nothing.
     /// Errors: 400 <c>INVALID_REACTION</c>, 403 <c>NOT_A_MEMBER</c>, 404 <c>MESSAGE_NOT_FOUND</c>.
     /// </summary>
     Task<MessageReactionsDto> SetAsync(Guid chatId, Guid userId, Guid messageId, string? emoji, CancellationToken ct = default);
@@ -28,6 +29,10 @@ public sealed class ReactionService(
     IMembershipService membership,
     IChatPolicy policy,
     IChatEventPublisher events,
+    IChatRepository chats,
+    IMessageRepository messages,
+    IUserRepository users,
+    TimeProvider time,
     IOptions<MessageOptions> options) : IReactionService
 {
     public const string InvalidReactionCode = "INVALID_REACTION";
@@ -68,9 +73,29 @@ public sealed class ReactionService(
                 Emoji = emoji
             };
             if (change.Changed)
+            {
                 await events.ReactionsChangedAsync(result, memberIds, ct);
+                // The author's mark in the chat list; reacting to one's own message is no news.
+                if (change.AuthorId != userId && memberIds.Contains(change.AuthorId))
+                {
+                    await ReadStateService.PublishStateAsync(chats, events, chatId, change.AuthorId, ct);
+                    if (emoji is not null)
+                        await NotifyAuthorAsync(chatId, messageId, userId, emoji, change.AuthorId, ct);
+                }
+            }
             return result;
         }, ct: ct);
+    }
+
+    private async Task NotifyAuthorAsync(
+        Guid chatId, Guid messageId, Guid reactorId, string emoji, Guid authorId, CancellationToken ct)
+    {
+        if (await messages.GetAsync(chatId, messageId, ct) is not { } message ||
+            await users.GetByIdAsync(reactorId, ct) is not { } reactor)
+            return;
+
+        await events.ReactionAddedAsync(PushNotifications.OfReaction(
+            MessageMapper.Map(message), reactorId, reactor.DisplayName, emoji, time.GetUtcNow().UtcDateTime), authorId, ct);
     }
 
     /// <summary>

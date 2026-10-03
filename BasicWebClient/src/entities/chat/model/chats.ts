@@ -167,6 +167,7 @@ export function applyChatEvent<K extends keyof JournaledEvents>(
       chat.lastReadSeq = read.lastReadSeq
       chat.unreadCount = read.unreadCount
       chat.unreadMentionCount = read.unreadMentionCount
+      chat.unreadReactionCount = read.unreadReactionCount
       chat.markedUnread = read.markedUnread
       state.countedUpTo[read.chatId] = read.lastReadSeq
       return

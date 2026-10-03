@@ -45,6 +45,14 @@ public sealed class OutboxChatEventPublisher(
         MessageReactionsDto reactions, IReadOnlyCollection<Guid> memberIds, CancellationToken ct = default) =>
         ToAllAsync(UpdateTypes.ReactionsChanged, reactions, memberIds, ct);
 
+    public Task ReactionAddedAsync(PushNotificationDto notification, Guid authorId, CancellationToken ct = default) =>
+        db.InTransactionAsync(async ct =>
+        {
+            await EnqueueAsync("ReactionAdded", ct,
+                HubSend.Push(notification.ChatId, notification.SenderId, notification, authorId));
+            return true;
+        }, ct: ct);
+
     public Task MessagesDeliveredAsync(
         ReceiptDto receipt, IReadOnlyCollection<Guid> authorIds, CancellationToken ct = default) =>
         ToAllAsync(UpdateTypes.MessagesDelivered, receipt, authorIds, ct);

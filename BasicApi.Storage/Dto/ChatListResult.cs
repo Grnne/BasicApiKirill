@@ -11,6 +11,7 @@ public class ChatListResult
     public string? CompanionUsername { get; set; }
     public int UnreadCount { get; set; }
     public int UnreadMentionCount { get; set; }
+    public int UnreadReactionCount { get; set; }
     public long LastReadSeq { get; set; }
     public bool MarkedUnread { get; set; }
 

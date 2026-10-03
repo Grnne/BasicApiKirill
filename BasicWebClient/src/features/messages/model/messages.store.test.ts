@@ -148,6 +148,20 @@ describe('reading the open chat', () => {
     expect(chats.get('chat-1')!.unreadCount).toBe(0)
   })
 
+  it('new reactions alone: the chat is read so that they count as seen', async () => {
+    const { store, chats } = await openChatWithUnread()
+    store.seen()
+    await vi.advanceTimersByTimeAsync(1_000)
+    vi.mocked(messagesApi.markRead).mockClear()
+    chats.patch('chat-1', { unreadReactionCount: 1 })
+
+    store.seen()
+    await vi.advanceTimersByTimeAsync(1_000)
+
+    expect(messagesApi.markRead).toHaveBeenCalledWith('chat-1', m1.id)
+    expect(chats.get('chat-1')!.unreadReactionCount).toBe(0)
+  })
+
   it('nothing new: no request', async () => {
     const { store } = await openChatWithUnread()
     store.seen()

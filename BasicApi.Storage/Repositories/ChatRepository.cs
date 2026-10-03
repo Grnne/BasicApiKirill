@@ -187,6 +187,20 @@ public class ChatRepository(IDbSession db) : IChatRepository
                       SELECT 1 FROM hidden_messages h WHERE h.user_id = @userId AND h.message_id = mm.message_id)
             ) AS UnreadMentionCount,
 
+            -- Others' reactions to the user's messages since they last read the chat.
+            (
+                SELECT COUNT(*)
+                FROM message_reactions r
+                INNER JOIN messages m_reacted ON m_reacted.id = r.message_id
+                WHERE r.author_id = @userId
+                  AND r.chat_id = c.id
+                  AND r.created_at > cm.reactions_seen_at
+                  AND r.user_id <> @userId
+                  AND m_reacted.deleted_at IS NULL
+                  AND NOT EXISTS (
+                      SELECT 1 FROM hidden_messages h WHERE h.user_id = @userId AND h.message_id = r.message_id)
+            ) AS UnreadReactionCount,
+
             cm.last_read_seq AS LastReadSeq,
             cm.pinned_position AS PinnedPosition,
             cm.archived_at AS ArchivedAt,

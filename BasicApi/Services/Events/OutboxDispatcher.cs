@@ -130,7 +130,8 @@ public sealed class OutboxDispatcher(
             {
                 // Slow and unreliable push services must not hold up the events behind this one.
                 pushes.Enqueue(new PushJob(Guid.Parse(send.Ids[0]), Guid.Parse(send.Ids[1]),
-                    send.Args[0].Deserialize<PushNotificationDto>(OutboxEnvelope.Json)!));
+                    send.Args[0].Deserialize<PushNotificationDto>(OutboxEnvelope.Json)!,
+                    send.Ids.Count > 2 ? Guid.Parse(send.Ids[2]) : null));
                 continue;
             }
 

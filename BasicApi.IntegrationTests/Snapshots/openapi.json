@@ -368,6 +368,11 @@
             "description": "Unread messages that mention the user.",
             "format": "int32",
             "type": "integer"
+          },
+          "unreadReactionCount": {
+            "description": "Other members' reactions to the user's messages since the user last read the chat\n(`POST /api/chats/{chatId}/read`); show a mark on the row while it is above 0.",
+            "format": "int32",
+            "type": "integer"
           }
         },
         "type": "object"
@@ -1640,6 +1645,72 @@
         },
         "type": "object"
       },
+      "PushNotificationDto": {
+        "additionalProperties": false,
+        "description": "What a push notification carries to the service worker's `push` event: enough to show it\nwithout asking the API, since the worker has no access token.",
+        "properties": {
+          "attachmentCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "attachmentKind": {
+            "description": "Media: the kind of the first file (`photo`, `video`, `file`, `voice`); null otherwise.",
+            "nullable": true,
+            "type": "string"
+          },
+          "chatId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "chatTitle": {
+            "description": "The group's title; null in a private chat — show the sender's name.",
+            "nullable": true,
+            "type": "string"
+          },
+          "chatType": {
+            "description": "`private` or `group`.",
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "When the message was sent, or the reaction made.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "emoji": {
+            "description": "The reaction (`kind: reaction`); null for a message.",
+            "nullable": true,
+            "type": "string"
+          },
+          "kind": {
+            "description": "`message` — a new message; `reaction` — a reaction to the recipient's message\n            (`emoji`; the sender is who reacted, the message fields are the message's). More kinds may\n            come: ignore an unknown one.",
+            "type": "string"
+          },
+          "messageId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "messageType": {
+            "description": "As `MessageDto.type`: `text`, `media`, `system`.",
+            "type": "string"
+          },
+          "senderId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "senderName": {
+            "type": "string"
+          },
+          "seq": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "text": {
+            "description": "The start of the text (up to 100 characters); for media — of the caption, may be empty.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "PushSubscriptionDto": {
         "additionalProperties": false,
         "description": "A browser push subscription, as `PushSubscription.toJSON()` gives it.",
@@ -1701,7 +1772,7 @@
       },
       "ReadStateDto": {
         "additionalProperties": false,
-        "description": "`ReadStateChanged`: the user's reading of a chat changed on one of their devices —\n            the others update the counters and the mark from it.",
+        "description": "`ReadStateChanged`: the chat's counters changed for the user — they read it on one of\n            their devices, or a reaction to their message came or went. Devices take the counters and the\n            mark from it as they are.",
         "properties": {
           "chatId": {
             "format": "uuid",
@@ -1719,6 +1790,11 @@
             "type": "integer"
           },
           "unreadMentionCount": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "unreadReactionCount": {
+            "description": "As `ChatListItemDto.unreadReactionCount`.",
             "format": "int32",
             "type": "integer"
           }

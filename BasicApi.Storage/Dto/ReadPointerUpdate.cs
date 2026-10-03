@@ -15,7 +15,9 @@ public enum ReadPointerUpdate
 /// <param name="FromSeq">The pointer before the move.</param>
 /// <param name="ToSeq">The pointer after it; equal to <paramref name="FromSeq"/> when it did not move.</param>
 /// <param name="ClearedMark">The chat was marked as unread, and reading it cleared the mark.</param>
-public sealed record ReadPointerMove(ReadPointerUpdate Update, long FromSeq = 0, long ToSeq = 0, bool ClearedMark = false);
+/// <param name="ClearedReactions">There were new reactions to the member's messages; reading saw them.</param>
+public sealed record ReadPointerMove(
+    ReadPointerUpdate Update, long FromSeq = 0, long ToSeq = 0, bool ClearedMark = false, bool ClearedReactions = false);
 
 /// <summary>A member's pointer moved in a chat from one seq to another.</summary>
 public sealed record PointerMove(Guid ChatId, long FromSeq, long ToSeq);

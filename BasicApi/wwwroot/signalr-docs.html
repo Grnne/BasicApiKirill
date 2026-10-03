@@ -492,12 +492,12 @@
                 <span class="event-name">ReadStateChanged</span>
             </div>
             <div class="method-description" style="margin-top: 0.5rem;">
-                На одном из ваших устройств сдвинулся указатель прочтения или изменилась метка «непрочитано». Получают все ваши устройства.
+                Изменились счётчики чата: на одном из ваших устройств сдвинулся указатель прочтения или изменилась метка «непрочитано», либо на ваше сообщение поставили или сняли реакцию. Получают все ваши устройства.
             </div>
             <table>
                 <thead><tr><th>Аргумент</th><th>Тип</th><th>Описание</th></tr></thead>
                 <tbody>
-                    <tr><td><code>state</code></td><td class="type-cell">object</td><td><code>chatId</code>, <code>lastReadSeq</code>, <code>unreadCount</code>, <code>unreadMentionCount</code>, <code>markedUnread</code></td></tr>
+                    <tr><td><code>state</code></td><td class="type-cell">object</td><td><code>chatId</code>, <code>lastReadSeq</code>, <code>unreadCount</code>, <code>unreadMentionCount</code>, <code>unreadReactionCount</code>, <code>markedUnread</code></td></tr>
                 </tbody>
             </table>
             <div class="note">
@@ -556,6 +556,7 @@
                     <tr><td><code>lastMessage</code></td><td class="type-cell">MessageDto?</td><td><code>null</code> у только что созданного чата</td></tr>
                     <tr><td><code>unreadCount</code></td><td class="type-cell">int</td><td>Непрочитанные (свои сообщения не считаются)</td></tr>
                     <tr><td><code>unreadMentionCount</code></td><td class="type-cell">int</td><td>Непрочитанные сообщения, где упомянут пользователь</td></tr>
+                    <tr><td><code>unreadReactionCount</code></td><td class="type-cell">int</td><td>Реакции других на ваши сообщения с тех пор, как вы читали чат</td></tr>
                     <tr><td><code>lastReadSeq</code></td><td class="type-cell">long</td><td>До какого <code>seq</code> вы прочитали</td></tr>
                     <tr><td><code>markedUnread</code></td><td class="type-cell">boolean</td><td>Вы пометили чат непрочитанным</td></tr>
                     <tr><td><code>outboxDeliveredSeq</code></td><td class="type-cell">long</td><td>Ваши сообщения до этого <code>seq</code> доставлены</td></tr>

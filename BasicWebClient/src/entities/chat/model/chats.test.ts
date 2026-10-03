@@ -12,11 +12,12 @@ function apply<K extends JournaledEventName>(state: ChatsState, type: K, payload
   return effects
 }
 
-const readState = (lastReadSeq: number, unreadCount: number) => ({
+const readState = (lastReadSeq: number, unreadCount: number, unreadReactionCount = 0) => ({
   chatId: 'chat-1',
   lastReadSeq,
   unreadCount,
   unreadMentionCount: 0,
+  unreadReactionCount,
   markedUnread: false,
 })
 
@@ -109,6 +110,15 @@ describe('messages and unread counters', () => {
     apply(state, 'ReadStateChanged', readState(2, 0))
     apply(state, 'MessageCreated', m3)
     expect(state.byId['chat-1']!.unreadCount).toBe(1)
+  })
+
+  it('new reactions to my messages come with the counters, without moving the row', () => {
+    const state = fromSnapshot([chat({ lastMessage: message({ seq: 3 }), lastReadSeq: 3 })])
+
+    apply(state, 'ReadStateChanged', readState(3, 0, 2))
+
+    expect(state.byId['chat-1']!.unreadReactionCount).toBe(2)
+    expect(state.byId['chat-1']!.unreadCount).toBe(0)
   })
 
   it('a catch-up of events missed while offline adds them', () => {

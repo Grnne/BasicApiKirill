@@ -53,6 +53,18 @@ describe('service worker', () => {
     )
   })
 
+  it('a reaction to my message: who and what, apart from the messages of the chat', async () => {
+    const reaction = { ...base, kind: 'reaction', emoji: '🔥', messageId: 'm1' }
+    await worker.fire('push', push({ ...reaction, chatType: 'private' }))
+    await worker.fire('push', push({ ...reaction, chatType: 'group', chatTitle: 'Команда', text: '', attachmentKind: 'photo', attachmentCount: 1 }))
+
+    expect(worker.self.registration.showNotification).toHaveBeenNthCalledWith(1, 'Алиса', {
+      body: '🔥 на «привет»', tag: 'reaction-m1', renotify: true, data: { chatId: 'c1' },
+    })
+    expect(worker.self.registration.showNotification).toHaveBeenNthCalledWith(2, 'Команда',
+      expect.objectContaining({ body: 'Алиса: 🔥 на «Фото»' }))
+  })
+
   it('an unknown kind or a broken payload shows nothing', async () => {
     await worker.fire('push', push({ kind: 'something_new', chatId: 'c1' }))
     await worker.fire('push', { data: { json: () => { throw new Error('not json') } } })

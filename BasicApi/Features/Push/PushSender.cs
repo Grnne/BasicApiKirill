@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
+using BasicApi.Models.Dto.Message;
 using BasicApi.Services;
 using BasicApi.Services.Events;
 using BasicApi.Storage.Interfaces;
@@ -7,8 +8,9 @@ using BasicApi.Storage.Interfaces;
 namespace BasicApi.Features.Push;
 
 /// <summary>
-/// Sends push notifications of new messages to members who are offline, except the sender and
-/// those who muted the chat or blocked the sender; online members get the message over the hub.
+/// Sends push notifications of new messages (and of reactions, to the message's author) to members
+/// who are offline, except the sender and those who muted the chat or blocked the sender; online
+/// members get the event over the hub.
 /// </summary>
 public sealed class PushSender(
     PushQueue queue,
@@ -48,7 +50,7 @@ public sealed class PushSender(
         await using var scope = scopes.CreateAsyncScope();
         var devices = scope.ServiceProvider.GetRequiredService<IDeviceRepository>();
 
-        var targets = await devices.GetPushTargetsAsync(job.ChatId, job.SenderId, ct);
+        var targets = await devices.GetPushTargetsAsync(job.ChatId, job.SenderId, job.RecipientId, ct);
         if (targets.Count == 0)
             return;
         var online = await status.GetOnlineUserIdsAsync(targets.Select(t => t.UserId).ToHashSet());
@@ -60,8 +62,9 @@ public sealed class PushSender(
         notification.ChatType = offline[0].ChatType;
         notification.ChatTitle = offline[0].ChatTitle;
         var payload = JsonSerializer.Serialize(notification, OutboxEnvelope.Json);
-        // A newer notification of the chat replaces one the device has not received yet.
-        var topic = job.ChatId.ToString("N");
+        // A newer notification of the chat replaces one the device has not received yet; a reaction
+        // replaces only an older reaction to the same message, never a message.
+        var topic = (notification.Kind == PushNotificationDto.ReactionKind ? notification.MessageId : job.ChatId).ToString("N");
 
         var gone = new ConcurrentBag<string>();
         await Parallel.ForEachAsync(offline, new ParallelOptions { MaxDegreeOfParallelism = Parallelism, CancellationToken = ct },

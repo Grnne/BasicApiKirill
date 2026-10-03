@@ -432,7 +432,7 @@ export const useMessagesStore = defineStore('messages', () => {
     const chat = chats.get(id)
 
     const unread =
-      !chat || chat.unreadCount > 0 || chat.markedUnread ||
+      !chat || chat.unreadCount > 0 || chat.markedUnread || chat.unreadReactionCount > 0 ||
       (last.senderId !== session.user?.userId && last.seq > chat.lastReadSeq)
     if (!unread && unsentRead?.chatId !== id) return
 
