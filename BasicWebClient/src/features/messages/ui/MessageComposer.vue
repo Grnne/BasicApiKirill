@@ -543,7 +543,7 @@ function onKeydown(event: KeyboardEvent): void {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 10px max(12px, calc((100% - var(--column)) / 2));
   border-top: 1px solid var(--border);
   background: var(--surface-solid);
 }

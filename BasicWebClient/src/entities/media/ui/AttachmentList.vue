@@ -102,6 +102,10 @@ function boxStyle(a: AttachmentDto): Record<string, string> {
   height: 100%;
   object-fit: cover;
 }
+/* A tall picture alone would take the whole screen. */
+.grid:not(.album) .tile img {
+  max-height: 420px;
+}
 .placeholder {
   display: grid;
   place-items: center;

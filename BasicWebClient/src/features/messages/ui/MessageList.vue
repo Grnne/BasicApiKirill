@@ -197,7 +197,7 @@ function startsNewDay(index: number): boolean {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 14px 16px;
+  padding: 14px max(16px, calc((100% - var(--column)) / 2));
   overflow-y: auto;
 }
 .note {

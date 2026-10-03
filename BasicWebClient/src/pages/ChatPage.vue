@@ -262,12 +262,14 @@ const { logout: onLogout } = useLogout()
   }
 }
 .body {
+  /* Wider on big screens: longer chat titles and previews fit. */
+  --sidebar: clamp(280px, 22vw, 380px);
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
+  grid-template-columns: var(--sidebar) minmax(0, 1fr);
   overflow: hidden;
 }
 .body.with-log {
-  grid-template-columns: 300px minmax(0, 1fr) 320px;
+  grid-template-columns: var(--sidebar) minmax(0, 1fr) 320px;
 }
 
 @media (max-width: 1100px) {
