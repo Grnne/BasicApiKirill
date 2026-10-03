@@ -115,12 +115,18 @@ describe('the tab in front', () => {
     expect(browser.show).not.toHaveBeenCalled()
   })
 
-  it('no sound unless the user asked for it', () => {
+  it('the sound is on by default; turned off, it stays off after a reload', () => {
     start()
+    emit('ChatListUpdated', 'chat-1', message())
+    expect(sound.chime).toHaveBeenCalledOnce()
 
+    useNotifierStore().setSound(false)
+    setActivePinia(createPinia())
+    start()
     emit('ChatListUpdated', 'chat-1', message())
 
-    expect(sound.chime).not.toHaveBeenCalled()
+    expect(useNotifierStore().sound).toBe(false)
+    expect(sound.chime).toHaveBeenCalledOnce()
   })
 })
 

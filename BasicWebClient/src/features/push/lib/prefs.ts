@@ -2,7 +2,7 @@
 // Storage may be unavailable (private mode, blocked site data): then the defaults hold.
 
 const TURNED_OFF = 'notifications.off'
-const SOUND = 'notifications.sound'
+const SOUND_OFF = 'notifications.sound.off'
 
 function read(key: string): boolean {
   try {
@@ -25,6 +25,6 @@ function write(key: string, on: boolean): void {
 export const turnedOff = (): boolean => read(TURNED_OFF)
 export const setTurnedOff = (off: boolean): void => write(TURNED_OFF, off)
 
-/** A sound for new messages; off by default. */
-export const sound = (): boolean => read(SOUND)
-export const setSound = (on: boolean): void => write(SOUND, on)
+/** A sound for new messages; on by default, until turned off here. */
+export const sound = (): boolean => !read(SOUND_OFF)
+export const setSound = (on: boolean): void => write(SOUND_OFF, !on)
