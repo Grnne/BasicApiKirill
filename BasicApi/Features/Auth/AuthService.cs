@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using BasicApi.Hubs;
 using BasicApi.Middleware.Exceptions;
@@ -146,6 +147,27 @@ public sealed class AuthService(
         await devices.DeleteAllExceptAsync(userId, sessionFamilyId, ct);
         liveness.ForgetAll();
         hubConnections.AbortUserExcept(userId, sessionFamilyId);
+    }
+
+    /// <summary>
+    /// The administrator's reset for a user who forgot the password: a new random password, every
+    /// session and push subscription of the user ended. Null — no active user with this login. Run
+    /// from the command line it is another process: the running server's own caches do not learn of
+    /// it: requests stop within 15 s, hub connections at its next session check (a minute).
+    /// </summary>
+    public async Task<string?> ResetPasswordAsync(string username, CancellationToken ct = default)
+    {
+        if (await userRepository.GetIdByUsernameAsync(username, ct) is not { } userId)
+            return null;
+
+        var password = Convert.ToBase64String(RandomNumberGenerator.GetBytes(15))
+            .Replace('+', '-').Replace('/', '_');
+        await userRepository.SetPasswordHashAsync(userId, BCrypt.Net.BCrypt.HashPassword(password), ct);
+        await sessionService.RevokeAllForUserAsync(userId, ct);
+        await devices.DeleteAllExceptAsync(userId, null, ct);
+        liveness.ForgetAll();
+        hubConnections.AbortUser(userId);
+        return password;
     }
 
     /// <summary>

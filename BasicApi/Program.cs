@@ -92,6 +92,14 @@ public class Program
 
         var app = builder.Build();
 
+        // The administrator's password reset, against the configured database; nothing else starts.
+        if (Features.Auth.ResetPasswordCommand.IsRequested(args))
+        {
+            Environment.ExitCode = Features.Auth.ResetPasswordCommand
+                .RunAsync(app.Services, args, Console.Out, Console.Error).GetAwaiter().GetResult();
+            return;
+        }
+
         // The real client IP and scheme from proxy headers come before everything else,
         // so that logs, limits and sessions see the client, not Caddy.
         app.UseForwardedHeaders();
