@@ -208,4 +208,39 @@ public class ReactionsTests(PostgresFixture db) : DbTest(db)
         (await ReactAsync(bobApi, chat, mine, "🎉")).EnsureSuccessStatusCode();
         Assert.Equal(1, await UnreadReactionsAsync(aliceApi, chat));
     }
+
+    [Fact]
+    public async Task TheAuthorWithTheClientOpen_GetsANotification_TheOthersDoNot()
+    {
+        await using var factory = new ApiFactory(Db.ConnectionString,
+            new Dictionary<string, string?> { ["RateLimiting:CommandsPer10Seconds"] = "1000" });
+        var alice = await factory.RegisterAsync("alice");
+        var bob = await factory.RegisterAsync("bob");
+        var carol = await factory.RegisterAsync("carol");
+        var chat = await Data.GroupChatAsync("team", [alice.UserId, bob.UserId, carol.UserId]);
+        var mine = await Data.MessageAsync(chat, alice.UserId, "we shipped it", TestData.T0);
+        using var bobApi = factory.CreateClient(bob.Token);
+
+        var gotIt = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var aliceHub = factory.CreateHubConnection(alice.Token);
+        aliceHub.On<JsonElement>("Notification", n => gotIt.TrySetResult(n));
+        await aliceHub.StartAsync();
+        var carolGot = false;
+        await using var carolHub = factory.CreateHubConnection(carol.Token);
+        carolHub.On<JsonElement>("Notification", _ => carolGot = true);
+        await carolHub.StartAsync();
+
+        (await ReactAsync(bobApi, chat, mine, "🔥")).EnsureSuccessStatusCode();
+
+        var n = await gotIt.Task.WaitAsync(Wait);
+        Assert.Equal("reaction", n.GetProperty("kind").GetString());
+        Assert.Equal("🔥", n.GetProperty("emoji").GetString());
+        Assert.Equal(bob.UserId, n.Id("senderId"));
+        Assert.Equal("we shipped it", n.GetProperty("text").GetString());
+        Assert.Equal("group", n.GetProperty("chatType").GetString());
+        Assert.Equal("team", n.GetProperty("chatTitle").GetString());
+        // Not journaled: the counter is, the notification is only for who is here now.
+        Assert.Empty(await factory.CreateClient(alice.Token).JournalAsync("Notification"));
+        Assert.False(carolGot);
+    }
 }

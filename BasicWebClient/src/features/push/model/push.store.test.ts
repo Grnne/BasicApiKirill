@@ -30,6 +30,7 @@ const subscription = () => {
 beforeEach(() => {
   setActivePinia(createPinia())
   vi.clearAllMocks()
+  localStorage.clear()
   vi.mocked(pushApi.getPushConfig).mockResolvedValue({ enabled: true, vapidPublicKey: 'BKey' })
   vi.mocked(browser.permission).mockReturnValue('default')
   vi.mocked(browser.currentSubscription).mockResolvedValue(null)
@@ -99,6 +100,52 @@ describe('push', () => {
 
     expect(pushApi.saveSubscription).toHaveBeenCalledWith(sub.json)
     expect(browser.requestPermission).not.toHaveBeenCalled()
+  })
+
+  it('on by default: the first click after sign-in asks, once per page load', async () => {
+    vi.mocked(browser.requestPermission).mockResolvedValue('default') // the user closed the question
+    const push = usePushStore()
+
+    await push.askOnce()
+    await push.askOnce()
+
+    expect(browser.requestPermission).toHaveBeenCalledOnce()
+  })
+
+  it('turned off by the user: not asked again, and the open client shows nothing', async () => {
+    await usePushStore().disable()
+    await usePushStore().askOnce()
+    expect(browser.requestPermission).not.toHaveBeenCalled()
+
+    // The next page load, the permission given long ago: still off.
+    setActivePinia(createPinia())
+    vi.mocked(browser.permission).mockReturnValue('granted')
+    const reloaded = usePushStore()
+    await reloaded.resync()
+
+    expect(reloaded.notifying).toBe(false)
+    expect(browser.subscribe).not.toHaveBeenCalled()
+  })
+
+  it('the permission is asked even where the server sends no push: the open client shows its own', async () => {
+    vi.mocked(pushApi.getPushConfig).mockResolvedValue({ enabled: false, vapidPublicKey: null })
+    vi.mocked(browser.requestPermission).mockResolvedValue('granted')
+    const push = usePushStore()
+
+    await push.enable()
+
+    expect(push.state).toBe('unavailable')
+    expect(push.notifying).toBe(true)
+  })
+
+  it('allowed before, but logout dropped the subscription: the next sign-in subscribes unasked', async () => {
+    vi.mocked(browser.permission).mockReturnValue('granted')
+    vi.mocked(browser.subscribe).mockResolvedValue(subscription())
+
+    await usePushStore().resync()
+
+    expect(browser.requestPermission).not.toHaveBeenCalled()
+    expect(browser.subscribe).toHaveBeenCalledWith('BKey')
   })
 
   it('logout: the server and the browser both forget the subscription, and a failure does not stop it', async () => {

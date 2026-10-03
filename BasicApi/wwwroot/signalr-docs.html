@@ -832,6 +832,27 @@
             </div>
         </div>
 
+        <div class="event-card">
+            <div class="event-header">
+                <span class="direction-badge server-client">Server → Client</span>
+                <span class="event-name">Notification</span>
+            </div>
+            <div class="method-description" style="margin-top: 0.5rem;">
+                То, что показал бы push, будь клиент закрыт: пока — реакция на ваше сообщение. Получают все ваши
+                открытые соединения; в журнал не пишется (счётчик реакций — в <code>ReadStateChanged</code>).
+            </div>
+            <table>
+                <thead><tr><th>Аргумент</th><th>Тип</th><th>Описание</th></tr></thead>
+                <tbody>
+                    <tr><td><code>notification</code></td><td class="type-cell">PushNotificationDto</td><td>Та же полезная нагрузка, что у push: <code>kind</code>, <code>emoji</code>, <code>chatId</code>, <code>chatType</code>, <code>chatTitle</code>, <code>senderId</code>, <code>senderName</code>, <code>messageId</code>, <code>text</code>…</td></tr>
+                </tbody>
+            </table>
+            <div class="note">
+                <strong>Клиент:</strong> показать уведомление, если приложение не на экране; заглушённый чат и
+                заблокированного отправителя клиент проверяет сам.
+            </div>
+        </div>
+
         <!-- ==================== СОЕДИНЕНИЕ ==================== -->
         <h2>🔄 Соединение</h2>
 

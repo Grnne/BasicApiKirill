@@ -145,7 +145,7 @@ public class ReactionServiceTests
     {
         _chatRepoMock.Setup(r => r.GetMemberIdsAsync(_chatId, It.IsAny<CancellationToken>())).ReturnsAsync([_userId, _authorId]);
         _chatRepoMock.Setup(r => r.GetChatListItemAsync(_chatId, _authorId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ChatListResult { ChatId = _chatId, LastReadSeq = 4, UnreadReactionCount = 1 });
+            .ReturnsAsync(new ChatListResult { ChatId = _chatId, Type = "group", Title = "Кино", LastReadSeq = 4, UnreadReactionCount = 1 });
         _messagesMock.Setup(r => r.GetAsync(_chatId, _messageId, It.IsAny<CancellationToken>())).ReturnsAsync(new MessageWithSender
         {
             Id = _messageId, ChatId = _chatId, SenderId = _authorId, SenderName = "Алиса", Text = "Пойдём в кино?",
@@ -168,7 +168,8 @@ public class ReactionServiceTests
             _authorId, It.IsAny<CancellationToken>()), Times.Once);
         _eventsMock.Verify(e => e.ReactionAddedAsync(
             It.Is<PushNotificationDto>(n => n.Kind == "reaction" && n.Emoji == "👍" && n.SenderId == _userId &&
-                                            n.SenderName == "Боб" && n.MessageId == _messageId && n.Text == "Пойдём в кино?"),
+                                            n.SenderName == "Боб" && n.MessageId == _messageId && n.Text == "Пойдём в кино?" &&
+                                            n.ChatType == "group" && n.ChatTitle == "Кино"),
             _authorId, It.IsAny<CancellationToken>()), Times.Once);
     }
 

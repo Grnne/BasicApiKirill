@@ -4,6 +4,8 @@ import { watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { useAuthStore } from '@/features/auth/model/auth.store'
+import { useChatListStore } from '@/features/chat-list/model/chat-list.store'
+import { useNotifierStore } from '@/features/push/model/notifier.store'
 import { usePushStore } from '@/features/push/model/push.store'
 import { useRealtimeSession } from '@/features/realtime/lib/useRealtimeSession'
 import { useLogout } from '@/pages/lib/useLogout'
@@ -23,14 +25,29 @@ watch(
   },
 )
 
-// Push: a subscription this browser holds follows whoever signs in.
+// Notifications: a push subscription this browser holds follows whoever signs in; the open client
+// shows its own while signed in. On by default: the first click after sign-in asks the browser.
 const push = usePushStore()
+const notifier = useNotifierStore()
+const chatList = useChatListStore()
 watch(
   () => auth.isAuthenticated,
   (signedIn) => {
-    if (signedIn) void push.resync()
+    if (signedIn) {
+      void push.resync()
+      notifier.start(() => chatList.selectedChatId)
+    } else {
+      notifier.stop()
+    }
   },
   { immediate: true },
+)
+document.addEventListener(
+  'click',
+  () => {
+    if (auth.isAuthenticated) void push.askOnce()
+  },
+  true,
 )
 
 // A click on a notification while the client is open: the service worker asks to open the chat.

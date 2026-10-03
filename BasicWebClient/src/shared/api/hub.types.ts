@@ -17,6 +17,7 @@ import type {
   MessageReactionsDto,
   PinnedChatsDto,
   PrivacySettingsDto,
+  PushNotificationDto,
   ReadStateDto,
   ReceiptDto,
   UserUpdatedDto,
@@ -55,6 +56,8 @@ export type HubEvents = {
   ChatListUpdated: (chatId: string, message: MessageDto) => void
   UserOnlineChanged: (userId: string, isOnline: boolean) => void
   TypingChanged: (chatId: string, userId: string, isTyping: boolean) => void
+  /** What push would show if the client were closed (a reaction to the user's message); not journaled. */
+  Notification: (notification: PushNotificationDto) => void
 }
 
 export type HubEventName = keyof HubEvents
@@ -88,6 +91,7 @@ export const HUB_EVENT_NAMES: readonly HubEventName[] = [
   'ChatListUpdated',
   'UserOnlineChanged',
   'TypingChanged',
+  'Notification',
 ]
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'reconnecting'

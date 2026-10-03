@@ -48,7 +48,7 @@ public sealed class SignalRChatEventPublisher(IHubContext<ChatHub> hub, HubConne
             : hub.Clients.Users(ToStrings(memberIds)).SendAsync("ReactionsChanged", reactions, ct);
 
     public Task ReactionAddedAsync(PushNotificationDto notification, Guid authorId, CancellationToken ct = default) =>
-        Task.CompletedTask; // push goes through the outbox only
+        hub.Clients.User(authorId.ToString()).SendAsync("Notification", notification, ct); // push goes through the outbox only
 
     public Task MessagesDeliveredAsync(
         ReceiptDto receipt, IReadOnlyCollection<Guid> authorIds, CancellationToken ct = default) =>

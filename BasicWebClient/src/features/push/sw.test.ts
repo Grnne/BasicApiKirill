@@ -65,6 +65,14 @@ describe('service worker', () => {
       expect.objectContaining({ body: 'Алиса: 🔥 на «Фото»' }))
   })
 
+  it('the open client asks for the same notification as push would show', async () => {
+    await worker.fire('message', { data: { type: 'show', payload: { ...base, chatType: 'private' } } })
+    await worker.fire('message', { data: { type: 'something-else' } })
+
+    expect(worker.self.registration.showNotification).toHaveBeenCalledOnce()
+    expect(worker.self.registration.showNotification).toHaveBeenCalledWith('Алиса', expect.objectContaining({ tag: 'chat-c1' }))
+  })
+
   it('an unknown kind or a broken payload shows nothing', async () => {
     await worker.fire('push', push({ kind: 'something_new', chatId: 'c1' }))
     await worker.fire('push', { data: { json: () => { throw new Error('not json') } } })

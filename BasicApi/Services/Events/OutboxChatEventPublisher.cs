@@ -49,6 +49,7 @@ public sealed class OutboxChatEventPublisher(
         db.InTransactionAsync(async ct =>
         {
             await EnqueueAsync("ReactionAdded", ct,
+                HubSend.User(authorId, "Notification", notification),
                 HubSend.Push(notification.ChatId, notification.SenderId, notification, authorId));
             return true;
         }, ct: ct);

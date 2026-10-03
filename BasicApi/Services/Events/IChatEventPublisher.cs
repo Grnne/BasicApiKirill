@@ -34,7 +34,10 @@ public interface IChatEventPublisher
     /// <summary><c>ReactionsChanged</c> with the message's reactions to all participants.</summary>
     Task ReactionsChangedAsync(MessageReactionsDto reactions, IReadOnlyCollection<Guid> memberIds, CancellationToken ct = default);
 
-    /// <summary>A push notification of a reaction to the author of the message, if they are offline.</summary>
+    /// <summary>
+    /// <c>Notification</c> of a reaction to the author of the message: to their open connections (not
+    /// journaled), and a push if they are offline.
+    /// </summary>
     Task ReactionAddedAsync(PushNotificationDto notification, Guid authorId, CancellationToken ct = default);
 
     /// <summary><c>MessagesDelivered</c> to the authors whose messages the member's device received.</summary>

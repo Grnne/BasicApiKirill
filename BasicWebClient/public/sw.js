@@ -1,5 +1,6 @@
-// Service worker of the web client: shows push notifications about new messages and reactions to
-// the user's messages, and opens the chat on a click. It holds no access token: everything shown comes in the notification itself
+// Service worker of the web client: shows notifications about new messages and reactions to the
+// user's messages — from push when the client is closed, from the open client when its tab is not
+// on screen — and opens the chat on a click. It holds no access token: everything shown comes in the notification itself
 // (docs/api-contract-changes.md, 18.3). Plain JavaScript, copied to the build as is.
 
 const KIND_LABELS = { photo: 'Фото', video: 'Видео', voice: 'Голосовое сообщение', file: 'Файл' }
@@ -15,15 +16,11 @@ function bodyOf(payload) {
 self.addEventListener('install', () => self.skipWaiting())
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()))
 
-self.addEventListener('push', (event) => {
-  let payload = null
-  try {
-    payload = event.data ? event.data.json() : null
-  } catch {
-    payload = null
+/** Shows a notification of the push payload's shape (PushNotificationDto); an unknown kind is skipped. */
+function show(payload) {
+  if (!payload || !payload.chatId || (payload.kind !== 'message' && payload.kind !== 'reaction')) {
+    return Promise.resolve()
   }
-  // An unknown kind is skipped.
-  if (!payload || !payload.chatId || (payload.kind !== 'message' && payload.kind !== 'reaction')) return
 
   const group = payload.chatType === 'group'
   const reaction = payload.kind === 'reaction'
@@ -31,16 +28,30 @@ self.addEventListener('push', (event) => {
   const text = reaction ? `${payload.emoji} на «${bodyOf(payload)}»` : bodyOf(payload)
   const body = group && (reaction || payload.messageType !== 'system') ? `${payload.senderName}: ${text}` : text
 
-  event.waitUntil(
-    self.registration.showNotification(title, {
-      body,
-      // One notification per chat: a newer one replaces the older. A reaction replaces only an
-      // older reaction to the same message, never the chat's messages.
-      tag: reaction ? `reaction-${payload.messageId}` : `chat-${payload.chatId}`,
-      renotify: true,
-      data: { chatId: payload.chatId },
-    }),
-  )
+  return self.registration.showNotification(title, {
+    body,
+    // One notification per chat: a newer one replaces the older — also the same one shown by
+    // several open tabs. A reaction replaces only an older reaction to the same message.
+    tag: reaction ? `reaction-${payload.messageId}` : `chat-${payload.chatId}`,
+    renotify: true,
+    data: { chatId: payload.chatId },
+  })
+}
+
+self.addEventListener('push', (event) => {
+  let payload = null
+  try {
+    payload = event.data ? event.data.json() : null
+  } catch {
+    payload = null
+  }
+  event.waitUntil(show(payload))
+})
+
+// The open client, its tab not on screen, asks for the same notification push would show.
+self.addEventListener('message', (event) => {
+  const data = event.data
+  if (data && data.type === 'show') event.waitUntil(show(data.payload))
 })
 
 self.addEventListener('notificationclick', (event) => {

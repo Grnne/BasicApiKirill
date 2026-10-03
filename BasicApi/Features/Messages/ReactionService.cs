@@ -3,6 +3,8 @@ using BasicApi.Models.Dto.Message;
 using BasicApi.Services;
 using BasicApi.Services.Events;
 using BasicApi.Storage;
+using BasicApi.Storage.Dto;
+using BasicApi.Storage.Entities;
 using BasicApi.Storage.Interfaces;
 using Microsoft.Extensions.Options;
 
@@ -13,8 +15,9 @@ public interface IReactionService
 {
     /// <summary>
     /// Sets the user's reaction, replacing their previous one; members get <c>ReactionsChanged</c>,
-    /// the message's author — also <c>ReadStateChanged</c> with the new reaction counted, and a push
-    /// notification if they are offline. The same reaction again changes nothing and sends nothing.
+    /// the message's author — also <c>ReadStateChanged</c> with the new reaction counted, and a
+    /// <c>Notification</c> (a push if they are offline). The same reaction again changes nothing
+    /// and sends nothing.
     /// Errors: 400 <c>INVALID_REACTION</c>, 403 <c>NOT_A_MEMBER</c>, 404 <c>MESSAGE_NOT_FOUND</c>.
     /// </summary>
     Task<MessageReactionsDto> SetAsync(Guid chatId, Guid userId, Guid messageId, string? emoji, CancellationToken ct = default);
@@ -76,11 +79,12 @@ public sealed class ReactionService(
             {
                 await events.ReactionsChangedAsync(result, memberIds, ct);
                 // The author's mark in the chat list; reacting to one's own message is no news.
-                if (change.AuthorId != userId && memberIds.Contains(change.AuthorId))
+                if (change.AuthorId != userId &&
+                    await chats.GetChatListItemAsync(chatId, change.AuthorId, ct) is { } authorRow)
                 {
-                    await ReadStateService.PublishStateAsync(chats, events, chatId, change.AuthorId, ct);
+                    await events.ReadStateChangedAsync(ReadStateService.StateOf(authorRow), change.AuthorId, ct);
                     if (emoji is not null)
-                        await NotifyAuthorAsync(chatId, messageId, userId, emoji, change.AuthorId, ct);
+                        await NotifyAuthorAsync(authorRow, messageId, userId, emoji, change.AuthorId, ct);
                 }
             }
             return result;
@@ -88,14 +92,17 @@ public sealed class ReactionService(
     }
 
     private async Task NotifyAuthorAsync(
-        Guid chatId, Guid messageId, Guid reactorId, string emoji, Guid authorId, CancellationToken ct)
+        ChatListResult chat, Guid messageId, Guid reactorId, string emoji, Guid authorId, CancellationToken ct)
     {
-        if (await messages.GetAsync(chatId, messageId, ct) is not { } message ||
+        if (await messages.GetAsync(chat.ChatId, messageId, ct) is not { } message ||
             await users.GetByIdAsync(reactorId, ct) is not { } reactor)
             return;
 
-        await events.ReactionAddedAsync(PushNotifications.OfReaction(
-            MessageMapper.Map(message), reactorId, reactor.DisplayName, emoji, time.GetUtcNow().UtcDateTime), authorId, ct);
+        var notification = PushNotifications.OfReaction(
+            MessageMapper.Map(message), reactorId, reactor.DisplayName, emoji, time.GetUtcNow().UtcDateTime);
+        notification.ChatType = chat.Type;
+        notification.ChatTitle = chat.Type == ChatTypes.Group ? chat.Title : null;
+        await events.ReactionAddedAsync(notification, authorId, ct);
     }
 
     /// <summary>

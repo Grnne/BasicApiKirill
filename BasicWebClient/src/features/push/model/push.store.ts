@@ -1,9 +1,10 @@
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import { describeError } from '@/shared/api/problem'
 import * as pushApi from '../api/push.api'
 import * as browser from '../lib/browser'
+import * as prefs from '../lib/prefs'
 
 /**
  * unsupported — the browser cannot; unavailable — the server sends no push; denied — the user
@@ -11,17 +12,28 @@ import * as browser from '../lib/browser'
  */
 export type PushState = 'unsupported' | 'unavailable' | 'denied' | 'off' | 'on'
 
-/** Push notifications of this device. Turned on only by the user's own click (enable). */
+/**
+ * Notifications of this device: push while the client is closed, and the browser's permission the
+ * open client shows its own with. On by default — asked on the first click after sign-in — until
+ * the user turns them off here.
+ */
 export const usePushStore = defineStore('push', () => {
   const state = ref<PushState>('off')
   const busy = ref(false)
   const error = ref<string | null>(null)
+  const turnedOff = ref(prefs.turnedOff())
+  const permission = ref<NotificationPermission>(browser.permission())
+  let asked = false
+
+  /** The open client may show notifications: allowed by the browser and not turned off here. */
+  const notifying = computed(() => browser.isSupported() && permission.value === 'granted' && !turnedOff.value)
 
   async function refresh(): Promise<void> {
     if (!browser.isSupported()) {
       state.value = 'unsupported'
       return
     }
+    permission.value = browser.permission()
     try {
       if (!(await pushApi.getPushConfig()).enabled) {
         state.value = 'unavailable'
@@ -31,7 +43,7 @@ export const usePushStore = defineStore('push', () => {
       error.value = describeError(e)
       return
     }
-    if (browser.permission() === 'denied') {
+    if (permission.value === 'denied') {
       state.value = 'denied'
       return
     }
@@ -40,19 +52,23 @@ export const usePushStore = defineStore('push', () => {
     state.value = subscription && browser.permission() === 'granted' ? 'on' : 'off'
   }
 
+  /** The permission first: the open client shows notifications even where the server sends no push. */
   async function enable(): Promise<void> {
     if (busy.value) return
     busy.value = true
     error.value = null
     try {
+      turnedOff.value = false
+      prefs.setTurnedOff(false)
+      const answer = browser.permission() === 'granted' ? 'granted' : await browser.requestPermission()
+      permission.value = answer
+      if (answer !== 'granted') {
+        state.value = answer === 'denied' ? 'denied' : 'off'
+        return
+      }
       const config = await pushApi.getPushConfig()
       if (!config.enabled || !config.vapidPublicKey) {
         state.value = 'unavailable'
-        return
-      }
-      const answer = await browser.requestPermission()
-      if (answer !== 'granted') {
-        state.value = answer === 'denied' ? 'denied' : 'off'
         return
       }
       let subscription: PushSubscription
@@ -72,10 +88,13 @@ export const usePushStore = defineStore('push', () => {
     }
   }
 
+  /** Off on this device, push and the open client's notifications alike, until turned on again. */
   async function disable(): Promise<void> {
     if (busy.value) return
     busy.value = true
     error.value = null
+    turnedOff.value = true
+    prefs.setTurnedOff(true)
     try {
       await pushApi.deleteSubscription()
       await (await browser.currentSubscription())?.unsubscribe()
@@ -89,16 +108,28 @@ export const usePushStore = defineStore('push', () => {
 
   /**
    * After sign-in: a subscription this browser already holds is given to the new sign-in (the
-   * server moves it), so notifications follow the user who is signed in now.
+   * server moves it), so notifications follow the user who is signed in now. Without one — the
+   * permission was given before, logout dropped the subscription — it subscribes again, unasked.
    */
   async function resync(): Promise<void> {
     if (browser.permission() !== 'granted') return
     try {
       const subscription = await browser.currentSubscription()
       if (subscription) await pushApi.saveSubscription(subscription.toJSON())
+      else if (!turnedOff.value) await enable()
     } catch {
       // Push is a convenience: the next sign-in or a click in the settings tries again.
     }
+  }
+
+  /**
+   * On by default: a browser lets a page ask for the permission only in answer to a click, so the
+   * first click after sign-in asks — once per page load, never after the user turned them off.
+   */
+  async function askOnce(): Promise<void> {
+    if (asked || turnedOff.value || !browser.isSupported() || browser.permission() !== 'default') return
+    asked = true
+    await enable()
   }
 
   /** Before logout: no notifications for a user who has left this browser. Never throws. */
@@ -115,5 +146,5 @@ export const usePushStore = defineStore('push', () => {
     }
   }
 
-  return { state, busy, error, refresh, enable, disable, resync, forget }
+  return { state, busy, error, notifying, refresh, enable, disable, resync, askOnce, forget }
 })

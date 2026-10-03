@@ -1,6 +1,8 @@
 // The browser side of push: the service worker and the push subscription. Kept apart so the store
 // can be tested without a browser that has a push service.
 
+import type { PushNotificationDto } from '@/shared/api/schema'
+
 /** The worker sits at the client's root, so its scope is the whole client. */
 const WORKER_URL = `${import.meta.env.BASE_URL}sw.js`
 
@@ -21,6 +23,23 @@ export async function currentSubscription(): Promise<PushSubscription | null> {
   if (!isSupported()) return null
   const registration = await navigator.serviceWorker.getRegistration(import.meta.env.BASE_URL)
   return registration ? registration.pushManager.getSubscription() : null
+}
+
+/**
+ * Shows a notification of the push payload's shape: the service worker draws it, the same as one
+ * that came by push. Never throws — a notification is a courtesy.
+ */
+export async function show(notification: PushNotificationDto): Promise<void> {
+  if (!isSupported() || Notification.permission !== 'granted') return
+  try {
+    const registration =
+      (await navigator.serviceWorker.getRegistration(import.meta.env.BASE_URL)) ??
+      (await navigator.serviceWorker.register(WORKER_URL, { scope: import.meta.env.BASE_URL }))
+    const worker = registration.active ?? (await navigator.serviceWorker.ready).active
+    worker?.postMessage({ type: 'show', payload: notification })
+  } catch {
+    // No worker here (site data blocked): the message is in the list anyway.
+  }
 }
 
 export async function subscribe(vapidPublicKey: string): Promise<PushSubscription> {
