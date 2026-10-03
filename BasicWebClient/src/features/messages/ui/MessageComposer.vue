@@ -283,6 +283,15 @@ function onSelect(): void {
   updateMention()
 }
 
+/** The field grows with its text up to its max-height, then scrolls. */
+function fit(): void {
+  const el = input.value
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = `${el.scrollHeight + el.offsetHeight - el.clientHeight}px`
+}
+watch(text, () => void nextTick(fit))
+
 async function keepSelection(from: number, to: number): Promise<void> {
   await nextTick()
   input.value?.focus()
@@ -451,14 +460,14 @@ function onKeydown(event: KeyboardEvent): void {
       <button type="button" class="close" title="Отменить (Esc)" aria-label="Отменить ответ" @click="store.cancelReply()">✕</button>
     </div>
 
-    <div class="tools" role="toolbar" aria-label="Форматирование">
+    <!-- Over selected text only, as in other messengers: the hotkeys work without it. -->
+    <div v-if="hasSelection" class="tools" role="toolbar" aria-label="Форматирование">
       <button
         v-for="f in FORMATS"
         :key="f.type"
         type="button"
         class="tool"
         :title="f.title"
-        :disabled="!hasSelection"
         @mousedown.prevent
         @click="format(f.type)"
       >
@@ -466,20 +475,8 @@ function onKeydown(event: KeyboardEvent): void {
       </button>
       <button
         type="button"
-        class="tool attach"
-        :title="mayAttach ? 'Прикрепить файлы' : 'В этой группе файлы отправляют только админы'"
-        aria-label="Прикрепить файлы"
-        :disabled="!!store.editing || !mayAttach"
-        @click="fileInput?.click()"
-      >
-        📎
-      </button>
-      <input ref="fileInput" type="file" multiple hidden @change="onFilesChosen" />
-      <button
-        type="button"
         class="tool"
         title="Ссылка (Ctrl+K)" aria-label="Ссылка (Ctrl+K)"
-        :disabled="!hasSelection"
         @mousedown.prevent
         @click="startLink"
       >
@@ -514,6 +511,17 @@ function onKeydown(event: KeyboardEvent): void {
       </li>
     </ul>
 
+    <button
+      type="button"
+      class="attach"
+      :title="mayAttach ? 'Прикрепить файлы' : 'В этой группе файлы отправляют только админы'"
+      aria-label="Прикрепить файлы"
+      :disabled="!!store.editing || !mayAttach"
+      @click="fileInput?.click()"
+    >
+      📎
+    </button>
+    <input ref="fileInput" type="file" multiple hidden @change="onFilesChosen" />
     <textarea
       ref="input"
       :value="text"
@@ -528,8 +536,14 @@ function onKeydown(event: KeyboardEvent): void {
       @keydown="onKeydown"
       @paste="onPaste"
     />
-    <button type="submit" class="send" :disabled="!canSend">
-      {{ store.editing ? 'Сохранить' : 'Отправить' }}
+    <button
+      type="submit"
+      class="send"
+      :disabled="!canSend"
+      :title="store.editing ? 'Сохранить (Enter)' : 'Отправить (Enter)'"
+      :aria-label="store.editing ? 'Сохранить' : 'Отправить'"
+    >
+      {{ store.editing ? '✓' : '➤' }}
     </button>
 
     <p v-if="entities.length > 0" class="preview">
@@ -540,8 +554,10 @@ function onKeydown(event: KeyboardEvent): void {
 
 <style scoped>
 .composer {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: end;
   gap: 8px;
   padding: 10px max(12px, calc((100% - var(--column)) / 2));
   border-top: 1px solid var(--border);
@@ -574,18 +590,26 @@ function onKeydown(event: KeyboardEvent): void {
   color: var(--text-dim);
 }
 .tools {
-  grid-column: 1 / -1;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: max(12px, calc((100% - var(--column)) / 2));
+  z-index: 10;
   display: flex;
   gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-solid);
+  box-shadow: 0 4px 16px #0008;
 }
 .tool {
   min-width: 28px;
-  padding: 2px 6px;
+  padding: 3px 7px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--text-dim);
-  font-size: 12px;
+  color: var(--text);
+  font-size: 13px;
 }
 .tool:hover:not(:disabled) {
   border-color: var(--border);
@@ -609,10 +633,20 @@ function onKeydown(event: KeyboardEvent): void {
   color: var(--danger);
   font-size: 12px;
 }
-.tool.attach {
-  margin-right: 6px;
+.attach {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 18px;
 }
-.tool:disabled {
+.attach:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+.attach:disabled {
   opacity: 0.35;
   cursor: default;
 }
@@ -662,19 +696,21 @@ function onKeydown(event: KeyboardEvent): void {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--bg);
-  resize: vertical;
+  resize: none;
 }
 .input:focus {
   border-color: var(--accent);
   outline: none;
 }
 .send {
-  padding: 0 16px;
+  width: 38px;
+  height: 38px;
+  padding: 0;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: 50%;
   background: var(--accent);
   color: #04160b;
-  font-weight: 600;
+  font-size: 16px;
 }
 .send:disabled {
   background: var(--surface-hover);

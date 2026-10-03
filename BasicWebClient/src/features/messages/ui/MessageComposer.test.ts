@@ -119,6 +119,19 @@ describe('MessageComposer', () => {
     vi.useRealTimers()
   })
 
+  it('the formatting tools come up over selected text only', async () => {
+    const { wrapper } = setup()
+    const area = wrapper.get('textarea')
+    await area.setValue('hello world')
+    expect(wrapper.find('[role=toolbar]').exists()).toBe(false)
+
+    ;(area.element as HTMLTextAreaElement).setSelectionRange(0, 5)
+    await area.trigger('select')
+    await wrapper.get('[title="Жирный (Ctrl+B)"]').trigger('click')
+
+    expect(wrapper.find('.preview strong').text()).toBe('hello')
+  })
+
   it('Shift+Enter is a new line, not sending', async () => {
     const { wrapper, send } = setup()
     const area = wrapper.get('textarea')
