@@ -58,7 +58,8 @@ watch(
         <span class="title">{{ chatTitle(chat) }}</span>
         <span :class="['subtitle', { typing: isTyping }]">{{ subtitle }}</span>
       </button>
-      <button type="button" class="search-toggle" title="Поиск в чате" aria-label="Поиск в чате" @click="searching = !searching">🔍</button>
+      <button type="button" class="head-tool search-toggle" title="Поиск в чате" aria-label="Поиск в чате" @click="searching = !searching">🔍</button>
+      <button type="button" class="head-tool" title="Информация о чате" aria-label="Информация о чате" @click="emit('info')">ⓘ</button>
     </header>
 
     <ChatSearch v-if="searching" @close="searching = false" />
@@ -106,12 +107,22 @@ watch(
     display: block;
   }
 }
-.search-toggle {
-  margin-left: auto;
-  padding: 2px 6px;
+.head-tool {
+  width: 32px;
+  height: 32px;
+  padding: 0;
   border: none;
+  border-radius: var(--radius-sm);
   background: none;
   color: var(--text-dim);
+  font-size: 16px;
+}
+.head-tool:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.search-toggle {
+  margin-left: auto;
 }
 .about {
   display: flex;

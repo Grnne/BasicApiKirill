@@ -10,6 +10,7 @@ import BlockedSection from '@/features/privacy/ui/BlockedSection.vue'
 import PushSection from '@/features/push/ui/PushSection.vue'
 import PrivacySection from '@/features/privacy/ui/PrivacySection.vue'
 import { describeError } from '@/shared/api/problem'
+import BaseButton from '@/shared/ui/BaseButton.vue'
 import { useNoticesStore } from '@/shared/ui/notices.store'
 import { useLogout } from './lib/useLogout'
 
@@ -33,6 +34,7 @@ async function onSignOutEverywhere(): Promise<void> {
     <header class="bar">
       <button type="button" class="back" @click="router.push({ name: 'chat' })">← К чатам</button>
       <h1 class="title">Настройки</h1>
+      <BaseButton variant="ghost" class="logout" @click="logout">Выйти</BaseButton>
     </header>
 
     <main class="content">
@@ -72,6 +74,9 @@ async function onSignOutEverywhere(): Promise<void> {
 .title {
   margin: 0;
   font-size: 16px;
+}
+.logout {
+  margin-left: auto;
 }
 .content {
   display: grid;

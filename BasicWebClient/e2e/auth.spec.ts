@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 
 import { uniqueName } from './support/api'
 import { expect, signIn, test } from './support/fixtures'
-import { openSettings } from './support/ui'
+import { fromMenu, openSettings } from './support/ui'
 
 test('registration through the form signs in and survives a reload', async ({ anonymous }) => {
   const page = await anonymous()
@@ -82,7 +82,7 @@ test('a deep link leads through the login back to it', async ({ anonymous, user 
 test('logout returns to the login and the old session is gone', async ({ open, user }) => {
   const alice = await user('alice')
   const page = await open(alice)
-  await page.getByRole('button', { name: 'Выйти' }).click()
+  await fromMenu(page, 'Выйти')
   await expect(page).toHaveURL(/\/client\/login/)
   expect(await page.evaluate(() => localStorage.getItem('basicchat.refreshToken'))).toBeNull()
 
@@ -124,7 +124,7 @@ test('many tabs of one browser share the session without logging each other out'
 test('signing in again after a logout elsewhere works', async ({ open, user, anonymous }) => {
   const alice = await user('alice')
   const page = await open(alice)
-  await page.getByRole('button', { name: 'Выйти' }).click()
+  await fromMenu(page, 'Выйти')
   const again = await anonymous()
   await signIn(again, alice)
 })

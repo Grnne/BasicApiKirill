@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test'
 
 import { group, png, send } from './support/api'
 import { expect, test } from './support/fixtures'
-import { chatHeader, chatRow, composer, dialog, message, messageAction, notice, openChat, openInfo, sendText } from './support/ui'
+import { chatHeader, chatRow, composer, dialog, fromMenu, message, messageAction, notice, openChat, openInfo, sendText } from './support/ui'
 
 const system = (page: Page, text: string | RegExp) => page.locator('.window .system', { hasText: text })
 
@@ -19,7 +19,7 @@ test('creating a group with a photo: members see it at once', async ({ open, use
   const b = await open(bob)
   const c = await open(carol)
 
-  await a.getByTitle('Новая группа').click()
+  await fromMenu(a, 'Новая группа')
   const create = dialog(a, 'Новая группа')
   await create.locator('input[type=file]').setInputFiles({ name: 'logo.png', mimeType: 'image/png', buffer: png(256, 256, 5) })
   await create.getByLabel('Название').fill('Книжный клуб')

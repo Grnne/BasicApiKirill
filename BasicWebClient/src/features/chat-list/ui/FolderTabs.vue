@@ -53,8 +53,6 @@ function onDrop(target: FolderDto): void {
       </button>
       <button type="button" class="tab add" title="Новая папка" aria-label="Новая папка" @click="editing = null">+</button>
     </nav>
-    <!-- The page's own actions (new group, saved messages): they stay put while the tabs scroll. -->
-    <div class="actions"><slot name="actions" /></div>
 
     <FolderEditor v-if="editing !== undefined" :folder="editing" @close="editing = undefined" />
   </div>
@@ -73,15 +71,6 @@ function onDrop(target: FolderDto): void {
   min-width: 0;
   overflow-x: auto;
   padding: 6px 8px 0;
-}
-.actions {
-  display: flex;
-  flex: none;
-  gap: 2px;
-  padding: 0 6px 3px;
-}
-.actions:empty {
-  display: none;
 }
 .tab {
   flex: none;

@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test'
 
 import { privateChat, send } from './support/api'
 import { expect, test } from './support/fixtures'
-import { chatHeader, chatRow, composer, dialog, message, openChat, sendText } from './support/ui'
+import { chatHeader, chatRow, composer, dialog, fromMenu, message, openChat, sendText } from './support/ui'
 
 async function menu(page: Page, title: string, item: string): Promise<void> {
   await chatRow(page, title).click({ button: 'right' })
@@ -100,7 +100,7 @@ test('marking unread and read by hand', async ({ open, user, request }) => {
 
   // Opening the chat clears the mark.
   await openChat(laptop, bob.displayName)
-  await laptop.getByTitle('Избранное').click()
+  await fromMenu(laptop, 'Избранное')
   await expect(chatRow(a, bob.displayName).locator('.badge')).toHaveCount(0)
 })
 
@@ -149,7 +149,7 @@ test('folders: create by rule and by hand, edit, delete', async ({ open, user, r
 test('saved messages: notes to oneself', async ({ open, user }) => {
   const alice = await user('alice')
   const a = await open(alice)
-  await a.getByTitle('Избранное').click()
+  await fromMenu(a, 'Избранное')
   await expect(chatHeader(a)).toContainText('Избранное')
   await sendText(a, 'купить молоко')
   await expect(message(a, 'купить молоко')).toBeVisible()
@@ -157,7 +157,7 @@ test('saved messages: notes to oneself', async ({ open, user }) => {
 
   // A second click, after a reload, does not make a second chat.
   await a.reload()
-  await a.getByTitle('Избранное').click()
+  await fromMenu(a, 'Избранное')
   await expect(chatRow(a, 'Избранное')).toHaveCount(1)
 
   // People search does not offer oneself.

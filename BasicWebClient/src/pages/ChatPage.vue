@@ -2,7 +2,6 @@
 import { defineAsyncComponent, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
-import BaseButton from '@/shared/ui/BaseButton.vue'
 import ConnectionStatus from '@/features/realtime/ui/ConnectionStatus.vue'
 import ChatListPanel from '@/features/chat-list/ui/ChatListPanel.vue'
 import FolderTabs from '@/features/chat-list/ui/FolderTabs.vue'
@@ -16,6 +15,7 @@ import CreateGroupDialog from '@/features/groups/ui/CreateGroupDialog.vue'
 import { useNoticesStore } from '@/shared/ui/notices.store'
 import { useChatDialogs } from './lib/useChatDialogs'
 import { useLogout } from './lib/useLogout'
+import MainMenu from './ui/MainMenu.vue'
 import UserSearchPanel from '@/features/user-search/ui/UserSearchPanel.vue'
 import MessageSearchPanel from '@/features/message-search/ui/MessageSearchPanel.vue'
 import { useAuthStore } from '@/features/auth/model/auth.store'
@@ -125,12 +125,17 @@ const { logout: onLogout } = useLogout()
         />
         <span class="user-name">{{ account.me?.displayName ?? auth.user?.displayName }}</span>
       </button>
-      <BaseButton variant="ghost" @click="onLogout">Выйти</BaseButton>
     </header>
 
     <div :class="['body', { 'with-log': isDev, 'chat-open': chatList.selectedChatId !== null }]">
       <aside class="sidebar">
         <div class="search">
+          <MainMenu
+            @group="creatingGroup = true"
+            @saved="chatList.openSaved()"
+            @settings="router.push({ name: 'settings' })"
+            @logout="onLogout"
+          />
           <input
             v-model="query"
             class="search-input"
@@ -139,14 +144,7 @@ const { logout: onLogout } = useLogout()
             autocomplete="off"
           />
         </div>
-        <FolderTabs v-if="!query.trim()">
-          <template #actions>
-            <button type="button" class="action" title="Новая группа" aria-label="Новая группа" @click="creatingGroup = true">
-              👥
-            </button>
-            <button type="button" class="action" title="Избранное" aria-label="Избранное" @click="chatList.openSaved()">★</button>
-          </template>
-        </FolderTabs>
+        <FolderTabs v-if="!query.trim()" />
         <div class="panels">
           <ChatListPanel :query="query" />
           <UserSearchPanel :query="query" @select="onUserSelected" />
@@ -257,9 +255,6 @@ const { logout: onLogout } = useLogout()
   .user-name {
     display: none;
   }
-  .bar :deep(.btn) {
-    padding: 8px 10px;
-  }
 }
 .body {
   /* Wider on big screens: longer chat titles and previews fit. */
@@ -301,11 +296,15 @@ const { logout: onLogout } = useLogout()
   border-right: 1px solid var(--border);
 }
 .search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   padding: 10px;
   border-bottom: 1px solid var(--border);
 }
 .search-input {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   padding: 7px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -314,18 +313,6 @@ const { logout: onLogout } = useLogout()
 .search-input:focus {
   border-color: var(--accent);
   outline: none;
-}
-.action {
-  padding: 3px 7px;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-dim);
-  font-size: 14px;
-}
-.action:hover {
-  background: var(--surface-hover);
-  color: var(--text);
 }
 .panels {
   flex: 1;

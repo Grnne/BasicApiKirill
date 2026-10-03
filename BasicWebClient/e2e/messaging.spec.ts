@@ -5,6 +5,7 @@ import {
   chatRow,
   composer,
   dialog,
+  fromMenu,
   message,
   messageAction,
   openChat,
@@ -321,7 +322,7 @@ test('a draft follows across chats, reloads and devices', async ({ open, user, r
   await openChat(a, bob.displayName)
   await composer(a).fill('недописанная мысль')
 
-  await a.getByTitle('Избранное').click()
+  await fromMenu(a, 'Избранное')
   await expect(chatHeader(a)).toContainText('Избранное')
   await expect(chatRow(a, bob.displayName)).toContainText('Черновик: недописанная мысль')
 
@@ -382,7 +383,7 @@ test('forwarding one message and a selection', async ({ open, user, request }) =
 
   await messageAction(a, 'рецепт пирога', 'Переслать')
   await dialog(a, 'Переслать').getByRole('button', { name: '★ Избранное' }).click()
-  await a.getByTitle('Избранное').click()
+  await fromMenu(a, 'Избранное')
   await expect(message(a, 'рецепт пирога')).toContainText(`Переслано от ${bob.displayName}`)
 
   await openChat(a, bob.displayName)

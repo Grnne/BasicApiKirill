@@ -54,6 +54,12 @@ export async function react(page: Page, text: string | RegExp, emoji: string): P
 export const notice = (page: Page, text: string | RegExp): Locator =>
   page.locator('.notices .notice', { hasText: text })
 
+/** Picks an item of the ☰ menu by the search field. */
+export async function fromMenu(page: Page, item: string): Promise<void> {
+  await page.getByRole('button', { name: 'Меню' }).click()
+  await page.getByRole('menuitem', { name: item }).click()
+}
+
 export async function openSettings(page: Page): Promise<void> {
   await page.getByTitle('Настройки').click()
   await expect(page).toHaveURL(/\/client\/settings/)
