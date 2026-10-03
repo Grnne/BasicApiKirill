@@ -13,6 +13,7 @@ const props = defineProps<{
   message: Message
   own: boolean
   meId: string | null
+  showSender?: boolean
   status?: OwnStatus | null
 }>()
 defineEmits<{ jump: [messageId: string]; react: [emoji: string] }>()
@@ -32,7 +33,7 @@ const caption = computed(() =>
   <p v-if="message.type === 'system'" class="system">{{ caption }}</p>
 
   <article v-else :class="['bubble', { own }]">
-    <span v-if="!own" class="sender">{{ message.senderName }}</span>
+    <span v-if="showSender && !own" class="sender">{{ message.senderName }}</span>
     <span v-if="message.forwardFrom" class="forwarded">Переслано от {{ message.forwardFrom.senderName }}</span>
     <button
       v-if="message.replyTo"

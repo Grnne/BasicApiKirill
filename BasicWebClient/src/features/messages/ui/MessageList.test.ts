@@ -91,3 +91,38 @@ describe('going from chat to chat', () => {
   })
 })
 
+
+describe('who wrote it', () => {
+  async function show(type: 'private' | 'group') {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    useSessionStore().user = { userId: ME, username: 'me', email: 'me@test', displayName: 'Me', avatarId: null }
+    useChatsStore().replaceAll([chat({ chatId: 'c', type })], [])
+    vi.mocked(messageEntityApi.getMessagesPage).mockResolvedValue({
+      items: [
+        message({ chatId: 'c', seq: 1, id: 'm1', senderId: 'bob', senderName: 'Bob' }),
+        message({ chatId: 'c', seq: 2, id: 'm2', senderId: 'bob', senderName: 'Bob' }),
+        message({ chatId: 'c', seq: 3, id: 'm3', senderId: 'carl', senderName: 'Carl' }),
+      ],
+      nextCursor: null,
+      hasMore: false,
+    })
+    const wrapper = mount(MessageList, { global: { plugins: [pinia] } })
+    await useMessagesStore().openChat('c')
+    await flushPromises()
+    return wrapper
+  }
+
+  it('a group names the sender once, over the first message of their run', async () => {
+    const wrapper = await show('group')
+
+    expect(wrapper.findAll('.sender').map((s) => s.text())).toEqual(['Bob', 'Carl'])
+    expect(wrapper.findAll('.item').map((i) => i.classes('continues'))).toEqual([false, true, false])
+  })
+
+  it('a private chat has one other side: no names at all', async () => {
+    const wrapper = await show('private')
+
+    expect(wrapper.findAll('.sender')).toHaveLength(0)
+  })
+})

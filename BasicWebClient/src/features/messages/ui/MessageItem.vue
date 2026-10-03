@@ -21,8 +21,12 @@ const props = withDefaults(
     meId: string | null
     /** Groups: the sender's photo by the last message of their run, its place by the others. */
     avatar?: 'show' | 'space' | null
+    /** Groups: the sender's name over the first message of their run. */
+    showSender?: boolean
+    /** Not the first of its run: it goes close under the one before. */
+    continues?: boolean
   }>(),
-  { avatar: null },
+  { avatar: null, showSender: false, continues: false },
 )
 
 const store = useMessagesStore()
@@ -159,7 +163,7 @@ async function confirmDelete(): Promise<void> {
 
   <div
     v-else
-    :class="['item', { own, selected: isSelected, selecting }]"
+    :class="['item', { own, continues, selected: isSelected, selecting }]"
     :data-message-id="message.id"
     @click.capture="onClick"
   >
@@ -177,6 +181,7 @@ async function confirmDelete(): Promise<void> {
       :message="message"
       :own="own"
       :me-id="meId"
+      :show-sender="showSender"
       :status="status"
       @jump="store.jumpTo($event)"
       @react="store.react(message, $event)"
@@ -254,6 +259,9 @@ async function confirmDelete(): Promise<void> {
 .item.own {
   flex-direction: row-reverse;
   align-self: flex-end;
+}
+.item.continues {
+  margin-top: -4px;
 }
 .item :deep(.bubble) {
   max-width: min(560px, 75vw);

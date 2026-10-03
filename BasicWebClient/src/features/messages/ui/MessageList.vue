@@ -4,7 +4,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useChatsStore } from '@/entities/chat/model/chats.store'
 import { useSessionStore } from '@/entities/user/model/session.store'
 import { formatDay, parseApiDate } from '@/shared/lib/date'
-import { closesRun } from '../lib/runs'
+import { closesRun, opensRun } from '../lib/runs'
 import { useMessagesStore } from '../model/messages.store'
 import MessageItem from './MessageItem.vue'
 import PendingBubble from './PendingBubble.vue'
@@ -161,6 +161,8 @@ function startsNewDay(index: number): boolean {
           :message="message"
           :me-id="session.user?.userId ?? null"
           :avatar="isGroup ? (closesRun(store.messages, index) ? 'show' : 'space') : null"
+          :show-sender="isGroup && opensRun(store.messages, index)"
+          :continues="!opensRun(store.messages, index)"
         />
       </template>
 
